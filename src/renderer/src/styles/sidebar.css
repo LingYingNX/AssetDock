@@ -1,0 +1,29 @@
+/* ============================ 三栏布局 ============================ */
+.layout{display:grid;grid-template-columns:236px minmax(0,1fr) 304px;min-height:0}
+.layout.insp-hidden{grid-template-columns:236px minmax(0,1fr) 0}
+.layout.insp-hidden .inspector{display:none}
+
+/* ---------- 侧栏 ---------- */
+.sidebar{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.side-scroll{flex:1;overflow-y:auto;padding:10px 8px 14px}
+.side-sec{margin-bottom:14px}
+.side-title{display:flex;align-items:center;gap:6px;padding:0 10px 6px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--t3)}
+.side-title .ic{width:12px;height:12px}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:29px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:12.5px;text-align:left;position:relative;transition:background .2s ease,color .2s ease}
+.nav-item:hover{background:var(--bg3);color:var(--t1)}
+.nav-item.on{background:linear-gradient(90deg,var(--acc-soft),rgba(255,255,255,.55));color:#0A5AC2;font-weight:600}
+.nav-item.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--acc)}
+.nav-item.on .ic{color:var(--acc2)}
+.nav-item .ic{width:15px;height:15px;color:var(--t3)}
+.nav-item .cnt{margin-left:auto;font-size:11px;color:var(--t3)}
+.nav-item .chev{width:11px;height:11px;color:var(--t3);flex:none;transition:transform .15s}
+.nav-item.exp .chev{transform:rotate(90deg)}
+.nav-tree{margin-left:14px;padding-left:9px;border-left:1px solid var(--line)}
+.side-add{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;margin-top:2px;border-radius:6px;color:var(--t3);font-size:12px;width:100%}
+.side-add:hover{color:var(--t1);background:var(--bg3)}
+.side-add .ic{width:13px;height:13px}
+.swatches{display:flex;flex-wrap:wrap;gap:7px;padding:4px 10px 2px}
+.sw{width:15px;height:15px;border-radius:50%;border:1px solid rgba(255,255,255,.6);position:relative;cursor:pointer;transition:transform .12s}
+.sw:hover{transform:scale(1.18)}
+.sw.on::after{content:"";position:absolute;inset:-3px;border:1.5px solid var(--acc);border-radius:50%}
+.sw.all{background:conic-gradient(#EF4444 0 45deg,#F97316 0 90deg,#EAB308 0 135deg,#22C55E 0 180deg,#14B8A6 0 225deg,#3B82F6 0 270deg,#8B5CF6 0 315deg,#EC4899 0 360deg)}

@@ -1,0 +1,60 @@
+/* ============================ 检查器 ============================ */
+.inspector{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.insp-scroll{flex:1;overflow-y:auto;padding:14px 16px 20px}
+.insp-sec{margin-top:16px}
+.insp-sec:first-child{margin-top:0}
+.insp-h{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--t3);margin-bottom:8px}
+.insp-h .ic{width:12px;height:12px}
+.fname{display:flex;align-items:center;gap:7px}
+.fname b{font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fname input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--acc-line);border-radius:6px;outline:0;padding:3px 7px;font-size:13px;font-weight:600}
+.fname .ic{width:13px;height:13px;color:var(--t3);cursor:pointer}
+.fname .ic:hover{color:var(--t1)}
+.rate{display:inline-flex;gap:1px}
+.rate .star{width:11px;height:11px;color:#3D4454;cursor:pointer}
+.rate .star svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.8}
+.rate .star.fill{color:var(--star)}
+.rate .star.fill svg{fill:var(--star);stroke:var(--star)}
+.rate.big{gap:3px}
+.rate.big .star{width:16px;height:16px}
+.rate.big .star svg{width:16px;height:16px}
+.flagrow{display:flex;align-items:center;gap:6px}
+.flagbtn{display:flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:6px;font-size:11px;color:var(--t3);border:1px solid var(--line)}
+.flagbtn:hover{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.08)}
+.flagbtn.on{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.13)}
+.flagbtn .ic{width:12px;height:12px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:11px;font-size:11.5px;background:var(--bg3);border:1px solid var(--line);color:var(--t2)}
+.tag:hover{border-color:var(--line2);color:var(--t1)}
+.tag .dot{width:7px;height:7px}
+.tag .x{width:11px;height:11px;opacity:.5;cursor:pointer}
+.tag .x:hover{opacity:1;color:var(--t1)}
+.tagin{display:flex;align-items:center;gap:6px;margin-top:8px;height:28px;padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;color:var(--t3);font-size:12px}
+.tagin:focus-within{border-color:var(--acc-line)}
+.tagin input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:12px}
+.tagin kbd{font-size:10px;padding:1px 4px}
+.sugg{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.sugg span{font-size:11px;color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:10px;cursor:pointer}
+.sugg span:hover{color:var(--acc2);border-color:var(--acc)}
+.sugg span.used{opacity:.3;pointer-events:none}
+/* 颜色构造 */
+.palette{display:flex;gap:6px}
+.palette .pal{flex:1;min-width:0;height:42px;border-radius:7px;display:flex;flex-direction:column;justify-content:flex-end;padding:4px 6px;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:transform .15s}
+.palette .pal:hover{transform:translateY(-2px)}
+.palette .pal em{font:600 10px/1.3 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+.palette .pal span{font:9px/1.3 var(--font-mono);color:rgba(255,255,255,.78);text-shadow:0 1px 3px rgba(0,0,0,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 来源链接 */
+.linkin{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;color:var(--t3)}
+.linkin:focus-within{border-color:var(--acc-line)}
+.linkin input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:12px}
+/* 文件信息 */
+.dl{display:grid;grid-template-columns:64px 1fr;row-gap:7px;column-gap:10px;font-size:12px}
+.dl dt{color:var(--t3)}
+.dl dd{color:var(--t1)}
+.dl dd small{color:var(--t3);margin-left:5px}
+/* 备注 */
+.note{width:100%;min-height:56px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--t2);resize:none;outline:0;line-height:1.6}
+.note:focus{border-color:var(--acc-line)}
+/* 无选中占位 */
+.insp-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--t3);font-size:12px}
+.insp-empty .ic{width:30px;height:30px;opacity:.4}

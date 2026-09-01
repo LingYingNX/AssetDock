@@ -1,0 +1,102 @@
+/* ============================ 素材网格 ============================ */
+.gridwrap{flex:1;overflow-y:auto;min-height:0}
+
+/* 瀑布流(默认) */
+.grid{column-width:var(--colw);column-gap:14px;padding:20px 22px 32px}
+/* 网格 */
+.grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:12px}
+.v-grid .thumb{aspect-ratio:4/3}
+/* 列表 */
+.grid.v-list{columns:auto;display:flex;flex-direction:column;gap:1px;padding:0 12px 24px}
+.lhead,.grid.v-list .card{display:grid;grid-template-columns:96px minmax(180px,1.7fr) 52px 92px 76px 60px 96px 34px;gap:12px;align-items:center}
+.lhead{display:none;position:sticky;top:0;z-index:5;padding:0 12px;height:34px;margin:0 -4px 6px;background:var(--bg0);border-bottom:1px solid var(--line);font-size:11px;color:var(--t3)}
+.v-list .lhead{display:grid;margin:0;padding:0 10px}
+.v-list .card{margin:0;padding:5px 10px;border-radius:8px;border-color:transparent}
+.v-list .card:hover{border-color:var(--line);background:var(--bg2)}
+.v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:6px;flex:none}
+.v-list .thumb .dur,.v-list .thumb .qa,.v-list .play-big,.v-list .scrub,.v-list .orb{display:none}
+.v-list .thumb .cube3d{--cs:30px;animation-duration:24s}
+.v-list figcaption{display:contents;padding:0}
+.v-list .name-row{display:block}
+.v-list .meta-row{display:none}
+.v-list .lc{display:block;font-size:11.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v-list .lc-type{color:var(--t3);font-size:10.5px;font-weight:700;letter-spacing:.05em}
+.v-list .lc-date{color:var(--t3)}
+.v-list .lc-acts{display:flex;justify-content:flex-end}
+.v-list .lc-acts button{width:26px;height:26px;border-radius:6px;color:var(--t3);display:grid;place-items:center;opacity:0}
+.v-list .card:hover .lc-acts button{opacity:1}
+.v-list .lc-acts button:hover{background:var(--bg4);color:var(--t1)}
+.v-list .cbx{left:auto;right:8px}
+.v-list .card.is-selected .cbx{opacity:1}
+
+/* ---------- 卡片 ---------- */
+.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:default;transition:border-color .3s ease,box-shadow .45s ease,transform .45s cubic-bezier(.2,.7,.2,1);position:relative;box-shadow:0 10px 30px rgba(20,60,120,.10),inset 0 1px 1px rgba(255,255,255,.9),inset 0 -1px 1px rgba(255,255,255,.25)}
+.card:hover{border-color:rgba(255,255,255,.9);box-shadow:0 20px 46px rgba(20,60,120,.18),0 0 0 1px rgba(255,255,255,.45),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 1px rgba(255,255,255,.35);transform:translateY(-3px)}
+.thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
+.card:hover .thumb{transform:scale(1.05)}
+.v-list .card:hover .thumb{transform:none}
+.thumb::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 18% 0%,rgba(255,255,255,.16),transparent 52%),linear-gradient(180deg,transparent 62%,rgba(0,0,0,.28));pointer-events:none}
+.thumb img,.thumb video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .4s ease}
+.thumb img.loaded,.thumb video.loaded{opacity:1}
+/* 渐变占位(设计稿 g-* 类) */
+.g-ocean{background:radial-gradient(circle at 72% 24%,rgba(255,255,255,.35),transparent 38%),linear-gradient(165deg,#5EE7F9 0%,#2E7CF6 48%,#16266B 100%)}
+.g-night{background:radial-gradient(circle at 26% 28%,rgba(148,187,255,.5),transparent 34%),radial-gradient(circle at 78% 72%,rgba(250,204,21,.28),transparent 26%),linear-gradient(180deg,#232C46 0%,#0E1424 78%)}
+.g-sunset{background:radial-gradient(circle at 68% 34%,#FFE3B3 0%,transparent 42%),linear-gradient(180deg,#FFB25C 0%,#F0527C 52%,#5B2A86 100%)}
+.g-mono{background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.3),transparent 40%),linear-gradient(160deg,#C7D0DC 0%,#7C8BA1 45%,#39445A 100%)}
+.g-forest{background:radial-gradient(circle at 70% 25%,rgba(209,250,229,.4),transparent 40%),linear-gradient(180deg,#7FE6B4 0%,#0E9F6E 55%,#0B4A38 100%)}
+.g-blossom{background:radial-gradient(circle at 32% 30%,#FFE1E6 0%,transparent 44%),linear-gradient(170deg,#F8A8B8 0%,#E23A5F 55%,#7C1D3C 100%)}
+.g-cyber{background:radial-gradient(circle at 24% 22%,rgba(103,232,249,.55),transparent 36%),linear-gradient(140deg,#22D3EE 0%,#6366F1 52%,#241B5E 100%)}
+.g-sand{background:radial-gradient(circle at 70% 30%,#FFF3C4 0%,transparent 42%),linear-gradient(180deg,#FBD36B 0%,#E8930C 55%,#8A4B12 100%)}
+.g-mint{background:radial-gradient(circle at 30% 26%,rgba(240,253,244,.5),transparent 40%),linear-gradient(165deg,#A7F3D0 0%,#2FBE8F 55%,#0E5F46 100%)}
+.g-royal{background:radial-gradient(circle at 70% 26%,rgba(233,213,255,.45),transparent 40%),linear-gradient(170deg,#C4B5FD 0%,#7C3AED 55%,#2A1160 100%)}
+.g-coral{background:radial-gradient(circle at 30% 24%,rgba(255,224,204,.5),transparent 42%),linear-gradient(165deg,#FDB4A0 0%,#F0654A 55%,#8C2E1B 100%)}
+.g-steel{background:radial-gradient(circle at 68% 28%,rgba(214,229,255,.4),transparent 40%),linear-gradient(165deg,#9FB4D4 0%,#51658C 55%,#1F2B45 100%)}
+.g-slate{background:radial-gradient(circle at 26% 22%,rgba(255,255,255,.28),transparent 40%),linear-gradient(165deg,#B7C0CE 0%,#6E7B90 50%,#2C3444 100%)}
+.g-gold{background:radial-gradient(circle at 66% 30%,#FFF7D6 0%,transparent 40%),linear-gradient(170deg,#F7D774 0%,#D9930D 55%,#6E3B0A 100%)}
+
+.type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:18px;padding:0 6px;border-radius:5px;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.type-chip .dot{width:6px;height:6px}
+.dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:1px 6px;border-radius:5px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.cbx{position:absolute;left:8px;top:8px;z-index:3;width:19px;height:19px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);background:rgba(10,12,16,.35);display:grid;place-items:center;color:#fff;opacity:0;transition:opacity .12s,background .12s;backdrop-filter:blur(3px)}
+.cbx .ic{width:11px;height:11px;stroke-width:3;opacity:0}
+.card:hover .cbx,.card.is-selected .cbx{opacity:1}
+.card.is-selected .cbx{background:var(--acc);border-color:var(--acc)}
+.card.is-selected .cbx .ic{opacity:1}
+.card.is-selected{border-color:rgba(10,132,255,.6);box-shadow:0 0 0 1px rgba(10,132,255,.45),0 14px 34px rgba(10,90,220,.22),inset 0 1px 1px rgba(255,255,255,.9)}
+.qa{position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:4px;opacity:0;transform:translateY(-4px);transition:opacity .14s,transform .14s}
+.card:hover .qa{opacity:1;transform:none}
+.qa button{width:25px;height:25px;border-radius:6px;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(4px)}
+.qa button:hover{background:rgba(10,12,16,.8)}
+.qa .ic{width:13px;height:13px}
+.qa .fav.on{color:#FF7A93}
+.play-big{position:absolute;left:50%;top:50%;z-index:2;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.5);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(5px);opacity:0;transition:opacity .15s}
+.play-big .ic{width:15px;height:15px;margin-left:2px}
+.card.video:hover .play-big{opacity:1}
+.scrub{position:absolute;left:0;right:0;bottom:0;z-index:2;height:3px;background:rgba(255,255,255,.22);opacity:0;transition:opacity .15s}
+.scrub i{position:absolute;left:0;top:0;bottom:0;width:38%;background:var(--acc)}
+.card.video:hover .scrub{opacity:1}
+
+/* 三维模型:CSS 转台立方体 */
+.orb{position:absolute;left:50%;top:50%;z-index:2;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.5);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(5px);opacity:0;transition:opacity .15s}
+.orb .ic{width:14px;height:14px}
+.card.c3d:hover .orb{opacity:1}
+.c3d-wrap{position:relative;display:grid;place-items:center;perspective:640px}
+.thumb .c3d-wrap{position:absolute;inset:0}
+.cube3d{--h:calc(var(--cs,58px)/2);width:var(--cs,58px);height:var(--cs,58px);position:relative;transform-style:preserve-3d;animation:turnY 18s linear infinite}
+.cube3d i{position:absolute;inset:0;border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 0 26px rgba(255,255,255,.28)}
+.cube3d i:nth-child(1){background:linear-gradient(135deg,rgba(96,176,255,.72),rgba(26,120,250,.45));transform:rotateY(0deg) translateZ(var(--h))}
+.cube3d i:nth-child(2){background:linear-gradient(135deg,rgba(18,95,205,.58),rgba(9,52,135,.66));transform:rotateY(90deg) translateZ(var(--h))}
+.cube3d i:nth-child(3){background:linear-gradient(135deg,rgba(255,255,255,.5),rgba(168,214,255,.32));transform:rotateY(180deg) translateZ(var(--h))}
+.cube3d i:nth-child(4){background:linear-gradient(135deg,rgba(10,58,150,.6),rgba(5,34,92,.7));transform:rotateY(270deg) translateZ(var(--h))}
+.cube3d i:nth-child(5){background:linear-gradient(135deg,rgba(168,218,255,.72),rgba(110,180,250,.5));transform:rotateX(90deg) translateZ(var(--h))}
+.cube3d i:nth-child(6){background:linear-gradient(135deg,rgba(4,26,66,.72),rgba(2,14,38,.82));transform:rotateX(-90deg) translateZ(var(--h))}
+.c3d-wrap::after{content:"";position:absolute;left:50%;bottom:14%;width:52%;height:9%;transform:translateX(-50%);background:radial-gradient(50% 50% at 50% 50%,rgba(12,48,100,.3),transparent 72%)}
+.cube3d.static{animation:none}
+@keyframes turnY{from{transform:rotateX(-24deg) rotateY(0deg)}to{transform:rotateX(-24deg) rotateY(360deg)}}
+
+figcaption{padding:8px 10px 9px}
+.lc{display:none}
+.name-row{display:flex;align-items:baseline;gap:4px;min-width:0}
+.name{font-size:12.5px;font-weight:500;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta-row{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;color:var(--t3)}
+.meta-row .sep2{opacity:.5}

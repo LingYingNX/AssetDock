@@ -1,0 +1,20 @@
+/* ============================ 菜单 ============================ */
+.menu{position:fixed;z-index:90;min-width:196px;border-radius:16px;padding:5px;opacity:0;transform:translateY(-4px) scale(.98);pointer-events:none;transition:opacity .14s,transform .14s}
+.menu.open{opacity:1;transform:none;pointer-events:auto}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--t1);text-align:left}
+.menu button:hover{background:var(--acc-soft);color:var(--t1)}
+.menu button .ic{width:15px;height:15px;color:var(--t2)}
+.menu button:hover .ic{color:var(--acc2)}
+.menu button .k{margin-left:auto;color:var(--t3);font-size:11px}
+.menu button .sub{margin-left:auto;color:var(--t3)}
+.menu .sep{height:1px;background:rgba(18,26,22,.08);margin:5px 4px}
+.menu .ck{width:15px;display:grid;place-items:center;color:var(--acc);flex:none}
+.menu .ck .ic{width:13px;height:13px;stroke-width:2.4}
+.menu .noicon{padding-left:34px}
+.menu button[disabled]{opacity:.45;cursor:default}
+.menu button[disabled]:hover{background:none;color:var(--t1)}
+.menu button[disabled] .ic{color:var(--t3)}
+.menu button[disabled]:hover .ic{color:var(--t3)}
+.menu .danger button{color:var(--danger)}
+.menu .danger button .ic{color:var(--danger)}
+.menu .danger button:hover{background:var(--danger-soft)}

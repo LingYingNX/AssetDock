@@ -1,0 +1,41 @@
+/* ============================ 令牌 ============================ */
+:root{
+  --bg0:#EFF2F0; --bg1:rgba(219,236,255,.34); --bg2:rgba(219,236,255,.26); --bg3:rgba(255,255,255,.5); --bg4:rgba(255,255,255,.68);
+  --line:rgba(255,255,255,.62); --line2:rgba(255,255,255,.82);
+  --t1:#101820; --t2:#3D4A5C; --t3:#64748A;
+  --acc:#0A84FF; --acc2:#0A66D6; --acc-soft:rgba(10,132,255,.16); --acc-line:rgba(10,132,255,.55);
+  --star:#E8A33D; --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
+  --ok:#1FA871; --warn:#C77F1F;
+  --colw:232px;
+  --r-s:8px; --r-m:14px; --r-l:18px;
+  --font:"Geist","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono:"Geist Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%}
+body{
+  background:
+    radial-gradient(900px 620px at 82% 6%,rgba(64,156,255,.80),transparent 55%),
+    radial-gradient(760px 560px at 10% 12%,rgba(120,214,255,.68),transparent 55%),
+    radial-gradient(860px 660px at 80% 80%,rgba(88,140,255,.58),transparent 55%),
+    radial-gradient(720px 580px at 18% 82%,rgba(150,232,255,.55),transparent 55%),
+    linear-gradient(165deg,#DCEBFB,#CFE2FA 50%,#D8E9FC);
+  color:var(--t1);
+  font:13px/1.5 var(--font);
+  font-variant-numeric:tabular-nums;
+  overflow:hidden;
+  min-width:1440px;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(18,26,22,.22);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:rgba(18,26,22,.36);background-clip:content-box;border:3px solid transparent}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
+kbd{font:10.5px/1 var(--font-mono);color:var(--t3);background:var(--bg3);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:2px 5px}
+svg{display:block}
+.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.fill{fill:currentColor;stroke:none}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
