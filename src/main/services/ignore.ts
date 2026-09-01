@@ -10,6 +10,7 @@ export const EXT_WHITELIST: Record<string, { type: 'image' | 'video' | 'model'; 
   mp4: { type: 'video', format: 'MP4' },
   mov: { type: 'video', format: 'MOV' },
   glb: { type: 'model', format: 'GLB' },
+  gltf: { type: 'model', format: 'GLB' },
   fbx: { type: 'model', format: 'FBX' },
   obj: { type: 'model', format: 'OBJ' }
 }

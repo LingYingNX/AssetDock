@@ -220,8 +220,8 @@ export function infoRows(a: Asset): [string, string, string?][] {
   if (a.type === 'model') {
     return [
       ['类型', `${a.format} 模型`, a.format === 'GLB' ? 'glTF 2.0' : undefined],
-      ['面数', formatFaces(a.faceCount ?? 0), '三角面'],
-      ['顶点', formatFaces(a.vertices ?? 0)],
+      ['面数', a.faceCount == null ? '—' : formatFaces(a.faceCount), a.faceCount == null ? undefined : '三角面'],
+      ['顶点', a.vertices == null ? '—' : formatFaces(a.vertices)],
       ['材质', a.materialInfo ?? '—'],
       ['大小', formatBytes(a.sizeBytes)],
       ['导入', formatFullDate(a.importedAt)]

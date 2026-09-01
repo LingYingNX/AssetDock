@@ -3,6 +3,7 @@ import { useUI } from '../store/ui'
 import { formatBytes, formatFaces, infoRows } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
+import { Viewer3D, type ViewKey } from './Viewer3D'
 
 /** 舞台媒体加载失败占位 */
 function MediaFallback(): React.JSX.Element {
@@ -14,19 +15,41 @@ function MediaFallback(): React.JSX.Element {
   )
 }
 
+function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  if (failed) return <MediaFallback />
+  return <img src={src} alt={name} onError={() => setFailed(true)} />
+}
+
+function MediaVideo({ src }: { src: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  if (failed) return <MediaFallback />
+  return <video src={src} controls autoPlay onError={() => setFailed(true)} />
+}
+
 /** 视角预设条:5 个 64×38 玻璃小格 */
-const PRESETS: { title: string; rot: string }[] = [
-  { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)' },
-  { title: '前视', rot: 'rotateX(-14deg) rotateY(0deg)' },
-  { title: '侧视', rot: 'rotateX(-14deg) rotateY(90deg)' },
-  { title: '顶视', rot: 'rotateX(62deg) rotateY(0deg)' },
-  { title: '背视', rot: 'rotateX(-14deg) rotateY(180deg)' }
+const PRESETS: { title: string; rot: string; view: ViewKey }[] = [
+  { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)', view: 'auto' },
+  { title: '前视', rot: 'rotateX(-14deg) rotateY(0deg)', view: 'front' },
+  { title: '侧视', rot: 'rotateX(-14deg) rotateY(90deg)', view: 'side' },
+  { title: '顶视', rot: 'rotateX(62deg) rotateY(0deg)', view: 'top' },
+  { title: '背视', rot: 'rotateX(-14deg) rotateY(180deg)', view: 'back' }
 ]
 
 const VIEW_ROT: Record<string, string> = {
   front: 'rotateX(-24deg) rotateY(0deg)',
   side: 'rotateX(-24deg) rotateY(90deg)',
   top: 'rotateX(66deg) rotateY(0deg)'
+}
+
+const VIEW_LABEL: Record<ViewKey, string> = {
+  auto: '透视',
+  front: '前视',
+  side: '侧视',
+  top: '顶视',
+  back: '背视'
 }
 
 export function Lightbox(): React.JSX.Element | null {
@@ -37,18 +60,35 @@ export function Lightbox(): React.JSX.Element | null {
   const toggleFavorite = useUI((s) => s.toggleFavorite)
   const setRating = useUI((s) => s.setRating)
   const [shown, setShown] = useState(false)
+
+  /* 占位舞台(FBX/OBJ/演示模型)状态 */
   const [paused, setPaused] = useState(false)
   const [wire, setWire] = useState(false)
   const [rot, setRot] = useState<string | null>(null)
-  const [preset, setPreset] = useState(0)
 
-  /* 淡入过渡:挂载后下一帧加 .show */
+  /* 真实 3D(GLB/glTF)状态:reduced-motion 默认暂停转台 */
+  const [realTurn, setRealTurn] = useState(
+    () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+  const [realWire, setRealWire] = useState(false)
+  const [realView, setRealView] = useState<ViewKey>('auto')
+
+  /* 淡入过渡 + 素材切换时重置控制状态 */
   useEffect(() => {
     if (lightboxId) {
       const id = requestAnimationFrame(() => setShown(true))
       return () => cancelAnimationFrame(id)
     }
     setShown(false)
+  }, [lightboxId])
+
+  useEffect(() => {
+    setPaused(false)
+    setWire(false)
+    setRot(null)
+    setRealWire(false)
+    setRealView('auto')
+    setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [lightboxId])
 
   if (!lightboxId) return null
@@ -58,11 +98,60 @@ export function Lightbox(): React.JSX.Element | null {
   const visible = assets.filter((x) => !x.deletedAt)
   const idx = visible.findIndex((x) => x.id === a.id)
   const isModel = a.type === 'model'
+  const realModel = isModel && a.dbId != null && a.format === 'GLB' && !!a.originalUrl
 
   const sub =
     a.type === 'model'
-      ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatFaces(a.faceCount ?? 0)} 面 · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
+      ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.faceCount == null ? '— 面' : formatFaces(a.faceCount) + ' 面'} · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
       : `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.width}×${a.height} · ${formatBytes(a.sizeBytes)} · ${a.format}`
+
+  /* 控制条动作(按真实/占位分流) */
+  const onTurntable = (): void => {
+    if (realModel) {
+      setRealTurn((t) => !t)
+      if (!realTurn) setRealView('auto')
+    } else {
+      const next = !paused
+      setPaused(next)
+      if (!next) {
+        setRot(null)
+        setRealView('auto')
+      }
+    }
+  }
+  const onWireframe = (): void => (realModel ? setRealWire(!realWire) : setWire(!wire))
+  const onViewChip = (v: Exclude<ViewKey, 'auto' | 'back'>): void => {
+    if (realModel) {
+      setRealView(v)
+      setRealTurn(false)
+    } else {
+      setRot(VIEW_ROT[v])
+      setPaused(false)
+    }
+  }
+  const onPreset = (p: (typeof PRESETS)[number]): void => {
+    if (realModel) {
+      if (p.view === 'auto') {
+        setRealView('auto')
+        setRealTurn(true)
+      } else {
+        setRealView(p.view)
+        setRealTurn(false)
+      }
+    } else {
+      setRot(p.rot)
+      setPaused(false)
+    }
+  }
+
+  const stageClass = realModel ? '' : `pv3d${wire ? ' wf' : ''}${paused ? ' paused' : ''}`
+  const curPresetIndex = realModel
+    ? PRESETS.findIndex((p) => p.view === realView)
+    : rot
+      ? PRESETS.findIndex((p) => p.rot === rot)
+      : !paused
+        ? 0
+        : -1
 
   return (
     <div
@@ -100,8 +189,32 @@ export function Lightbox(): React.JSX.Element | null {
       <div className="pv-body">
         <div className="pv-stage">
           <div className="pv-frame">
-            {isModel ? (
-              <div className={`pv3d${wire ? ' wf' : ''}${paused ? ' paused' : ''}`}>
+            {realModel ? (
+              <div className="pv3d" style={{ position: 'relative' }}>
+                <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
+                <Viewer3D
+                  url={a.originalUrl ?? ''}
+                  turntable={realTurn}
+                  wireframe={realWire}
+                  view={realView}
+                />
+                <div className="v3-bar">
+                  <button className={`v3-chip${realTurn && realView === 'auto' ? ' on' : ''}`} title="转台 开/暂停" onClick={onTurntable}>
+                    <Icon name="rotate-3d" />转台
+                  </button>
+                  <button className={`v3-chip${realWire ? ' on' : ''}`} onClick={onWireframe}>
+                    线框
+                  </button>
+                  <span className="vr" />
+                  <button className={`v3-chip${realView === 'front' ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
+                  <button className={`v3-chip${realView === 'side' ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
+                  <button className={`v3-chip${realView === 'top' ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
+                  <span className="vr" />
+                  <span className="v3-env">环境 · 影棚</span>
+                </div>
+              </div>
+            ) : isModel ? (
+              <div className={stageClass}>
                 <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
                 <div className="c3d-wrap">
                   <Cube3D cs="186px" transform={rot ?? undefined} />
@@ -110,30 +223,17 @@ export function Lightbox(): React.JSX.Element | null {
                   <button
                     className={`v3-chip${!paused && !rot ? ' on' : ''}`}
                     title="转台 开/暂停"
-                    onClick={() => {
-                      const next = !paused
-                      setPaused(next)
-                      if (!next) { setRot(null); setPreset(0) }
-                    }}
+                    onClick={onTurntable}
                   >
                     <Icon name="rotate-3d" />转台
                   </button>
-                  <button
-                    className={`v3-chip${wire ? ' on' : ''}`}
-                    onClick={() => setWire(!wire)}
-                  >
+                  <button className={`v3-chip${wire ? ' on' : ''}`} onClick={onWireframe}>
                     线框
                   </button>
                   <span className="vr" />
-                  {Object.entries(VIEW_ROT).map(([k, r]) => (
-                    <button
-                      key={k}
-                      className={`v3-chip${rot === r ? ' on' : ''}`}
-                      onClick={() => { setRot(r); setPaused(false) }}
-                    >
-                      {{ front: '前视', side: '侧视', top: '顶视' }[k]}
-                    </button>
-                  ))}
+                  <button className={`v3-chip${rot === VIEW_ROT.front ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
+                  <button className={`v3-chip${rot === VIEW_ROT.side ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
+                  <button className={`v3-chip${rot === VIEW_ROT.top ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
                   <span className="vr" />
                   <span className="v3-env">环境 · 影棚</span>
                 </div>
@@ -155,9 +255,9 @@ export function Lightbox(): React.JSX.Element | null {
               {PRESETS.map((p, i) => (
                 <div
                   key={p.title}
-                  className={`fr${rot === p.rot || (!rot && i === 0 && !paused) ? ' cur' : ''}`}
+                  className={`fr${curPresetIndex === i ? ' cur' : ''}`}
                   title={p.title}
-                  onClick={() => { setRot(p.rot); setPaused(false) }}
+                  onClick={() => onPreset(p)}
                 >
                   <div className="c3d-wrap"><Cube3D cs="20px" transform={p.rot} /></div>
                 </div>
@@ -216,18 +316,4 @@ function Row({ k, v, sub }: { k: string; v: string; sub?: string }): React.JSX.E
       </dd>
     </>
   )
-}
-
-function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
-  if (failed) return <MediaFallback />
-  return <img src={src} alt={name} onError={() => setFailed(true)} />
-}
-
-function MediaVideo({ src }: { src: string }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
-  if (failed) return <MediaFallback />
-  return <video src={src} controls autoPlay onError={() => setFailed(true)} />
 }
