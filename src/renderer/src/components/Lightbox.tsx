@@ -72,6 +72,8 @@ export function Lightbox(): React.JSX.Element | null {
   )
   const [realWire, setRealWire] = useState(false)
   const [realView, setRealView] = useState<ViewKey>('auto')
+  const [exposure, setExposure] = useState(1)
+  const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
 
   /* 淡入过渡 + 素材切换时重置控制状态 */
   useEffect(() => {
@@ -88,6 +90,7 @@ export function Lightbox(): React.JSX.Element | null {
     setRot(null)
     setRealWire(false)
     setRealView('auto')
+    setLoadPct(undefined)
     setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [lightboxId])
 
@@ -102,7 +105,7 @@ export function Lightbox(): React.JSX.Element | null {
 
   const sub =
     a.type === 'model'
-      ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.faceCount == null ? '— 面' : formatFaces(a.faceCount) + ' 面'} · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
+      ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
       : `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.width}×${a.height} · ${formatBytes(a.sizeBytes)} · ${a.format}`
 
   /* 控制条动作(按真实/占位分流) */
@@ -197,7 +200,30 @@ export function Lightbox(): React.JSX.Element | null {
                   turntable={realTurn}
                   wireframe={realWire}
                   view={realView}
+                  exposure={exposure}
+                  onProgress={setLoadPct}
                 />
+                {loadPct != null && loadPct < 100 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%,-50%)',
+                      zIndex: 3,
+                      padding: '6px 14px',
+                      borderRadius: 10,
+                      background: 'rgba(255,255,255,.72)',
+                      border: '1px solid rgba(255,255,255,.95)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#0A4E9E',
+                      boxShadow: '0 6px 18px rgba(20,60,120,.18)'
+                    }}
+                  >
+                    {loadPct === null ? '解析模型…' : `加载中 ${Math.round(loadPct)}%`}
+                  </div>
+                )}
                 <div className="v3-bar">
                   <button className={`v3-chip${realTurn && realView === 'auto' ? ' on' : ''}`} title="转台 开/暂停" onClick={onTurntable}>
                     <Icon name="rotate-3d" />转台
@@ -211,6 +237,29 @@ export function Lightbox(): React.JSX.Element | null {
                   <button className={`v3-chip${realView === 'top' ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
                   <span className="vr" />
                   <span className="v3-env">环境 · 影棚</span>
+                  <span className="vr" />
+                  <span className="zoomer" style={{ gap: 5 }} title="曝光 0.4–1.6">
+                    <Icon name="spark" />
+                    <input
+                      type="range"
+                      min={0.4}
+                      max={1.6}
+                      step={0.05}
+                      value={exposure}
+                      aria-label="影棚曝光"
+                      ref={(el) => {
+                        if (el) {
+                          const p = ((Number(el.value) - 0.4) / 1.2) * 100
+                          el.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
+                        }
+                      }}
+                      onChange={(e) => {
+                        setExposure(Number(e.target.value))
+                        const p = ((Number(e.target.value) - 0.4) / 1.2) * 100
+                        e.target.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
+                      }}
+                    />
+                  </span>
                 </div>
               </div>
             ) : isModel ? (

@@ -34,6 +34,8 @@ export interface Asset {
   vertices?: number
   materialInfo?: string
   duration?: string
+  codec?: string
+  fps?: number
   sizeBytes: number
   importedAt: string
   rating: 0 | 1 | 2 | 3 | 4 | 5

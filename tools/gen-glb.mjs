@@ -57,7 +57,8 @@ const json = {
   ]
 }
 
-const jsonBuf = pad4(Buffer.from(JSON.stringify(json), 'utf8'))
+const padJson = (b) => (b.length % 4 ? Buffer.concat([b, Buffer.alloc(4 - (b.length % 4), 0x20)]) : b)
+const jsonBuf = padJson(Buffer.from(JSON.stringify(json), 'utf8'))
 const binChunk = pad4(bin)
 const total = 12 + 8 + jsonBuf.length + 8 + binChunk.length
 const header = Buffer.alloc(12)

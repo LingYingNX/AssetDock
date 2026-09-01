@@ -28,7 +28,8 @@ const api = {
       ipcRenderer.invoke('assets:update', id, patch),
     addTag: (id: number, name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:addTag', id, name),
     removeTag: (id: number, name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:removeTag', id, name),
-    emptyTrash: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:emptyTrash', libraryId)
+    emptyTrash: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:emptyTrash', libraryId),
+    purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId)
   },
 
   tabs: {

@@ -20,6 +20,7 @@ const mmss = (sec: number): string => {
 /** 主进程资产行 → Asset */
 function rowToAsset(r: Record<string, unknown>): Asset {
   const tags = (r.tags as { name: string; color: string }[]) ?? []
+  const segs = String(r.rel_path ?? '').split('/')
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
@@ -36,13 +37,16 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     vertices: (r.vertices as number) ?? undefined,
     materialInfo: (r.material_info as string) ?? undefined,
     duration: r.duration != null ? mmss(r.duration as number) : undefined,
+    codec: (r.codec as string) ?? undefined,
+    fps: (r.fps as number) ?? undefined,
     sizeBytes: r.size_bytes as number,
     importedAt: (r.imported_at as string).replace(' ', 'T'),
     rating: (r.rating as 0 | 1 | 2 | 3 | 4 | 5) ?? 0,
     favorite: (r.favorite as number) === 1,
     reviewFlag: (r.review_flag as number) === 1,
     tags,
-    folders: ((r.rel_path as string).split('/').slice(0, -1)),
+    /* 目录链:完整相对目录前缀(sub、sub/inner),树构建与导航共用 */
+    folders: segs.slice(0, -1).map((_, i) => segs.slice(0, i + 1).join('/')),
     note: (r.note as string) ?? '',
     sourceUrl: (r.source_url as string) ?? undefined,
     palette: JSON.parse((r.palette as string) || '[]') as PaletteColor[],
@@ -58,6 +62,12 @@ function TAG_COLOR(name: string): string {
 }
 
 interface UIState {
+  /* 已绑定库列表(「+」菜单与引导卡共用) */
+  libraries: { id: number; name: string; path: string }[]
+  setLibraries: (list: { id: number; name: string; path: string }[]) => void
+  createLibraryFlow: () => void
+  openLibrary: (libraryId: number, name: string) => void
+
   /* 标题栏库标签页 */
   tabs: LibraryTab[]
   activeTabId: string
@@ -157,6 +167,36 @@ export const useUI = create<UIState>((set, get) => {
   }
 
   return {
+    libraries: [],
+    setLibraries: (libraries) => set({ libraries }),
+    createLibraryFlow: () => {
+      void window.windowApi.pickFolder().then(async (folder) => {
+        if (!folder) return
+        const libs = get().libraries
+        const bound = libs.find((l) => l.path.toLowerCase() === folder.toLowerCase())
+        if (bound) {
+          get().openLibrary(bound.id, bound.name)
+          return
+        }
+        const r = await window.windowApi.library.create(folder)
+        if ('error' in r) {
+          alert(r.error)
+          return
+        }
+        get().setLibraries([...libs, r])
+        get().openLibrary(r.id, r.name)
+      })
+    },
+    openLibrary: (libraryId, name) => {
+      const open = get().tabs.find((t) => t.libraryId === libraryId)
+      if (open) {
+        set({ activeTabId: open.id })
+      } else {
+        get().createLibraryTab(libraryId, name)
+      }
+      get().reloadActiveLibrary()
+    },
+
     tabs: initialTabs,
     activeTabId: initialTabs[0].id,
     openTab: (id) => {
@@ -179,18 +219,8 @@ export const useUI = create<UIState>((set, get) => {
       else set({ assets: ASSETS, mode: 'demo' })
     },
     addTab: () => {
-      // 真实建库流程:选目录 → 建库 → 扫描由主进程发起
-      void window.windowApi.pickFolder().then(async (folder) => {
-        if (!folder) return
-        const r = await window.windowApi.library.create(folder)
-        if ('error' in r) {
-          alert(r.error)
-          return
-        }
-        get().createLibraryTab(r.id, r.name)
-        const lib = await window.windowApi.library.list()
-        void window.windowApi.tabs.save(lib.map((l) => l.id))
-      })
+      // 「+」菜单路径:打开库入口下拉(新建 + 已绑定库列表)
+      set({ openMenu: 'm-libs' })
     },
     createLibraryTab: (libraryId, name) => {
       tabSeq++

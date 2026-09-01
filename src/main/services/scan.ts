@@ -6,7 +6,7 @@ import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
 import type { ScanEntry } from './store'
 
-/** 单文件元数据采集(尺寸/时长按类型) */
+/** 单文件元数据采集(尺寸/时长/编码/面数按类型) */
 async function collectEntry(absPath: string, relPath: string, sizeBytes: number, mtimeMs: number): Promise<ScanEntry | null> {
   const kind = detectKind(relPath)
   if (!kind) return null
@@ -31,6 +31,8 @@ async function collectEntry(absPath: string, relPath: string, sizeBytes: number,
     entry.duration = meta.duration
     entry.width = meta.width
     entry.height = meta.height
+    entry.codec = meta.codec
+    entry.fps = meta.fps
   }
   return entry
 }

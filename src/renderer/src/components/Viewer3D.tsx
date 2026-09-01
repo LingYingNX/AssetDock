@@ -12,6 +12,10 @@ interface Viewer3DProps {
   turntable: boolean
   wireframe: boolean
   view: ViewKey
+  /** toneMappingExposure(0.4–1.6);调整不重建渲染器 */
+  exposure?: number
+  /** 加载进度:0–99 字节流 / null 解析中 / 100 完成 */
+  onProgress?: (pct: number | null) => void
   onError?: () => void
   onLoaded?: () => void
 }
@@ -39,10 +43,18 @@ const VIEW_POS: Record<Exclude<ViewKey, 'auto'>, [number, number, number]> = {
  * GLTFLoader(+Draco) 经 media 流加载,包围盒自适应取景;
  * 转台=模型绕 Y 自转,定格=相机切正交向;卸载对称释放。
  */
-export function Viewer3D({ url, turntable, wireframe, view, onError, onLoaded }: Viewer3DProps): React.JSX.Element {
+export function Viewer3D({ url, turntable, wireframe, view, exposure = 1, onProgress, onError, onLoaded }: Viewer3DProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<ViewerApi | null>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const onProgressRef = useRef(onProgress)
+  onProgressRef.current = onProgress
   const [failed, setFailed] = useState(false)
+
+  /* 曝光:直改 toneMappingExposure,不重建 */
+  useEffect(() => {
+    if (rendererRef.current) rendererRef.current.toneMappingExposure = exposure
+  }, [exposure])
 
   useEffect(() => {
     const host = hostRef.current
@@ -60,6 +72,9 @@ export function Viewer3D({ url, turntable, wireframe, view, onError, onLoaded }:
       return
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = exposure
+    rendererRef.current = renderer
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
     renderer.domElement.style.outline = 'none'
@@ -125,20 +140,54 @@ export function Viewer3D({ url, turntable, wireframe, view, onError, onLoaded }:
     const ro = new ResizeObserver(resize)
     ro.observe(host)
 
-    /* 加载:media 流 → GLTFLoader.parse(Draco) */
+    /* 加载:media 流式进度 → GLTFLoader.parse(Draco) */
     const draco = new DRACOLoader()
     draco.setDecoderPath('/gltf/draco/')
     const loader = new GLTFLoader()
     loader.setDRACOLoader(draco)
 
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`media ${r.status}`)
-        return r.arrayBuffer()
-      })
-      .then((buf) => new Promise<THREE.Group>((res, rej) => loader.parse(buf, '', (g) => res(g.scene), rej)))
-      .then((model) => {
+    async function fetchWithProgress(u: string): Promise<ArrayBuffer> {
+      const res = await fetch(u)
+      if (!res.ok) throw new Error(`media ${res.status}`)
+      const total = Number(res.headers.get('content-length')) || 0
+      if (!res.body) return res.arrayBuffer()
+      const reader = res.body.getReader()
+      const chunks: Uint8Array[] = []
+      let loaded = 0
+      let lastPct = -1
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        loaded += value.length
+        if (total > 0) {
+          const pct = Math.min(99, Math.floor((loaded / total) * 100))
+          if (pct !== lastPct) {
+            lastPct = pct
+            onProgressRef.current?.(pct)
+          }
+        }
+      }
+      const buf = new Uint8Array(loaded)
+      let off = 0
+      for (const c of chunks) {
+        buf.set(c, off)
+        off += c.length
+      }
+      return buf.buffer
+    }
+
+    fetchWithProgress(url)
+      .then((buf) => {
         if (disposed) return
+        onProgressRef.current?.(null) // null = 解析阶段(旋转指示)
+        return new Promise<THREE.Group>((res, rej) =>
+          loader.parse(buf, '', (g) => res(g.scene as THREE.Group), rej)
+        )
+      })
+      .then((model) => {
+        if (disposed || !model) return
+        onProgressRef.current?.(100)
         group.add(model)
         const box = new THREE.Box3().setFromObject(model)
         const size = box.getSize(new THREE.Vector3()).length() || 1
@@ -186,6 +235,7 @@ export function Viewer3D({ url, turntable, wireframe, view, onError, onLoaded }:
       })
       renderer.dispose()
       renderer.forceContextLoss?.()
+      rendererRef.current = null
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement)
       window.__threeStats!.disposes++
       apiRef.current = null

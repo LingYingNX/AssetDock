@@ -44,7 +44,7 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
 
   const meta =
     a.type === 'model'
-      ? [`${formatFaces(a.faceCount ?? 0)} 面`, formatBytes(a.sizeBytes)]
+      ? [formatBytes(a.sizeBytes)]
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
   const isVideo = a.type === 'video'
@@ -150,7 +150,7 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
           <span>{meta[1]}</span>
         </div>
         <span className="lc lc-type">{a.format}</span>
-        <span className="lc lc-res">{a.type === 'model' ? `${formatFaces(a.faceCount ?? 0)} 面` : formatResolution(a)}</span>
+        <span className="lc lc-res">{a.type === 'model' ? (a.faceCount == null ? '— 面' : `${formatFaces(a.faceCount)} 面`) : formatResolution(a)}</span>
         <span className="lc lc-size">{formatBytes(a.sizeBytes)}</span>
         <span className="lc lc-dur">{isVideo ? (a.duration ?? '—') : '—'}</span>
         <span className="lc lc-date">{formatRelativeDate(a.importedAt)}</span>

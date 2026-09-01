@@ -220,22 +220,69 @@ export function infoRows(a: Asset): [string, string, string?][] {
   if (a.type === 'model') {
     return [
       ['类型', `${a.format} 模型`, a.format === 'GLB' ? 'glTF 2.0' : undefined],
-      ['面数', a.faceCount == null ? '—' : formatFaces(a.faceCount), a.faceCount == null ? undefined : '三角面'],
-      ['顶点', a.vertices == null ? '—' : formatFaces(a.vertices)],
-      ['材质', a.materialInfo ?? '—'],
       ['大小', formatBytes(a.sizeBytes)],
       ['导入', formatFullDate(a.importedAt)]
     ]
   }
   const rows: [string, string, string?][] = [
-    ['类型', `${a.format} ${a.type === 'video' ? '视频' : '图片'}`],
+    ['类型', `${a.format} ${a.type === 'video' ? '视频' : '图片'}`, a.type === 'video' ? codecLabel(a.codec) : undefined],
     ['分辨率', `${formatResolution(a)}`, a.format === 'SVG' ? undefined : pxLabel(a)]
   ]
-  if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`])
+  if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`, a.fps ? `${a.fps} fps` : undefined])
   rows.push(['大小', formatBytes(a.sizeBytes)])
   rows.push(['导入', formatFullDate(a.importedAt)])
   rows.push(['来源', a.sourceUrl ? '外部链接' : '本地导入'])
   return rows
+}
+
+/** 编码名展示映射 */
+export function codecLabel(codec?: string): string | undefined {
+  if (!codec) return undefined
+  const map: Record<string, string> = {
+    h264: 'H.264',
+    hevc: 'HEVC',
+    h265: 'HEVC',
+    prores: 'ProRes',
+    vp9: 'VP9',
+    av1: 'AV1',
+    mpeg4: 'MPEG-4',
+    mjpeg: 'MJPEG'
+  }
+  return map[codec.toLowerCase()] ?? codec.toUpperCase()
+}
+
+/* ---------- 色带聚合:当前视图 palette 加权前 8 色 ---------- */
+
+export function aggregatePalette(list: Asset[]): { hex: string; ratio: number }[] {
+  type Bucket = { r: number; g: number; b: number; w: number }
+  const buckets = new Map<number, Bucket>()
+  for (const a of list) {
+    for (const p of a.palette) {
+      const m = p.hex.replace('#', '')
+      if (m.length !== 6) continue
+      const r = parseInt(m.slice(0, 2), 16)
+      const g = parseInt(m.slice(2, 4), 16)
+      const b = parseInt(m.slice(4, 6), 16)
+      // 4bit/通道 量化分桶(色相近似合并)
+      const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4)
+      const bk = buckets.get(key) ?? { r: 0, g: 0, b: 0, w: 0 }
+      bk.r += r * p.ratio
+      bk.g += g * p.ratio
+      bk.b += b * p.ratio
+      bk.w += p.ratio
+      buckets.set(key, bk)
+    }
+  }
+  const total = [...buckets.values()].reduce((s, b) => s + b.w, 0)
+  if (total === 0) return []
+  const hex2 = (v: number): string => Math.round(v).toString(16).padStart(2, '0').toUpperCase()
+  return [...buckets.values()]
+    .sort((x, y) => y.w - x.w)
+    .slice(0, 8)
+    .map((b) => ({
+      hex: `#${hex2(b.r / b.w)}${hex2(b.g / b.w)}${hex2(b.b / b.w)}`,
+      ratio: Math.round((b.w / total) * 100)
+    }))
 }
 
 function pxLabel(a: Asset): string | undefined {

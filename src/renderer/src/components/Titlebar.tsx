@@ -1,4 +1,5 @@
 import { useUI } from '../store/ui'
+import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
 
 export function Titlebar(): React.JSX.Element {
@@ -7,6 +8,24 @@ export function Titlebar(): React.JSX.Element {
   const openTab = useUI((s) => s.openTab)
   const closeTab = useUI((s) => s.closeTab)
   const addTab = useUI((s) => s.addTab)
+  const libraries = useUI((s) => s.libraries)
+  const createLibraryFlow = useUI((s) => s.createLibraryFlow)
+  const openLibrary = useUI((s) => s.openLibrary)
+  const openMenu = useUI((s) => s.openMenu)
+  const setOpenMenu = useUI((s) => s.setOpenMenu)
+
+  const libItems: MenuItem[] = [
+    { id: 'new', label: '新建素材库(选择文件夹…)', icon: 'plus', groupEnd: true },
+    ...libraries.map((l) => {
+      const opened = tabs.some((t) => t.libraryId === l.id)
+      return {
+        id: `lib-${l.id}`,
+        label: opened ? `${l.name}(已打开)` : l.name,
+        icon: 'drive',
+        disabled: opened
+      }
+    })
+  ]
 
   return (
     <header className="titlebar glass-titlebar">
@@ -36,9 +55,21 @@ export function Titlebar(): React.JSX.Element {
             </span>
           </button>
         ))}
-        <button className="lib-add" title="新建素材库" onClick={addTab}>
+        <button className="lib-add" data-menu="m-libs" title="新建素材库 / 打开已绑定库" onClick={addTab}>
           <Icon name="plus" />
         </button>
+        <Dropdown
+          id="m-libs"
+          items={libItems}
+          value=""
+          onPick={(id) => {
+            if (id === 'new') createLibraryFlow()
+            else {
+              const l = libraries.find((x) => `lib-${x.id}` === id)
+              if (l) openLibrary(l.id, l.name)
+            }
+          }}
+        />
       </nav>
       <div className="tb-spacer" />
       <div className="win-ctrls">

@@ -24,6 +24,7 @@ export default function App(): React.JSX.Element {
     const boot = async (): Promise<void> => {
       try {
         const libs = await window.windowApi.library.list()
+        useUI.getState().setLibraries(libs)
         if (libs.length === 0) return
         const openIds = await window.windowApi.tabs.get()
         const tabs = openIds

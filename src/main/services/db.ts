@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS app_state (
 );
 `
 
+const SCHEMA_V2 = `
+ALTER TABLE assets ADD COLUMN codec TEXT;
+ALTER TABLE assets ADD COLUMN fps REAL;
+`
+
 export function initDb(userDataDir: string): Database.Database {
   if (db) return db
   db = new Database(join(userDataDir, 'mediahub.db'))
@@ -68,6 +73,10 @@ export function initDb(userDataDir: string): Database.Database {
   if (version < 1) {
     db.exec(SCHEMA_V1)
     db.pragma('user_version = 1')
+  }
+  if (version < 2) {
+    db.exec(SCHEMA_V2)
+    db.pragma('user_version = 2')
   }
   return db
 }

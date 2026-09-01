@@ -9,6 +9,7 @@ export interface MenuItem {
   icon?: string
   dotColor?: string
   sub?: string
+  disabled?: boolean
   /** 分组分隔:该项之后画分隔线 */
   groupEnd?: boolean
 }
@@ -45,7 +46,9 @@ export function Dropdown({ id, items, value, onPick }: DropdownProps): React.JSX
       {items.map((it) => (
         <div key={it.id}>
           <button
+            disabled={it.disabled}
             onClick={() => {
+              if (it.disabled) return
               onPick(it.id)
               setOpenMenu(null)
             }}

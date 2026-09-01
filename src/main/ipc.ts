@@ -6,6 +6,7 @@ import {
 } from './services/store'
 import { scanLibrary } from './services/scan'
 import { watchLibrary } from './services/watch'
+import { probeVideo } from './services/videoMeta'
 import { initThumbs, ensureThumb, hasThumb, thumbPath } from './services/thumbs'
 import { extractPaletteFromThumb } from './services/palette'
 import type { AssetPatch } from './services/store'
@@ -142,6 +143,26 @@ export function registerIpc(userData: string): void {
     return { ok: true }
   })
 
+  /* 清理缺失记录:missing=1 且文件确实不存在的行(二重校验),不动任何磁盘文件 */
+  ipcMain.handle('assets:purgeMissing', async (_e, libraryId: number) => {
+    const db = getDb()
+    const rows = db
+      .prepare('SELECT id, rel_path FROM assets WHERE library_id = ? AND missing = 1')
+      .all(libraryId) as { id: number; rel_path: string }[]
+    const lib = getLibrary(db, libraryId)
+    if (!lib) return { purged: 0 }
+    const { access } = await import('node:fs/promises')
+    let purged = 0
+    for (const r of rows) {
+      const gone = await access(joinPath(lib.path, r.rel_path)).then(() => false, () => true)
+      if (gone) {
+        db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
+        purged++
+      }
+    }
+    return { purged }
+  })
+
   ipcMain.handle('tabs:get', () => getOpenTabs(getDb()))
   ipcMain.handle('tabs:save', (_e, ids: number[]) => {
     saveOpenTabs(getDb(), ids)
@@ -165,9 +186,31 @@ export function initServices(userData: string): void {
   void userDataDir
 }
 
-/** 启动时恢复各库监听 */
+/** 启动时恢复各库监听,并为 v2 迁移前的旧行补齐 codec/fps/面数 */
 export function attachWatchersFor(libraries: { id: number; path: string }[]): void {
   for (const l of libraries) attachWatcher(l.id, l.path)
+  for (const l of libraries) void enrichMissingMeta(l.id, l.path)
+}
+
+/** 旧记录补齐:视频缺 codec/fps、GLB 缺面数的行重探一次 */
+async function enrichMissingMeta(libraryId: number, root: string): Promise<void> {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT id, rel_path, type, format FROM assets
+       WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
+         AND ((type = 'video' AND codec IS NULL) OR (type = 'model' AND format = 'GLB' AND face_count IS NULL))`
+    )
+    .all(libraryId) as { id: number; rel_path: string; type: 'video' | 'model'; format: string }[]
+  if (rows.length === 0) return
+  for (const r of rows) {
+    const abs = joinPath(root, r.rel_path)
+    if (r.type === 'video') {
+      const m = await probeVideo(abs)
+      updateAsset(db, r.id, { codec: m.codec ?? null, fps: m.fps ?? null, width: m.width, height: m.height, duration: m.duration })
+    }
+  }
+  send('assets:changed', { libraryId })
 }
 
 function attachWatcher(libraryId: number, root: string): void {

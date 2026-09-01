@@ -22,6 +22,8 @@ export interface AssetRow {
   face_count: number | null
   vertices: number | null
   material_info: string | null
+  codec: string | null
+  fps: number | null
   size_bytes: number
   mtime_ms: number
   fingerprint: string
@@ -78,9 +80,16 @@ export interface AssetPatch {
   width?: number
   height?: number
   duration?: number
+  codec?: string | null
+  fps?: number | null
+  face_count?: number | null
+  vertices?: number | null
 }
 
-const EDITABLE = new Set(['name', 'rating', 'favorite', 'review_flag', 'note', 'source_url', 'deleted_at', 'palette', 'width', 'height', 'duration'])
+const EDITABLE = new Set([
+  'name', 'rating', 'favorite', 'review_flag', 'note', 'source_url', 'deleted_at', 'palette',
+  'width', 'height', 'duration', 'codec', 'fps', 'face_count', 'vertices'
+])
 
 export function updateAsset(d: Database, id: number, patch: AssetPatch): void {
   const keys = Object.keys(patch).filter((k) => EDITABLE.has(k))
@@ -123,25 +132,31 @@ export interface ScanEntry {
   width?: number
   height?: number
   duration?: number
+  codec?: string
+  fps?: number
+  faceCount?: number
+  vertices?: number
 }
 
 export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[]): void {
   const existing = d.prepare('SELECT id, size_bytes, mtime_ms FROM assets WHERE library_id = ? AND rel_path = ?')
   const insert = d.prepare(
-    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, size_bytes, mtime_ms, fingerprint, imported_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices, size_bytes, mtime_ms, fingerprint, imported_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const updateMeta = d.prepare('UPDATE assets SET size_bytes = ?, mtime_ms = ?, missing = 0 WHERE id = ?')
-  const updateDims = d.prepare('UPDATE assets SET width = ?, height = ?, duration = ? WHERE id = ?')
+  const updateDims = d.prepare('UPDATE assets SET width = ?, height = ?, duration = ?, codec = ?, fps = ?, face_count = ?, vertices = ? WHERE id = ?')
   const now = new Date().toISOString().slice(0, 16)
   d.transaction(() => {
     for (const e of entries) {
       const row = existing.get(libraryId, e.relPath) as { id: number; size_bytes: number; mtime_ms: number } | undefined
       if (row) {
         updateMeta.run(e.sizeBytes, e.mtimeMs, row.id)
-        if (e.width != null) updateDims.run(e.width, e.height ?? null, e.duration ?? null, row.id)
+        if (e.width != null || e.duration != null || e.codec != null || e.faceCount != null) {
+          updateDims.run(e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, row.id)
+        }
       } else {
-        insert.run(libraryId, e.relPath, e.name, e.type, e.format, e.width ?? null, e.height ?? null, e.duration ?? null, e.sizeBytes, e.mtimeMs, e.fingerprint, now)
+        insert.run(libraryId, e.relPath, e.name, e.type, e.format, e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, e.sizeBytes, e.mtimeMs, e.fingerprint, now)
       }
     }
   })()
