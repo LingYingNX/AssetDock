@@ -2,7 +2,8 @@
 import fs from 'node:fs'
 
 const change = process.argv[2]
-const base = `openspec/changes/${change}/specs`
+const changesBase = process.argv[3] ?? 'openspec/changes'
+const base = `${changesBase}/${change}/specs`
 
 const blocks = (text) => {
   const out = {}
