@@ -188,6 +188,7 @@ export const useUI = create<UIState>((set, get) => {
       })
     },
     openLibrary: (libraryId, name) => {
+      set({ scanProgress: null })
       const open = get().tabs.find((t) => t.libraryId === libraryId)
       if (open) {
         set({ activeTabId: open.id })

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { parseVideoMetaText } from '../src/main/services/videoMeta'
-import { parseGlbMeta } from '../src/main/services/glbMeta'
 
 const SAMPLE = `Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'a.mp4':
   Duration: 00:00:20.04, start: 0.000000, bitrate: 6837 kb/s
@@ -17,17 +16,5 @@ describe('videoMeta text parse', () => {
   })
   it('无匹配返回空对象', () => {
     expect(parseVideoMetaText('garbage')).toEqual({ duration: undefined, codec: undefined, fps: undefined })
-  })
-})
-
-describe('glbMeta', () => {
-  it('演示立方体.glb → 12 三角面 / 24 顶点', async () => {
-    const m = await parseGlbMeta('E:/zcode项目/素材管理器/素材/演示立方体.glb')
-    expect(m.faceCount).toBe(12)
-    expect(m.vertices).toBe(24)
-  })
-  it('损坏文件返回空对象', async () => {
-    const m = await parseGlbMeta('E:/zcode项目/素材管理器/素材/总渲染.mp4')
-    expect(m.faceCount).toBeUndefined()
   })
 })

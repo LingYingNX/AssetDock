@@ -1,7 +1,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join, relative, basename } from 'node:path'
 import sharp from 'sharp'
-import { isIgnored, detectKind } from './ignore'
+import { isIgnored, isIgnoredDir, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
 import type { ScanEntry } from './store'
@@ -60,7 +60,7 @@ export async function scanLibrary(
     for (const dent of dirents) {
       const rel = relDir ? `${relDir}/${dent.name}` : dent.name
       if (dent.isDirectory()) {
-        if (!isIgnored(`${rel}/x`)) queue.push(rel)
+        if (!isIgnoredDir(rel)) queue.push(rel)
         continue
       }
       if (!dent.isFile() || isIgnored(rel)) continue

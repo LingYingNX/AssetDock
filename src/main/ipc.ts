@@ -14,6 +14,7 @@ import type { FSWatcher } from 'chokidar'
 
 let userDataDir = '.'
 const watchers = new Map<number, FSWatcher>()
+const scanning = new Set<number>()
 
 function win(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
@@ -23,20 +24,26 @@ function send(channel: string, payload: unknown): void {
   win()?.webContents.send(channel, payload)
 }
 
-/** 扫描 → 入库 → 逐个缩略图+调色板;完成后发事件 */
+/** 扫描 → 入库 → 逐个缩略图+调色板;完成后发事件;并发去重 */
 async function scanAndIndex(libraryId: number): Promise<void> {
-  const db = getDb()
-  const lib = getLibrary(db, libraryId)
-  if (!lib) return
-  const entries = await scanLibrary(lib.path, (done) => send('library:scan', { libraryId, done, phase: 'scanning' }))
-  upsertScanned(db, libraryId, entries)
-  send('library:scan', { libraryId, done: entries.length, phase: 'done', added: entries.length })
-  for (const e of entries) {
-    const row = db
-      .prepare('SELECT id, fingerprint FROM assets WHERE library_id = ? AND rel_path = ?')
-      .get(libraryId, e.relPath) as { id: number; fingerprint: string } | undefined
-    if (!row) continue
-    await ensureThumbAndPalette(libraryId, row.id, joinPath(lib.path, e.relPath), e.type, e.format, row.fingerprint)
+  if (scanning.has(libraryId)) return
+  scanning.add(libraryId)
+  try {
+    const db = getDb()
+    const lib = getLibrary(db, libraryId)
+    if (!lib) return
+    const entries = await scanLibrary(lib.path, (done) => send('library:scan', { libraryId, done, phase: 'scanning' })).catch((e) => { send('library:scan', { libraryId, phase: 'error', message: String(e) }); return [] as never[] })
+    upsertScanned(db, libraryId, entries)
+    send('library:scan', { libraryId, done: entries.length, phase: 'done', added: entries.length })
+    for (const e of entries) {
+      const row = db
+        .prepare('SELECT id, fingerprint FROM assets WHERE library_id = ? AND rel_path = ?')
+        .get(libraryId, e.relPath) as { id: number; fingerprint: string } | undefined
+      if (!row) continue
+      await ensureThumbAndPalette(libraryId, row.id, joinPath(lib.path, e.relPath), e.type, e.format, row.fingerprint)
+    }
+  } finally {
+    scanning.delete(libraryId)
   }
 }
 
@@ -115,7 +122,12 @@ export function registerIpc(userData: string): void {
     const lib = getLibrary(db, libraryId)
     if (!lib) return { error: 'library not found' }
     const rows = listAssets(db, libraryId)
-    void backfillLibrary(libraryId)
+    // 首扫中断保护:库内无记录且首次扫描未完成标记缺失时,自动重扫(幂等)
+    if (rows.length === 0 && !scanning.has(libraryId)) {
+      void scanAndIndex(libraryId).then(() => backfillLibrary(libraryId))
+    } else {
+      void backfillLibrary(libraryId)
+    }
     return {
       library: { id: lib.id, name: lib.name, path: lib.path },
       assets: rows.map((r) => ({ ...r, absPath: joinPath(lib.path, r.rel_path) }))
@@ -186,29 +198,48 @@ export function initServices(userData: string): void {
   void userDataDir
 }
 
-/** 启动时恢复各库监听,并为 v2 迁移前的旧行补齐 codec/fps/面数 */
+/** 启动时恢复各库监听,补齐 codec/fps,并对账目录(应用关闭期间新增/删除的文件) */
 export function attachWatchersFor(libraries: { id: number; path: string }[]): void {
-  for (const l of libraries) attachWatcher(l.id, l.path)
+  for (const l of libraries) {
+    attachWatcher(l.id, l.path)
+    void reconcileLibrary(l.id, l.path)
+  }
   for (const l of libraries) void enrichMissingMeta(l.id, l.path)
 }
 
-/** 旧记录补齐:视频缺 codec/fps、GLB 缺面数的行重探一次 */
+/** 启动对账:静默重扫目录,幂等 upsert(新文件入库、已删文件标缺失) */
+async function reconcileLibrary(libraryId: number, root: string): Promise<void> {
+  try {
+    const entries = await scanLibrary(root)
+    if (entries.length > 0) upsertScanned(getDb(), libraryId, entries)
+    const known = getDb()
+      .prepare('SELECT rel_path FROM assets WHERE library_id = ? AND missing = 0')
+      .all(libraryId) as { rel_path: string }[]
+    const onDisk = new Set(entries.map((e) => e.relPath))
+    for (const k of known) {
+      if (!onDisk.has(k.rel_path)) setAssetMissing(getDb(), libraryId, k.rel_path, true)
+    }
+    send('assets:changed', { libraryId })
+  } catch {
+    /* 对账失败不阻塞启动 */
+  }
+}
+
+/** 旧记录补齐:视频缺 codec/fps 的行重探一次 */
 async function enrichMissingMeta(libraryId: number, root: string): Promise<void> {
   const db = getDb()
   const rows = db
     .prepare(
-      `SELECT id, rel_path, type, format FROM assets
+      `SELECT id, rel_path FROM assets
        WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
-         AND ((type = 'video' AND codec IS NULL) OR (type = 'model' AND format = 'GLB' AND face_count IS NULL))`
+         AND (type = 'video' AND codec IS NULL)`
     )
-    .all(libraryId) as { id: number; rel_path: string; type: 'video' | 'model'; format: string }[]
+    .all(libraryId) as { id: number; rel_path: string }[]
   if (rows.length === 0) return
   for (const r of rows) {
     const abs = joinPath(root, r.rel_path)
-    if (r.type === 'video') {
-      const m = await probeVideo(abs)
-      updateAsset(db, r.id, { codec: m.codec ?? null, fps: m.fps ?? null, width: m.width, height: m.height, duration: m.duration })
-    }
+    const m = await probeVideo(abs)
+    updateAsset(db, r.id, { codec: m.codec ?? null, fps: m.fps ?? null, width: m.width, height: m.height, duration: m.duration })
   }
   send('assets:changed', { libraryId })
 }

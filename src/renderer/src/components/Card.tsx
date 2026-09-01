@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useUI } from '../store/ui'
-import { formatBytes, formatRelativeDate, formatResolution, formatFaces } from '../data/query'
+import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import type { Asset } from '../data/types'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
@@ -146,11 +146,15 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
         <div className="name-row"><span className="name">{a.name}</span></div>
         <div className="meta-row">
           <span>{meta[0]}</span>
-          <span className="sep2">·</span>
-          <span>{meta[1]}</span>
+          {meta[1] ? (
+            <>
+              <span className="sep2">·</span>
+              <span>{meta[1]}</span>
+            </>
+          ) : null}
         </div>
         <span className="lc lc-type">{a.format}</span>
-        <span className="lc lc-res">{a.type === 'model' ? (a.faceCount == null ? '— 面' : `${formatFaces(a.faceCount)} 面`) : formatResolution(a)}</span>
+        <span className="lc lc-res">{a.type === 'model' ? '三维' : formatResolution(a)}</span>
         <span className="lc lc-size">{formatBytes(a.sizeBytes)}</span>
         <span className="lc lc-dur">{isVideo ? (a.duration ?? '—') : '—'}</span>
         <span className="lc lc-date">{formatRelativeDate(a.importedAt)}</span>

@@ -1,7 +1,7 @@
 import { watch as chokidarWatch, type FSWatcher } from 'chokidar'
 import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
-import { isIgnored, detectKind } from './ignore'
+import { isIgnoredWatch, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
 import { upsertScanned, setAssetMissing } from './store'
@@ -27,9 +27,9 @@ function debounced(key: string, fn: () => void, ms = 300): void {
   )
 }
 
-/** 文件相对根的忽略判断 */
+/** 文件相对根的忽略判断(目录路径按段规则放行,不因无扩展名剪枝) */
 function ignored(rel: string): boolean {
-  return isIgnored(rel)
+  return isIgnoredWatch(rel)
 }
 
 async function upsertOne(db: Database, libraryId: number, root: string, absPath: string): Promise<number | null> {

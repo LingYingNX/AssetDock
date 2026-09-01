@@ -25,7 +25,7 @@
 2. **库重开:「+」玻璃下拉菜单**(复用 Dropdown 组件):「新建素材库…」+ 已绑定库列表(当前已开的标 ✓ 灰显);新建选择已绑定路径 → 直接 openTab。
 3. **色带聚合:`queryAssets` 结果 → 每 palette 色 ratio×1 累加,同桶(色相近似合并)求和归一,取前 8**。主线程 O(n) 一次,数百项无感;展示用 52×30 色块同现有样式。
 4. **文件夹树:由 assets.folders(目录链)构建 Map 树,深度缩进渲染;计数=直接子树素材数**。演示模式沿用 FOLDERS 静态结构。
-5. **GLB 解析:仅读前 512KB(mvhd 式 Range),定位 JSON chunk(`glTF` magic + JSON chunk length),解析 meshes/primitives/accessors 统计面数与顶点**。JSON chunk 超过 512KB 时再扩读一次(上限 4MB)。
+5. ~~GLB 解析~~ 撤销(用户指示面数功能多余)。
 6. **编码/fps:扩展 videoMeta stderr 正则**(已全文在手),新增 `codec_name`/`fps` 提取,入库字段 codec、fps。
 7. **加载进度:fetch ReadableStream 按	content-length 累计字节报百分比;parse 阶段转旋转指示**;曝光:`renderer.toneMappingExposure` 直改 + 控制条尾 88px 滑杆(复用 zoomer 样式)。
 8. **空态插画:内联 SVG 玻璃风几何插画组件(空盒/空箱/空网格三款)**,复用现有配色;演示模式引导卡放 grid 顶部,复用 .btn-clear 风格主按钮。

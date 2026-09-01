@@ -2,7 +2,7 @@
 
 - [ ] 1.1 db schema v2 迁移:assets 加 codec、fps 列;`npm run rebuild:native` 后 electron 冒烟开库
 - [ ] 1.2 videoMeta 扩展:解析编码(codec_name)与 fps;单测:样例 stderr 文本断言;集成:真实 mp4 解析入库
-- [ ] 1.3 GLB 解析器(前 512KB JSON chunk → 面单/顶点);单测:演示立方体.glb 断言 36 面/24 顶点;损坏头留空
+- [x] 1.3 ~~GLB 解析器~~ 撤销(用户指示:面数功能完全多余,不做);规格 delta 已同步删除
 - [ ] 1.4 `assets:purgeMissing` IPC(二重校验文件不存在);桥断言:3 行测试记录清除,正常素材不受影响
 
 ## 2. 渲染层:库入口与侧栏

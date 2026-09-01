@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useUI } from '../store/ui'
-import { formatBytes, formatFaces, infoRows } from '../data/query'
+import { formatBytes, infoRows } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { Viewer3D, type ViewKey } from './Viewer3D'
