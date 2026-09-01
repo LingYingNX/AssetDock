@@ -19,6 +19,43 @@ import { ContextMenu } from './components/ContextMenu'
 export default function App(): React.JSX.Element {
   const s = useUI()
 
+  /* 启动引导:恢复库标签/激活态,加载数据;订阅主进程事件 */
+  useEffect(() => {
+    const boot = async (): Promise<void> => {
+      try {
+        const libs = await window.windowApi.library.list()
+        if (libs.length === 0) return
+        const openIds = await window.windowApi.tabs.get()
+        const tabs = openIds
+          .map((t) => {
+            const lib = libs.find((l) => l.id === t.libraryId)
+            return lib ? { id: `dblib-${lib.id}`, name: lib.name, libraryId: lib.id } : null
+          })
+          .filter((t): t is NonNullable<typeof t> => t != null)
+        if (tabs.length === 0) return
+        const activeLib = Number(await window.windowApi.state.get('activeTabLibrary'))
+        const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0]
+        useUI.setState({ tabs, activeTabId: active.id })
+        useUI.getState().reloadActiveLibrary()
+      } catch {
+        /* 引导失败保持演示模式 */
+      }
+    }
+    void boot()
+    const un1 = window.windowApi.on('assets:changed', () => useUI.getState().reloadActiveLibrary())
+    const un2 = window.windowApi.on('thumbs:ready', () => useUI.getState().bumpThumb())
+    const un3 = window.windowApi.on('library:scan', (p) => {
+      const d = p as { phase: string; done: number }
+      useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
+      if (d.phase === 'done') useUI.getState().reloadActiveLibrary()
+    })
+    return () => {
+      un1()
+      un2()
+      un3()
+    }
+  }, [])
+
   /* 全局键盘快捷键 */
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

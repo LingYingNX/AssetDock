@@ -106,6 +106,7 @@ const RES_PX = (a: Asset): number => Math.max(a.width ?? 0, a.height ?? 0)
 
 function matchNav(a: Asset, nav: NavKey): boolean {
   if (nav === 'trash') return !!a.deletedAt
+  if (a.missing) return false
   if (a.deletedAt) return false
   switch (nav) {
     case 'all':

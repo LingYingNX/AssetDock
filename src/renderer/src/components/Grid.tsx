@@ -15,12 +15,18 @@ export function Grid(): React.JSX.Element {
   const stripColor = useUI((s) => s.stripColor)
   const clearSelection = useUI((s) => s.clearSelection)
   const setSearch = useUI((s) => s.setSearch)
+  const emptyTrash = useUI((s) => s.emptyTrash)
+  const tabs = useUI((s) => s.tabs)
+  const activeTabId = useUI((s) => s.activeTabId)
 
   const list = queryAssets(assets, { nav, search, filters, swatches, stripColor })
 
   if (list.length === 0) {
     return (
       <div className="gridwrap">
+        {nav === 'trash' && (
+          <TrashHeader canEmpty={tabs.find((t) => t.id === activeTabId)?.libraryId != null} onEmpty={emptyTrash} />
+        )}
         <div className="empty">
           <Icon name="image" />
           <span>没有符合当前筛选条件的素材</span>
@@ -40,6 +46,9 @@ export function Grid(): React.JSX.Element {
 
   return (
     <div className="gridwrap" id="gridwrap">
+      {nav === 'trash' && (
+        <TrashHeader canEmpty={tabs.find((t) => t.id === activeTabId)?.libraryId != null} onEmpty={emptyTrash} />
+      )}
       <div className={`grid v-${view}`} id="grid">
         {view === 'list' && (
           <div className="lhead">
@@ -52,6 +61,19 @@ export function Grid(): React.JSX.Element {
           <Card key={a.id} a={a} view={view} />
         ))}
       </div>
+    </div>
+  )
+}
+
+function TrashHeader({ canEmpty, onEmpty }: { canEmpty: boolean; onEmpty: () => void }): React.JSX.Element {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 22px 0' }}>
+      <span style={{ fontSize: 11.5, color: 'var(--t3)' }}>回收站中的素材 · 恢复:右键 →「从回收站恢复」</span>
+      {canEmpty && (
+        <button className="btn-clear" style={{ marginLeft: 'auto' }} onClick={onEmpty}>
+          清空回收站(仅移除记录,不动文件)
+        </button>
+      )}
     </div>
   )
 }

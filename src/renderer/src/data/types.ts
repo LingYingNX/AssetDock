@@ -17,6 +17,13 @@ export interface PaletteColor {
 
 export interface Asset {
   id: string
+  /** 库内真实素材的数据库 id;演示模式为空 */
+  dbId?: number
+  libraryId?: number
+  relPath?: string
+  fingerprint?: string
+  /** 缺失文件的库内素材 */
+  missing?: boolean
   type: AssetType
   format: AssetFormat
   /** 不含扩展名,界面不显示后缀 */
@@ -37,8 +44,10 @@ export interface Asset {
   note: string
   sourceUrl?: string
   palette: PaletteColor[]
-  /** dev 预览地址(真实文件经 vite /@fs/ 提供);合成条目为空,用渐变占位 */
+  /** dev 演示模式:经 vite /@fs/ 预览;库模式:thumb:// 缩略图 */
   previewUrl?: string
+  /** 库模式:media:// 原始文件(灯箱大图/播放) */
+  originalUrl?: string
   /** 渐变占位类(g-ocean 等) */
   thumbClass?: string
   /** 真实文件绝对路径(「在资源管理器中显示」用) */
@@ -50,6 +59,8 @@ export interface Asset {
 export interface LibraryTab {
   id: string
   name: string
+  /** 库模式:对应数据库 library id;演示标签为空 */
+  libraryId?: number
 }
 
 export interface FolderNode {

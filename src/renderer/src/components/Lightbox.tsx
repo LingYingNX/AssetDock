@@ -4,6 +4,16 @@ import { formatBytes, formatFaces, infoRows } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 
+/** 舞台媒体加载失败占位 */
+function MediaFallback(): React.JSX.Element {
+  return (
+    <div className="empty" style={{ minHeight: 240 }}>
+      <Icon name="image" />
+      <span>文件加载失败或已缺失</span>
+    </div>
+  )
+}
+
 /** 视角预设条:5 个 64×38 玻璃小格 */
 const PRESETS: { title: string; rot: string }[] = [
   { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)' },
@@ -128,6 +138,12 @@ export function Lightbox(): React.JSX.Element | null {
                   <span className="v3-env">环境 · 影棚</span>
                 </div>
               </div>
+            ) : a.dbId != null ? (
+              a.type === 'image' ? (
+                <MediaImg src={a.originalUrl ?? ''} name={a.name} />
+              ) : (
+                <MediaVideo src={a.originalUrl ?? ''} />
+              )
             ) : a.type === 'image' ? (
               <img src={`/@fs/${a.previewUrl}`} alt={a.name} />
             ) : (
@@ -200,4 +216,18 @@ function Row({ k, v, sub }: { k: string; v: string; sub?: string }): React.JSX.E
       </dd>
     </>
   )
+}
+
+function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  if (failed) return <MediaFallback />
+  return <img src={src} alt={name} onError={() => setFailed(true)} />
+}
+
+function MediaVideo({ src }: { src: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  if (failed) return <MediaFallback />
+  return <video src={src} controls autoPlay onError={() => setFailed(true)} />
 }

@@ -22,6 +22,7 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
+  const nonce = useUI((s) => s.thumbNonce)
   const [imgLoaded, setImgLoaded] = useState(false)
 
   const cls = [
@@ -73,10 +74,18 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
         role="img"
         aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : '图片'}缩略图:${a.name}`}
       >
-        {a.type === 'model' ? (
+        {a.type === 'model' && a.dbId == null ? (
           <div className="c3d-wrap">
             <Cube3D cs="58px" />
           </div>
+        ) : a.dbId != null ? (
+          <img
+            src={`${a.previewUrl}?v=${nonce}`}
+            alt={a.name}
+            className={imgLoaded ? 'loaded' : ''}
+            onLoad={() => setImgLoaded(true)}
+            draggable={false}
+          />
         ) : a.previewUrl && a.type === 'image' ? (
           <img
             src={`/@fs/${a.previewUrl}`}

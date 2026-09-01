@@ -71,6 +71,7 @@ export function FilterBar(): React.JSX.Element {
   const search = useUI((s) => s.search)
   const swatches = useUI((s) => s.swatches)
   const stripColor = useUI((s) => s.stripColor)
+  const scanProgress = useUI((s) => s.scanProgress)
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, swatches, stripColor }))
 
@@ -123,6 +124,7 @@ export function FilterBar(): React.JSX.Element {
         </div>
       ))}
       <span className="fresult">
+        {scanProgress ? `${scanProgress} · ` : ''}
         筛选结果 <b>{stats.count}</b> 项 · {stats.size}
       </span>
       <button

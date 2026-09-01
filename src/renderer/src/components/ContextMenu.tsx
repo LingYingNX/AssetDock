@@ -9,6 +9,7 @@ export function ContextMenu(): React.JSX.Element | null {
   const setRenaming = useUI((s) => s.setRenaming)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
   const trashAsset = useUI((s) => s.trashAsset)
+  const restoreAsset = useUI((s) => s.restoreAsset)
   const assets = useUI((s) => s.assets)
 
   if (!ctxMenu) return null
@@ -30,11 +31,13 @@ export function ContextMenu(): React.JSX.Element | null {
     { icon: 'edit', label: '重命名', k: 'F2', fn: () => setRenaming(true) },
     { icon: 'folder', label: '移动到…', sub: true },
     { icon: 'tag', label: '添加标签…', sub: true },
-    { icon: 'heart', label: '添加到收藏', fn: () => toggleFavorite(ctxMenu.assetId) },
+    ...(a?.deletedAt
+      ? [{ icon: 'sync', label: '从回收站恢复', fn: () => restoreAsset(ctxMenu.assetId) }]
+      : [{ icon: 'heart', label: '添加到收藏', fn: () => toggleFavorite(ctxMenu.assetId) }]),
     { icon: 'copy', label: '复制', k: 'Ctrl C' },
     { icon: 'download', label: '导出…' },
     { icon: 'info', label: '文件信息', k: 'Ctrl I', fn: () => openLightbox(ctxMenu.assetId) },
-    { icon: 'trash', label: '删除', k: 'Del', danger: true, fn: () => trashAsset(ctxMenu.assetId) }
+    { icon: 'trash', label: a?.deletedAt ? '彻底删除(仅记录)' : '删除', k: 'Del', danger: true, fn: () => trashAsset(ctxMenu.assetId) }
   ]
 
   return (
