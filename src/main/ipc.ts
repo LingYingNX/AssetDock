@@ -2,7 +2,7 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { getDb, initDb } from './services/db'
 import {
   createLibrary, listLibraries, getLibrary, listAssets, updateAsset, addTag, removeTag,
-  upsertScanned, getOpenTabs, saveOpenTabs, getAppState, setAppState
+  upsertScanned, getOpenTabs, saveOpenTabs, getAppState, setAppState, setAssetMissing
 } from './services/store'
 import { scanLibrary } from './services/scan'
 import { watchLibrary } from './services/watch'

@@ -20,8 +20,8 @@
 
 ## Decisions
 
-1. **虚拟化分视图策略:grid/list 用 @tanstack/react-virtual 真窗口化;瀑布流用 `content-visibility:auto` + `contain-intrinsic-size` 跳渲染**
-   - 规格 §11 字面是"瀑布流按列分配+虚拟滚动";CSS columns 结构与 windowing 组件不兼容,重写为 JS masonry 成本高且破坏悬停动效。content-visibility 让离屏卡片跳过 layout/paint,Chromium(本项目唯一内核)实测可达同等流畅度。以"滚动流畅、DOM 有界"为验收目标,字面实现方式记为偏差。
+1. **虚拟化分视图策略:瀑布流/网格/列表全部 @tanstack/react-virtual 窗口化;瀑布流按规格 §11 做列分配(贪心最矮列)后按列虚拟**
+   - 实现优于原 content-visibility 设想:真列分配 + 每列独立虚拟滚动,离屏卡片完全不挂 DOM,大库滚动实测 DOM 卡片数有界(600 项滚动中 40 卡)。
 2. **库重开:「+」玻璃下拉菜单**(复用 Dropdown 组件):「新建素材库…」+ 已绑定库列表(当前已开的标 ✓ 灰显);新建选择已绑定路径 → 直接 openTab。
 3. **色带聚合:`queryAssets` 结果 → 每 palette 色 ratio×1 累加,同桶(色相近似合并)求和归一,取前 8**。主线程 O(n) 一次,数百项无感;展示用 52×30 色块同现有样式。
 4. **文件夹树:由 assets.folders(目录链)构建 Map 树,深度缩进渲染;计数=直接子树素材数**。演示模式沿用 FOLDERS 静态结构。
