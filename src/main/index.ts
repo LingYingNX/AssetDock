@@ -1,5 +1,22 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { createServer } from 'node:http'
+
+// dev 下开放本地 HTTP 桥:GET /<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用
+if (!app.isPackaged) {
+  createServer((req, res) => {
+    const expr = decodeURIComponent((req.url ?? '/').slice(1))
+    const win = BrowserWindow.getAllWindows()[0]
+    if (!win || !expr) {
+      res.end(JSON.stringify({ ok: false, error: 'no window or empty expression' }))
+      return
+    }
+    win.webContents.executeJavaScript(expr, true).then(
+      (v) => res.end(JSON.stringify({ ok: true, value: v ?? null })),
+      (e) => res.end(JSON.stringify({ ok: false, error: String(e) }))
+    )
+  }).listen(9223, '127.0.0.1')
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({

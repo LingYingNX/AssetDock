@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { useUI } from './store/ui'
 import { SvgDefs } from './components/Icons'
+
+// dev 下暴露 store 供无头验证脚本断言
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>).__ui = useUI
+}
 import { Titlebar } from './components/Titlebar'
 import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
