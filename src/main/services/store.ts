@@ -36,6 +36,7 @@ export interface AssetRow {
   missing: number
   palette: string
   imported_at: string
+  source_index_id: number | null
   tags: { name: string; color: string }[]
 }
 
@@ -99,10 +100,10 @@ export function updateAsset(d: Database, id: number, patch: AssetPatch): void {
   d.prepare(`UPDATE assets SET ${sets} WHERE id = ?`).run(...vals, id)
 }
 
-export function setAssetMissing(d: Database, libraryId: number, relPath: string, missing: boolean): boolean {
+export function setAssetMissing(d: Database, relPath: string, missing: boolean): boolean {
   const r = d
-    .prepare('UPDATE assets SET missing = ? WHERE library_id = ? AND rel_path = ?')
-    .run(missing ? 1 : 0, libraryId, relPath)
+    .prepare('UPDATE assets SET missing = ? WHERE rel_path = ?')
+    .run(missing ? 1 : 0, relPath)
   return r.changes > 0
 }
 
@@ -138,25 +139,25 @@ export interface ScanEntry {
   vertices?: number
 }
 
-export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[]): void {
-  const existing = d.prepare('SELECT id, size_bytes, mtime_ms FROM assets WHERE library_id = ? AND rel_path = ?')
+export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[], sourceIndexId?: number): void {
+  const existing = d.prepare('SELECT id, size_bytes, mtime_ms FROM assets WHERE rel_path = ?')
   const insert = d.prepare(
-    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices, size_bytes, mtime_ms, fingerprint, imported_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices, size_bytes, mtime_ms, fingerprint, source_index_id, imported_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const updateMeta = d.prepare('UPDATE assets SET size_bytes = ?, mtime_ms = ?, missing = 0 WHERE id = ?')
   const updateDims = d.prepare('UPDATE assets SET width = ?, height = ?, duration = ?, codec = ?, fps = ?, face_count = ?, vertices = ? WHERE id = ?')
   const now = new Date().toISOString().slice(0, 16)
   d.transaction(() => {
     for (const e of entries) {
-      const row = existing.get(libraryId, e.relPath) as { id: number; size_bytes: number; mtime_ms: number } | undefined
+      const row = existing.get(e.relPath) as { id: number; size_bytes: number; mtime_ms: number } | undefined
       if (row) {
         updateMeta.run(e.sizeBytes, e.mtimeMs, row.id)
         if (e.width != null || e.duration != null || e.codec != null || e.faceCount != null) {
           updateDims.run(e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, row.id)
         }
       } else {
-        insert.run(libraryId, e.relPath, e.name, e.type, e.format, e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, e.sizeBytes, e.mtimeMs, e.fingerprint, now)
+        insert.run(libraryId, e.relPath, e.name, e.type, e.format, e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, e.sizeBytes, e.mtimeMs, e.fingerprint, sourceIndexId ?? null, now)
       }
     }
   })()

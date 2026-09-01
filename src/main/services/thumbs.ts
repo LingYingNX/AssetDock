@@ -15,6 +15,19 @@ export function thumbPath(fingerprint: string): string {
   return join(thumbsDir, `${fingerprint}.webp`)
 }
 
+export function thumbPathIn(dir: string, fingerprint: string): string {
+  return join(dir, `${fingerprint}.webp`)
+}
+
+export async function hasThumbIn(dir: string, fingerprint: string): Promise<boolean> {
+  try {
+    await access(thumbPathIn(dir, fingerprint))
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function hasThumb(fingerprint: string): Promise<boolean> {
   try {
     await access(thumbPath(fingerprint))
@@ -65,14 +78,28 @@ export interface ThumbRequest {
   absPath: string
   type: 'image' | 'video' | 'model'
   format: string
+  /** 缓存目录(库内 .mediahub/thumbs);缺省用全局 thumbs */
+  dir?: string
+}
+
+function dirOf(req: ThumbRequest): string {
+  return req.dir ?? thumbsDir
 }
 
 /** 确保缩略图存在;返回缓存路径。生成串行执行,失败回退占位图。 */
 export async function ensureThumb(req: ThumbRequest): Promise<{ path: string; placeholder: boolean }> {
-  const target = thumbPath(req.fingerprint)
-  if (await hasThumb(req.fingerprint)) return { path: target, placeholder: false }
+  const target = thumbPathIn(dirOf(req), req.fingerprint)
+  const exists = async (): Promise<boolean> => {
+    try {
+      await access(target)
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (await exists()) return { path: target, placeholder: false }
   return enqueue(async () => {
-    if (await hasThumb(req.fingerprint)) return { path: target, placeholder: false }
+    if (await exists()) return { path: target, placeholder: false }
     let buf: Buffer
     try {
       if (req.type === 'video') {

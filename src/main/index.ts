@@ -1,10 +1,24 @@
 import { app, shell, BrowserWindow, ipcMain, protocol } from 'electron'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
+import { getDb } from './services/db'
+import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries } from './services/store'
-import { getDb } from './services/db'
+
+/** 退出前 checkpoint 全部库 db,保证 .mediahub/library.db 自包含(整目录可携带) */
+function checkpointAllLibraries(): void {
+  try {
+    for (const l of listLibraries(getDb())) {
+      try {
+        const d = new (require('better-sqlite3') as typeof import('better-sqlite3'))(libDbPath(l.path))
+        d.pragma('wal_checkpoint(TRUNCATE)')
+        d.close()
+      } catch { /* 单库失败不影响其余 */ }
+    }
+  } catch { /* ignore */ }
+}
 
 // media:// 需要在 app ready 前声明特权(视频流/Range)
 protocol.registerSchemesAsPrivileged([
@@ -51,15 +65,18 @@ app.whenReady().then(() => {
   registerIpc(userData)
   attachWatchersFor(listLibraries(getDb()))
 
-  // 缩略图协议:thumb://<fingerprint>.webp,缓存缺失时即时排队生成
+  // 缩略图协议:thumb://<fingerprint>.webp,跨库指纹查找,缺失时排队生成
   protocol.handle('thumb', async (request) => {
     const fp = new URL(request.url).hostname.replace(/\.webp$/, '')
-    const { hasThumb, thumbPath, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
-    if (!(await hasThumb(fp))) {
+    const { findByFingerprint } = await import('./services/libResolve')
+    const { hasThumbIn, thumbPathIn, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
+    const hit = findByFingerprint(fp)
+    if (!hit) return new Response('not found', { status: 404 })
+    if (!(await hasThumbIn(hit.thumbsDir, fp))) {
       if (!ensureThumbByFingerprint(fp)) return new Response('not found', { status: 404 })
     }
     try {
-      const buf = await import('node:fs/promises').then((f) => f.readFile(thumbPath(fp)))
+      const buf = await import('node:fs/promises').then((f) => f.readFile(thumbPathIn(hit.thumbsDir, fp)))
       return new Response(buf, { headers: { 'content-type': 'image/webp' } })
     } catch {
       return new Response('not found', { status: 404 })
@@ -106,5 +123,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    checkpointAllLibraries()
+    closeAllLibHandles()
+    app.quit()
+  }
 })

@@ -1,5 +1,5 @@
 import { watch as chokidarWatch, type FSWatcher } from 'chokidar'
-import { join } from 'node:path'
+export type { FSWatcher }
 import { stat } from 'node:fs/promises'
 import { isIgnoredWatch, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
@@ -11,6 +11,15 @@ export interface WatchCallbacks {
   onAdded: (assetId: number | null) => void
   onChanged: () => void
   onMissing: (relPath: string) => void
+}
+
+export interface WatchOptions {
+  /** 索引根:upsert 的 rel 加此虚拟前缀(= 索引名) */
+  relPrefix?: string
+  /** 索引素材来源标记 */
+  sourceIndexId?: number
+  /** 库根 upsert 后回调(触发缩略图补齐) */
+  onUpsert?: (assetId: number | null) => void
 }
 
 const debounces = new Map<string, NodeJS.Timeout>()
@@ -32,9 +41,16 @@ function ignored(rel: string): boolean {
   return isIgnoredWatch(rel)
 }
 
-async function upsertOne(db: Database, libraryId: number, root: string, absPath: string): Promise<number | null> {
-  const rel = absPath.slice(root.length + 1).replace(/\\/g, '/')
-  if (ignored(rel)) return null
+async function upsertOne(
+  db: Database,
+  libraryId: number,
+  root: string,
+  absPath: string,
+  opts: WatchOptions | undefined
+): Promise<number | null> {
+  const sliced = absPath.slice(root.length + 1).replace(/\\/g, '/')
+  const rel = opts?.relPrefix ? `${opts.relPrefix}/${sliced}` : sliced
+  if (ignored(sliced)) return null
   const kind = detectKind(rel)
   if (!kind) return null
   const st = await stat(absPath).catch(() => null)
@@ -47,26 +63,37 @@ async function upsertOne(db: Database, libraryId: number, root: string, absPath:
     if (m) meta = { width: m.width ?? undefined, height: m.height ?? undefined }
   }
   if (kind.type === 'video') meta = await probeVideo(absPath)
-  upsertScanned(db, libraryId, [
-    {
-      relPath: rel,
-      name: rel.slice(rel.lastIndexOf('/') + 1, rel.lastIndexOf('.')),
-      type: kind.type,
-      format: kind.format,
-      sizeBytes: st.size,
-      mtimeMs: st.mtimeMs,
-      fingerprint: fp,
-      width: meta.width,
-      height: meta.height,
-      duration: meta.duration
-    }
-  ])
-  const row = db.prepare('SELECT id FROM assets WHERE library_id = ? AND rel_path = ?').get(libraryId, rel) as { id: number } | undefined
+  upsertScanned(
+    db,
+    libraryId,
+    [
+      {
+        relPath: rel,
+        name: rel.slice(rel.lastIndexOf('/') + 1, rel.lastIndexOf('.')),
+        type: kind.type,
+        format: kind.format,
+        sizeBytes: st.size,
+        mtimeMs: st.mtimeMs,
+        fingerprint: fp,
+        width: meta.width,
+        height: meta.height,
+        duration: meta.duration
+      }
+    ],
+    opts?.sourceIndexId
+  )
+  const row = db.prepare('SELECT id FROM assets WHERE rel_path = ?').get(rel) as { id: number } | undefined
   return row?.id ?? null
 }
 
-/** 绑定库增量监听;返回关闭函数 */
-export function watchLibrary(db: Database, libraryId: number, root: string, cb: WatchCallbacks): FSWatcher {
+/** 绑定目录增量监听(库根或索引根);返回关闭函数 */
+export function watchLibrary(
+  db: Database,
+  libraryId: number,
+  root: string,
+  cb: WatchCallbacks,
+  opts?: WatchOptions
+): FSWatcher {
   const watcher = chokidarWatch(root, {
     ignoreInitial: true,
     ignored: (p: string) => {
@@ -79,11 +106,17 @@ export function watchLibrary(db: Database, libraryId: number, root: string, cb: 
 
   const handleAddOrChange = (absPath: string): void =>
     debounced(absPath, () => {
-      void upsertOne(db, libraryId, root, absPath).then((id) => {
-        const rel = absPath.slice(root.length + 1).replace(/\\/g, '/')
-        const row = db.prepare('SELECT id FROM assets WHERE library_id = ? AND rel_path = ?').get(libraryId, rel) as { id: number; missing: number } | undefined
-        if (row?.missing) setAssetMissing(db, libraryId, rel, false)
-        if (id != null || row) cb.onAdded(id ?? row?.id ?? null)
+      void upsertOne(db, libraryId, root, absPath, opts).then((id) => {
+        const sliced = absPath.slice(root.length + 1).replace(/\\/g, '/')
+        const rel = opts?.relPrefix ? `${opts.relPrefix}/${sliced}` : sliced
+        const row = db.prepare('SELECT id, missing FROM assets WHERE rel_path = ?').get(rel) as
+          | { id: number; missing: number }
+          | undefined
+        if (row?.missing) setAssetMissing(db, rel, false)
+        if (id != null || row) {
+          if (opts?.onUpsert) opts.onUpsert(id ?? row?.id ?? null)
+          cb.onAdded(id ?? row?.id ?? null)
+        }
       })
     })
 
@@ -91,16 +124,16 @@ export function watchLibrary(db: Database, libraryId: number, root: string, cb: 
     .on('add', handleAddOrChange)
     .on('change', (p: string) => {
       debounced('c:' + p, () => {
-        void upsertOne(db, libraryId, root, p).then(() => cb.onChanged())
+        void upsertOne(db, libraryId, root, p, opts).then(() => cb.onChanged())
       })
     })
     .on('unlink', (p: string) => {
-      const rel = p.slice(root.length + 1).replace(/\\/g, '/')
+      const sliced = p.slice(root.length + 1).replace(/\\/g, '/')
+      const rel = opts?.relPrefix ? `${opts.relPrefix}/${sliced}` : sliced
       debounced('u:' + p, () => {
-        if (setAssetMissing(db, libraryId, rel, true)) cb.onMissing(rel)
+        if (setAssetMissing(db, rel, true)) cb.onMissing(sliced)
       })
     })
 
-  void join // 保持 join 引用(路径拼接在调用方)
   return watcher
 }

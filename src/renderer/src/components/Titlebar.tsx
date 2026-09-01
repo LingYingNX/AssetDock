@@ -13,9 +13,17 @@ export function Titlebar(): React.JSX.Element {
   const openLibrary = useUI((s) => s.openLibrary)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
+  const indexFlow = useUI((s) => s.indexFlow)
 
   const libItems: MenuItem[] = [
     { id: 'new', label: '新建素材库(选择文件夹…)', icon: 'plus', groupEnd: true },
+    {
+      id: 'index',
+      label: '索引目录到当前库…',
+      icon: 'scan',
+      disabled: tabs.find((t) => t.id === activeTabId)?.libraryId == null,
+      groupEnd: true
+    },
     ...libraries.map((l) => {
       const opened = tabs.some((t) => t.libraryId === l.id)
       return {
@@ -64,6 +72,7 @@ export function Titlebar(): React.JSX.Element {
           value=""
           onPick={(id) => {
             if (id === 'new') createLibraryFlow()
+            else if (id === 'index') indexFlow()
             else {
               const l = libraries.find((x) => `lib-${x.id}` === id)
               if (l) openLibrary(l.id, l.name)

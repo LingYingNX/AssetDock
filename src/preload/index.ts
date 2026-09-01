@@ -24,12 +24,23 @@ const api = {
 
   assets: {
     list: (libraryId: number): Promise<unknown> => ipcRenderer.invoke('assets:list', libraryId),
-    update: (id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('assets:update', id, patch),
-    addTag: (id: number, name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:addTag', id, name),
-    removeTag: (id: number, name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:removeTag', id, name),
+    update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('assets:update', libraryId, id, patch),
+    addTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('assets:addTag', libraryId, id, name),
+    removeTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('assets:removeTag', libraryId, id, name),
     emptyTrash: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:emptyTrash', libraryId),
     purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId)
+  },
+
+  index: {
+    add: (libraryId: number, folder: string): Promise<{ id: number; name: string; path: string } | { error: string }> =>
+      ipcRenderer.invoke('index:add', libraryId, folder),
+    remove: (libraryId: number, indexId: number): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('index:remove', libraryId, indexId),
+    list: (libraryId: number): Promise<{ id: number; path: string; name: string }[]> =>
+      ipcRenderer.invoke('index:list', libraryId)
   },
 
   tabs: {

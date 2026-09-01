@@ -231,7 +231,7 @@ export function infoRows(a: Asset): [string, string, string?][] {
   if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`, a.fps ? `${a.fps} fps` : undefined])
   rows.push(['大小', formatBytes(a.sizeBytes)])
   rows.push(['导入', formatFullDate(a.importedAt)])
-  rows.push(['来源', a.sourceUrl ? '外部链接' : '本地导入'])
+  rows.push(['来源', a.indexName ? `索引 · ${a.indexName}` : a.sourceUrl ? '外部链接' : '本地导入'])
   return rows
 }
 

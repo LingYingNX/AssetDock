@@ -28,6 +28,8 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     relPath: r.rel_path as string,
     fingerprint: r.fingerprint as string,
     missing: (r.missing as number) === 1,
+    sourceIndexId: (r.source_index_id as number) ?? undefined,
+    indexName: (r.index_name as string) ?? undefined,
     type: r.type as Asset['type'],
     format: r.format as Asset['format'],
     name: r.name as string,
@@ -66,6 +68,7 @@ interface UIState {
   libraries: { id: number; name: string; path: string }[]
   setLibraries: (list: { id: number; name: string; path: string }[]) => void
   createLibraryFlow: () => void
+  indexFlow: () => void
   openLibrary: (libraryId: number, name: string) => void
 
   /* 标题栏库标签页 */
@@ -112,6 +115,8 @@ interface UIState {
 
   /* 素材数据(可变字段走 store,编辑经 IPC 落库) */
   assets: Asset[]
+  indexes: { id: number; name: string; path: string }[]
+  setIndexes: (list: { id: number; name: string; path: string }[]) => void
   setRating: (id: string, v: number) => void
   toggleFavorite: (id: string) => void
   toggleReviewFlag: (id: string) => void
@@ -161,8 +166,8 @@ export const useUI = create<UIState>((set, get) => {
   const edit = (id: string, patch: Record<string, unknown>, local: (a: Asset) => Asset): void => {
     set((s) => ({ assets: s.assets.map((a) => (a.id === id ? local(a) : a)) }))
     const a = get().assets.find((x) => x.id === id)
-    if (a?.dbId != null) {
-      window.windowApi.assets.update(a.dbId, patch).catch(() => alert('保存失败:数据库写入错误,请重试'))
+    if (a?.dbId != null && a.libraryId != null) {
+      window.windowApi.assets.update(a.libraryId, a.dbId, patch).catch(() => alert('保存失败:数据库写入错误,请重试'))
     }
   }
 
@@ -185,6 +190,23 @@ export const useUI = create<UIState>((set, get) => {
         }
         get().setLibraries([...libs, r])
         get().openLibrary(r.id, r.name)
+      })
+    },
+    indexFlow: () => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      const libraryId = t?.libraryId
+      if (libraryId == null) {
+        alert('请先新建或打开一个素材库,再索引目录')
+        return
+      }
+      void window.windowApi.pickFolder().then(async (folder) => {
+        if (!folder) return
+        const r = await window.windowApi.index.add(libraryId, folder)
+        if ('error' in r) {
+          alert(r.error)
+          return
+        }
+        get().reloadActiveLibrary()
       })
     },
     openLibrary: (libraryId, name) => {
@@ -247,8 +269,14 @@ export const useUI = create<UIState>((set, get) => {
         return
       }
       void window.windowApi.assets.list(t.libraryId).then((r) => {
-        const data = r as { library?: unknown; assets?: Record<string, unknown>[] }
-        if (Array.isArray(data?.assets)) set({ assets: data.assets.map(rowToAsset), mode: 'library' })
+        const data = r as { library?: unknown; assets?: Record<string, unknown>[]; indexes?: { id: number; name: string; path: string }[] }
+        if (Array.isArray(data?.assets)) {
+          set({
+            assets: data.assets.map(rowToAsset),
+            indexes: (data.indexes as { id: number; name: string; path: string }[]) ?? [],
+            mode: 'library'
+          })
+        }
       })
     },
     bumpThumb: () => set((s) => ({ thumbNonce: s.thumbNonce + 1 })),
@@ -279,6 +307,8 @@ export const useUI = create<UIState>((set, get) => {
     toggleInspector: () => set((s) => ({ inspHidden: !s.inspHidden })),
 
     assets: ASSETS,
+    indexes: [],
+    setIndexes: (indexes) => set({ indexes }),
     setRating: (id, v) =>
       edit(id, { rating: Math.min(5, Math.max(0, v)) }, (a) => ({
         ...a,
@@ -302,12 +332,12 @@ export const useUI = create<UIState>((set, get) => {
       const a = get().assets.find((x) => x.id === id)
       if (!a || a.tags.some((t) => t.name === name)) return
       edit(id, {}, (x) => ({ ...x, tags: [...x.tags, { name, color: TAG_COLOR(name) }] }))
-      if (a.dbId != null) void window.windowApi.assets.addTag(a.dbId, name)
+      if (a.dbId != null && a.libraryId != null) void window.windowApi.assets.addTag(a.libraryId, a.dbId, name)
     },
     removeTag: (id, name) => {
       edit(id, {}, (x) => ({ ...x, tags: x.tags.filter((t) => t.name !== name) }))
       const a = get().assets.find((x) => x.id === id)
-      if (a?.dbId != null) void window.windowApi.assets.removeTag(a.dbId, name)
+      if (a?.dbId != null && a.libraryId != null) void window.windowApi.assets.removeTag(a.libraryId, a.dbId, name)
     },
     setNote: (id, note) => edit(id, { note }, (a) => ({ ...a, note })),
     setSourceUrl: (id, url) => edit(id, { source_url: url || null }, (a) => ({ ...a, sourceUrl: url || undefined })),

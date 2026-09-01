@@ -22,6 +22,10 @@ export interface Asset {
   libraryId?: number
   relPath?: string
   fingerprint?: string
+  /** 索引素材:来源 index_sources.id */
+  sourceIndexId?: number
+  /** 索引素材:来源索引名(信息面板/树节点用) */
+  indexName?: string
   /** 缺失文件的库内素材 */
   missing?: boolean
   type: AssetType
