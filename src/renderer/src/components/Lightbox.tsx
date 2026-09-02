@@ -15,11 +15,44 @@ function MediaFallback(): React.JSX.Element {
   )
 }
 
+/** 图片查看:滚轮缩放(以光标为锚),双击重置 */
 function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
+  const [scale, setScale] = useState(1)
+  const [origin, setOrigin] = useState('50% 50%')
+  useEffect(() => {
+    setFailed(false)
+    setScale(1)
+    setOrigin('50% 50%')
+  }, [src])
   if (failed) return <MediaFallback />
-  return <img src={src} alt={name} onError={() => setFailed(true)} />
+  return (
+    <img
+      src={src}
+      alt={name}
+      draggable={false}
+      style={{
+        transform: `scale(${scale})`,
+        transformOrigin: origin,
+        transition: 'transform .12s ease-out',
+        cursor: scale > 1 ? 'grab' : 'zoom-in'
+      }}
+      onWheel={(e) => {
+        e.preventDefault()
+        const rect = e.currentTarget.getBoundingClientRect()
+        const x = ((e.clientX - rect.left) / rect.width) * 100
+        const y = ((e.clientY - rect.top) / rect.height) * 100
+        setOrigin(`${Math.min(100, Math.max(0, x))}% ${Math.min(100, Math.max(0, y))}%`)
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
+        setScale((s) => Math.min(10, Math.max(0.2, s * factor)))
+      }}
+      onDoubleClick={() => {
+        setScale(1)
+        setOrigin('50% 50%')
+      }}
+      onError={() => setFailed(true)}
+    />
+  )
 }
 
 function MediaVideo({ src }: { src: string }): React.JSX.Element {
@@ -182,6 +215,9 @@ export function Lightbox(): React.JSX.Element | null {
       }}
     >
       <div className="pv-top">
+        <button className="tb-btn" title="后退 (Esc)" onClick={closeLightbox}>
+          <Icon name="chev-l" />
+        </button>
         <button className="tb-btn" title="上一个 (←)" onClick={() => stepLightbox(-1)}>
           <Icon name="arr-l" />
         </button>
@@ -206,7 +242,15 @@ export function Lightbox(): React.JSX.Element | null {
 
       <div className="pv-body">
         <div className="pv-stage">
-          <div className="pv-frame">
+          <div
+            className="pv-frame"
+            onClick={(e) => {
+              if (isModel) return
+              const t = e.target as HTMLElement
+              if (t.tagName === 'IMG' || t.tagName === 'VIDEO' || t.tagName === 'CANVAS' || t.closest('button') || t.closest('input')) return
+              closeLightbox()
+            }}
+          >
             {realModel ? (
               <div className="pv3d" style={{ position: 'relative' }}>
                 <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>

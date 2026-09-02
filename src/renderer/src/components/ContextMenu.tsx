@@ -22,7 +22,6 @@ export function ContextMenu(): React.JSX.Element | null {
   }
 
   const items: { icon: string; label: string; k?: string; sub?: boolean; danger?: boolean; fn?: () => void }[] = [
-    { icon: 'eye', label: '打开预览', k: 'Enter', fn: () => openLightbox(ctxMenu.assetId) },
     {
       icon: 'external',
       label: '在资源管理器中显示',
