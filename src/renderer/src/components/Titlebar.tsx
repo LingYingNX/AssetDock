@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useUI } from '../store/ui'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
@@ -11,9 +12,28 @@ export function Titlebar(): React.JSX.Element {
   const libraries = useUI((s) => s.libraries)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const openLibrary = useUI((s) => s.openLibrary)
+  const indexFlow = useUI((s) => s.indexFlow)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
-  const indexFlow = useUI((s) => s.indexFlow)
+  const [legacyCount, setLegacyCount] = useState(0)
+  const [legacyBusy, setLegacyBusy] = useState(false)
+
+  /* 迁移残留统计:菜单展开时刷新 */
+  useEffect(() => {
+    if (openMenu !== 'm-libs') return
+    void window.windowApi.library.legacyStats().then((r) => setLegacyCount(r.assets))
+  }, [openMenu])
+
+  const purgeLegacy = (): void => {
+    if (legacyBusy) return
+    if (!window.confirm(`将删除迁移残留的 ${legacyCount} 条素材记录(库数据与设置保留),确认?`)) return
+    if (!window.confirm('再次确认:此操作不可撤销,继续?')) return
+    setLegacyBusy(true)
+    void window.windowApi.library.purgeLegacy().then(() => {
+      setLegacyCount(0)
+      setLegacyBusy(false)
+    })
+  }
 
   const libItems: MenuItem[] = [
     { id: 'new', label: '新建素材库(选择文件夹…)', icon: 'plus', groupEnd: true },
@@ -32,7 +52,18 @@ export function Titlebar(): React.JSX.Element {
         icon: 'drive',
         disabled: opened
       }
-    })
+    }),
+    ...(legacyCount > 0
+      ? [
+          {
+            id: 'purge-legacy',
+            label: legacyBusy ? '清理中…' : `清理迁移残留(${legacyCount} 项)…`,
+            icon: 'trash',
+            disabled: legacyBusy,
+            groupEnd: true
+          } as MenuItem
+        ]
+      : [])
   ]
 
   return (
@@ -73,6 +104,7 @@ export function Titlebar(): React.JSX.Element {
           onPick={(id) => {
             if (id === 'new') createLibraryFlow()
             else if (id === 'index') indexFlow()
+            else if (id === 'purge-legacy') purgeLegacy()
             else {
               const l = libraries.find((x) => `lib-${x.id}` === id)
               if (l) openLibrary(l.id, l.name)

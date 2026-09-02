@@ -58,12 +58,23 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  const userData = app.getPath('userData')
-  initServices(userData)
-  registerMediaProtocol(getDb())
-  registerIpc(userData)
-  attachWatchersFor(listLibraries(getDb()))
+// 单实例锁:第二实例启动时聚焦既有窗口并退出,避免并发写库
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const w = BrowserWindow.getAllWindows()[0]
+    if (!w) return
+    if (w.isMinimized()) w.restore()
+    w.focus()
+  })
+
+  app.whenReady().then(() => {
+    const userData = app.getPath('userData')
+    initServices(userData)
+    registerMediaProtocol(getDb())
+    registerIpc(userData)
+    attachWatchersFor(listLibraries(getDb()))
 
   // 缩略图协议:thumb://<fingerprint>.webp,跨库指纹查找,缺失时排队生成
   protocol.handle('thumb', async (request) => {
@@ -120,7 +131,8 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-})
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

@@ -75,6 +75,21 @@ export function Lightbox(): React.JSX.Element | null {
   const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
 
+  /* 曝光持久化:首次打开时读应用状态 */
+  useEffect(() => {
+    if (!lightboxId) return
+    void window.windowApi.state.get('viewerExposure').then((v) => {
+      const n = Number(v)
+      if (v != null && !Number.isNaN(n)) setExposure(Math.min(1.6, Math.max(0.4, n)))
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const changeExposure = (v: number): void => {
+    setExposure(v)
+    void window.windowApi.state.set('viewerExposure', String(v))
+  }
+
   /* 淡入过渡 + 素材切换时重置控制状态 */
   useEffect(() => {
     if (lightboxId) {
@@ -254,7 +269,7 @@ export function Lightbox(): React.JSX.Element | null {
                         }
                       }}
                       onChange={(e) => {
-                        setExposure(Number(e.target.value))
+                        changeExposure(Number(e.target.value))
                         const p = ((Number(e.target.value) - 0.4) / 1.2) * 100
                         e.target.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
                       }}

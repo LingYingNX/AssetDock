@@ -326,6 +326,24 @@ export function registerIpc(userData: string): void {
     return { ok: true }
   })
 
+  /* 迁移残留清理:仅全局兜底库的素材/标签/关联;注册表与设置保留 */
+  ipcMain.handle('library:legacyStats', () => {
+    const d = getDb()
+    const r = d.prepare('SELECT COUNT(*) AS c FROM assets').get() as { c: number }
+    return { assets: r.c }
+  })
+
+  ipcMain.handle('library:purgeLegacy', () => {
+    const d = getDb()
+    d.transaction(() => {
+      d.prepare('DELETE FROM asset_tags').run()
+      d.prepare('DELETE FROM tags').run()
+      d.prepare('DELETE FROM assets').run()
+    })()
+    d.pragma('wal_checkpoint(TRUNCATE)')
+    return { ok: true }
+  })
+
   ipcMain.handle('assets:addTag', (_e, libraryId: number, id: number, name: string) => {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
