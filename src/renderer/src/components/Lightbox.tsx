@@ -108,15 +108,13 @@ export function Lightbox(): React.JSX.Element | null {
   const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
 
-  /* 曝光持久化:首次打开时读应用状态 */
+  /* 曝光持久化:打开灯箱时读应用状态(组件常驻挂载,不可依赖[]) */
   useEffect(() => {
-    if (!lightboxId) return
     void window.windowApi.state.get('viewerExposure').then((v) => {
       const n = Number(v)
       if (v != null && !Number.isNaN(n)) setExposure(Math.min(1.6, Math.max(0.4, n)))
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [lightboxId])
 
   const changeExposure = (v: number): void => {
     setExposure(v)
