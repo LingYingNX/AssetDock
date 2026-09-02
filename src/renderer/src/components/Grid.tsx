@@ -44,6 +44,7 @@ export function Grid(): React.JSX.Element {
   const stripColor = useUI((s) => s.stripColor)
   const colw = useUI((s) => s.colw)
   const clearSelection = useUI((s) => s.clearSelection)
+  const setSelectedIds = useUI((s) => s.setSelectedIds)
   const setSearch = useUI((s) => s.setSearch)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const addTab = useUI((s) => s.addTab)
@@ -53,6 +54,7 @@ export function Grid(): React.JSX.Element {
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const [wrapW, setWrapW] = useState(1200)
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
 
   const list = useMemo(
     () => queryAssets(assets, { nav, search, filters, swatches, stripColor }),
@@ -74,7 +76,46 @@ export function Grid(): React.JSX.Element {
   }, [])
 
   const canEmpty = tabs.find((t) => t.id === activeTabId)?.libraryId != null
+  const startMarquee = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement
+    if (target.closest('.card, button, input, textarea, select, a, [contenteditable]')) return
+
+    event.preventDefault()
+    clearSelection()
+    const startX = event.clientX
+    const startY = event.clientY
+    setMarquee({ left: startX, top: startY, width: 0, height: 0 })
+
+    const move = (moveEvent: MouseEvent) => {
+      const left = Math.min(startX, moveEvent.clientX)
+      const top = Math.min(startY, moveEvent.clientY)
+      const width = Math.abs(moveEvent.clientX - startX)
+      const height = Math.abs(moveEvent.clientY - startY)
+      setMarquee({ left, top, width, height })
+      const cards = wrapRef.current?.querySelectorAll<HTMLElement>('.card[data-asset-id]')
+      if (!cards) return
+      const selected = Array.from(cards)
+        .filter((card) => {
+          const r = card.getBoundingClientRect()
+          return r.left < left + width && r.right > left && r.top < top + height && r.bottom > top
+        })
+        .map((card) => card.dataset.assetId)
+        .filter((id): id is string => id != null)
+      setSelectedIds(selected)
+    }
+
+    const finish = () => {
+      window.removeEventListener('mousemove', move)
+      setMarquee(null)
+    }
+
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', finish, { once: true })
+  }
   const trashHeader = nav === 'trash' ? <TrashHeader canEmpty={canEmpty} onEmpty={emptyTrash} /> : null
+  const wrapProps = { onMouseDown: startMarquee }
+  const marqueeOverlay = marquee ? <div className="marquee" style={marquee} /> : null
 
   if (list.length === 0) {
     const kind = nav === 'trash' ? 'trash' : mode === 'library' ? 'library' : 'results'
@@ -133,27 +174,30 @@ export function Grid(): React.JSX.Element {
 
   if (view === 'list') {
     return (
-      <div className="gridwrap" ref={wrapRef}>
+      <div className="gridwrap" ref={wrapRef} {...wrapProps}>
         {trashHeader}
         {guide}
         <ListRows items={list} virtual={virtual} scrollEl={wrapRef} />
+        {marqueeOverlay}
       </div>
     )
   }
   if (view === 'grid') {
     return (
-      <div className="gridwrap" ref={wrapRef}>
+      <div className="gridwrap" ref={wrapRef} {...wrapProps}>
         {trashHeader}
         {guide}
         <CardRows items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
+        {marqueeOverlay}
       </div>
     )
   }
   return (
-    <div className="gridwrap" ref={wrapRef}>
+    <div className="gridwrap" ref={wrapRef} {...wrapProps}>
       {trashHeader}
       {guide}
       <Waterfall items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
+      {marqueeOverlay}
     </div>
   )
 }

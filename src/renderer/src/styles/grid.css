@@ -1,5 +1,5 @@
 /* ============================ 素材网格 ============================ */
-.gridwrap{flex:1;overflow-y:auto;min-height:0}
+.gridwrap{flex:1;overflow-y:auto;min-height:0;user-select:none}
 
 /* 瀑布流(默认) */
 .grid{column-width:var(--colw);column-gap:14px;padding:20px 22px 32px}
@@ -26,12 +26,10 @@
 .v-list .lc-acts button{width:26px;height:26px;border-radius:6px;color:var(--t3);display:grid;place-items:center;opacity:0}
 .v-list .card:hover .lc-acts button{opacity:1}
 .v-list .lc-acts button:hover{background:var(--bg4);color:var(--t1)}
-.v-list .cbx{left:auto;right:8px}
-.v-list .card.is-selected .cbx{opacity:1}
 
 /* ---------- 卡片 ---------- */
-.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:default;transition:border-color .3s ease,box-shadow .45s ease,transform .45s cubic-bezier(.2,.7,.2,1);position:relative;box-shadow:0 10px 30px rgba(20,60,120,.10),inset 0 1px 1px rgba(255,255,255,.9),inset 0 -1px 1px rgba(255,255,255,.25)}
-.card:hover{border-color:rgba(255,255,255,.9);box-shadow:0 20px 46px rgba(20,60,120,.18),0 0 0 1px rgba(255,255,255,.45),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 1px rgba(255,255,255,.35);transform:translateY(-3px)}
+.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:default;transition:border-color .3s ease,transform .45s cubic-bezier(.2,.7,.2,1);position:relative}
+.card:hover{border-color:rgba(255,255,255,.9);transform:translateY(-3px)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
 .card:hover .thumb{transform:scale(1.05)}
 .v-list .card:hover .thumb{transform:none}
@@ -57,12 +55,8 @@
 .type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:18px;padding:0 6px;border-radius:5px;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 .type-chip .dot{width:6px;height:6px}
 .dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:1px 6px;border-radius:5px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
-.cbx{position:absolute;left:8px;top:8px;z-index:3;width:19px;height:19px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);background:rgba(10,12,16,.35);display:grid;place-items:center;color:#fff;opacity:0;transition:opacity .12s,background .12s;backdrop-filter:blur(3px)}
-.cbx .ic{width:11px;height:11px;stroke-width:3;opacity:0}
-.card:hover .cbx,.card.is-selected .cbx{opacity:1}
-.card.is-selected .cbx{background:var(--acc);border-color:var(--acc)}
-.card.is-selected .cbx .ic{opacity:1}
-.card.is-selected{border-color:rgba(10,132,255,.6);box-shadow:0 0 0 1px rgba(10,132,255,.45),0 14px 34px rgba(10,90,220,.22),inset 0 1px 1px rgba(255,255,255,.9)}
+.card.is-selected{border-color:var(--acc);outline:1px solid var(--acc);outline-offset:-1px}
+.marquee{position:fixed;z-index:60;border:1px solid var(--acc);background:rgba(10,132,255,.16);pointer-events:none}
 .qa{position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:4px;opacity:0;transform:translateY(-4px);transition:opacity .14s,transform .14s}
 .card:hover .qa{opacity:1;transform:none}
 .qa button{width:25px;height:25px;border-radius:6px;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(4px)}

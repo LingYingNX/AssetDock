@@ -52,6 +52,7 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
   return (
     <figure
       className={cls}
+      data-asset-id={a.id}
       tabIndex={0}
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {
@@ -104,9 +105,6 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
           />
         ) : null}
 
-        <button className="cbx" title={selected ? '取消选中' : '选中'} tabIndex={-1}>
-          <Icon name="check" />
-        </button>
         <div className="qa">
           <button
             className={`fav${a.favorite ? ' on' : ''}`}
@@ -117,12 +115,6 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
             }}
           >
             <Icon name="heart" />
-          </button>
-          <button title="快速预览" onClick={(e) => { e.stopPropagation(); openLightbox(a.id) }}>
-            <Icon name="eye" />
-          </button>
-          <button title="更多" onClick={(e) => e.stopPropagation()}>
-            <Icon name="more-v" />
           </button>
         </div>
         {isVideo && (
