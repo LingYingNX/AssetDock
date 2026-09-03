@@ -134,6 +134,7 @@ interface UIState {
   activeId: string | null
   focusedCardId: string | null
   clickCard: (id: string) => void
+  setSelectedIds: (ids: string[]) => void
   setFocusedCard: (id: string | null) => void
   clearSelection: () => void
 
@@ -367,6 +368,7 @@ export const useUI = create<UIState>((set, get) => {
         activeId: id,
         focusedCardId: id
       })),
+    setSelectedIds: (ids) => set({ selectedIds: ids }),
     setFocusedCard: (focusedCardId) => set({ focusedCardId }),
     clearSelection: () => set({ selectedIds: [] }),
 
