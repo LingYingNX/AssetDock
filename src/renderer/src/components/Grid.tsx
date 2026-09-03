@@ -4,7 +4,6 @@ import { useUI } from '../store/ui'
 import { queryAssets } from '../data/query'
 import type { Asset } from '../data/types'
 import { Card } from './Card'
-import { Icon } from './Icons'
 import { EmptyState } from './EmptyState'
 
 const LHEAD_COLS = ['', '文件名', '类型', '分辨率', '大小', '时长', '导入时间', '']
@@ -118,11 +117,13 @@ export function Grid(): React.JSX.Element {
   const marqueeOverlay = marquee ? <div className="marquee" style={marquee} /> : null
 
   if (list.length === 0) {
-    const kind = nav === 'trash' ? 'trash' : mode === 'library' ? 'library' : 'results'
+    const kind = nav === 'trash' || mode === 'library' ? (nav === 'trash' ? 'trash' : 'library') : 'results'
     const title =
       kind === 'trash'
         ? '回收站是空的'
-        : kind === 'library'
+        : mode === 'empty'
+          ? '还没有素材库'
+          : kind === 'library'
           ? '这个视图下没有素材'
           : '没有符合当前筛选条件的素材'
     return (
@@ -131,9 +132,11 @@ export function Grid(): React.JSX.Element {
         <EmptyState
           kind={kind}
           title={title}
-          actionLabel={kind === 'results' ? '清空搜索' : undefined}
+          actionLabel={mode === 'empty' ? '新建素材库' : kind === 'results' ? '清空搜索' : undefined}
           onAction={
-            kind === 'results'
+            mode === 'empty'
+              ? createLibraryFlow
+              : kind === 'results'
               ? () => {
                   clearSelection()
                   setSearch('')
@@ -147,36 +150,10 @@ export function Grid(): React.JSX.Element {
 
   const virtual = list.length > VIRTUAL_THRESHOLD
 
-  /* 演示模式建库引导卡 */
-  const guide =
-    mode === 'demo' && nav === 'all' && list.length > 0 ? (
-      <div
-        style={{
-          margin: '14px 22px 0',
-          padding: '10px 14px',
-          borderRadius: 12,
-          border: '1px dashed var(--line2)',
-          background: 'var(--bg2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          fontSize: 12,
-          color: 'var(--t2)'
-        }}
-      >
-        <Icon name="spark" />
-        <span>这是演示数据。把常用文件夹变成素材库,即可真实浏览与管理。</span>
-        <button className="btn-clear" style={{ marginLeft: 'auto', borderColor: 'var(--acc-line)', color: '#0A5AC2' }} onClick={createLibraryFlow}>
-          新建素材库
-        </button>
-      </div>
-    ) : null
-
   if (view === 'list') {
     return (
       <div className="gridwrap" ref={wrapRef} {...wrapProps}>
         {trashHeader}
-        {guide}
         <ListRows items={list} virtual={virtual} scrollEl={wrapRef} />
         {marqueeOverlay}
       </div>
@@ -186,7 +163,6 @@ export function Grid(): React.JSX.Element {
     return (
       <div className="gridwrap" ref={wrapRef} {...wrapProps}>
         {trashHeader}
-        {guide}
         <CardRows items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
         {marqueeOverlay}
       </div>
@@ -195,7 +171,6 @@ export function Grid(): React.JSX.Element {
   return (
     <div className="gridwrap" ref={wrapRef} {...wrapProps}>
       {trashHeader}
-      {guide}
       <Waterfall items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
       {marqueeOverlay}
     </div>

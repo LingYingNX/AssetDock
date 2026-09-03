@@ -24,10 +24,21 @@ const api = {
     purgeLegacy: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:purgeLegacy')
   },
 
+  folders: {
+    list: (libraryId: number): Promise<{ paths: string[] } | { error: string }> =>
+      ipcRenderer.invoke('folders:list', libraryId),
+    create: (libraryId: number): Promise<{ path: string } | { error: string }> =>
+      ipcRenderer.invoke('folders:create', libraryId),
+    rename: (libraryId: number, path: string, name: string): Promise<{ path: string } | { error: string }> =>
+      ipcRenderer.invoke('folders:rename', libraryId, path, name)
+  },
+
   assets: {
     list: (libraryId: number): Promise<unknown> => ipcRenderer.invoke('assets:list', libraryId),
     update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:update', libraryId, id, patch),
+    move: (libraryId: number, ids: number[], folder: string): Promise<{ moved: number } | { error: string; moved?: number }> =>
+      ipcRenderer.invoke('assets:move', libraryId, ids, folder),
     addTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:addTag', libraryId, id, name),
     removeTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>

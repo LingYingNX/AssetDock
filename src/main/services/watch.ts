@@ -96,6 +96,9 @@ export function watchLibrary(
 ): FSWatcher {
   const watcher = chokidarWatch(root, {
     ignoreInitial: true,
+    usePolling: process.platform === 'win32',
+    interval: process.platform === 'win32' ? 1000 : 100,
+    binaryInterval: process.platform === 'win32' ? 1000 : 300,
     ignored: (p: string) => {
       const rel = p.slice(root.length + 1).replace(/\\/g, '/')
       if (!rel || rel.startsWith('..')) return false
@@ -133,6 +136,12 @@ export function watchLibrary(
       debounced('u:' + p, () => {
         if (setAssetMissing(db, rel, true)) cb.onMissing(sliced)
       })
+    })
+    .on('addDir', (p: string) => {
+      if (p !== root) cb.onChanged()
+    })
+    .on('unlinkDir', (p: string) => {
+      if (p !== root) cb.onChanged()
     })
 
   return watcher

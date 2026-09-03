@@ -14,6 +14,7 @@ import { extractPaletteFromThumb } from './services/palette'
 import { probeVideo } from './services/videoMeta'
 import { getLibHandle, hasLibDb, migrateLibrary } from './services/libraryDb'
 import { listIndexes, findByFingerprint, type IndexRow } from './services/libResolve'
+import { createLibraryFolder, listLibraryFolders, moveLibraryAsset, renameLibraryFolder } from './services/folders'
 
 let userDataDir = '.'
 const watchers = new Map<string, FSWatcher>()
@@ -301,6 +302,40 @@ export function registerIpc(userData: string): void {
 
   ipcMain.handle('library:list', () => listLibraries(getDb()))
 
+  ipcMain.handle('folders:list', async (_e, libraryId: number) => {
+    const root = libRootOf(libraryId)
+    if (!root) return { error: '素材库不存在' }
+    try {
+      return { paths: await listLibraryFolders(root) }
+    } catch {
+      return { error: '无法读取素材库文件夹' }
+    }
+  })
+
+  ipcMain.handle('folders:create', async (_e, libraryId: number) => {
+    const root = libRootOf(libraryId)
+    if (!root) return { error: '素材库不存在' }
+    try {
+      const path = await createLibraryFolder(root)
+      send('assets:changed', { libraryId })
+      return { path }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '新建文件夹失败' }
+    }
+  })
+
+  ipcMain.handle('folders:rename', async (_e, libraryId: number, relPath: string, name: string) => {
+    const root = libRootOf(libraryId)
+    if (!root) return { error: '素材库不存在' }
+    try {
+      const path = await renameLibraryFolder(root, relPath, name)
+      send('assets:changed', { libraryId })
+      return { path }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '重命名文件夹失败' }
+    }
+  })
+
   ipcMain.handle('assets:list', (_e, libraryId: number) => {
     const s = scopeFor(libraryId)
     if (!s) return { error: 'library not found' }
@@ -324,6 +359,33 @@ export function registerIpc(userData: string): void {
     if (!s) return { ok: false }
     updateAsset(s.db, id, patch)
     return { ok: true }
+  })
+
+  ipcMain.handle('assets:move', async (_e, libraryId: number, assetIds: number[], targetFolder: string) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (!Array.isArray(assetIds) || assetIds.length === 0) return { error: '没有选择素材' }
+
+    let moved = 0
+    for (const assetId of assetIds) {
+      if (!Number.isInteger(assetId)) return { error: '素材 ID 无效' }
+      const row = s.db.prepare('SELECT rel_path, missing, source_index_id FROM assets WHERE id = ?').get(assetId) as
+        | { rel_path: string; missing: number; source_index_id: number | null }
+        | undefined
+      if (!row) return { error: '素材不存在' }
+      if (row.source_index_id != null) return { error: '索引素材不能移动到素材库内' }
+      if (row.missing) return { error: '缺失文件不能移动' }
+      try {
+        const relPath = await moveLibraryAsset(s.libPath, row.rel_path, targetFolder)
+        s.db.prepare('UPDATE assets SET rel_path = ? WHERE id = ?').run(relPath, assetId)
+        moved++
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : '移动素材失败', moved }
+      }
+    }
+
+    send('assets:changed', { libraryId })
+    return { moved }
   })
 
   /* 迁移残留清理:仅全局兜底库的素材/标签/关联;注册表与设置保留 */

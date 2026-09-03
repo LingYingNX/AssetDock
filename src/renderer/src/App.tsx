@@ -33,13 +33,18 @@ export default function App(): React.JSX.Element {
             return lib ? { id: `dblib-${lib.id}`, name: lib.name, libraryId: lib.id } : null
           })
           .filter((t): t is NonNullable<typeof t> => t != null)
-        if (tabs.length === 0) return
+        const restoredTabCount = tabs.length
+        if (tabs.length === 0) {
+          const first = libs[0]
+          tabs.push({ id: `dblib-${first.id}`, name: first.name, libraryId: first.id })
+        }
         const activeLib = Number(await window.windowApi.state.get('activeTabLibrary'))
         const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0]
         useUI.setState({ tabs, activeTabId: active.id })
+        if (openIds.length === 0 || restoredTabCount !== openIds.length) useUI.getState().persistTabs()
         useUI.getState().reloadActiveLibrary()
       } catch {
-        /* 引导失败保持演示模式 */
+        /* 引导失败保持空状态 */
       }
     }
     void boot()
@@ -98,7 +103,12 @@ export default function App(): React.JSX.Element {
           break
         }
         case 'F2': {
-          if (st.activeId) st.setRenaming(true)
+          if (st.nav.startsWith('folder:')) {
+            e.preventDefault()
+            useUI.setState({ folderEditPath: st.nav.slice('folder:'.length) })
+          } else if (st.activeId) {
+            st.setRenaming(true)
+          }
           break
         }
         case 'Delete': {

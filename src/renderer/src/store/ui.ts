@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Asset, LibraryTab, NavKey, PaletteColor } from '../data/types'
-import { ASSETS, TAGS } from '../data/dataset'
+import { TAGS } from '../data/dataset'
 import { DEFAULT_FILTERS, type Filters } from '../data/query'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
@@ -81,12 +81,19 @@ interface UIState {
   persistTabs: () => void
 
   /* 数据源 */
-  mode: 'demo' | 'library'
+  mode: 'empty' | 'library'
   scanProgress: string | null
   thumbNonce: number
   setAssets: (list: Asset[]) => void
   reloadActiveLibrary: () => void
   bumpThumb: () => void
+  folderPaths: string[]
+  folderEditPath: string | null
+  refreshFolders: () => void
+  createFolder: () => void
+  renameFolder: (path: string, name: string) => void
+  cancelFolderRename: () => void
+  moveAssetsToFolder: (assetIds: string[], folder: string) => void
 
   /* 导航与搜索 */
   nav: NavKey
@@ -155,11 +162,6 @@ interface UIState {
   stepLightbox: (dir: 1 | -1) => void
 }
 
-const initialTabs: LibraryTab[] = [
-  { id: 'lib-1', name: '品牌资产 2026' },
-  { id: 'lib-2', name: '个人灵感库' }
-]
-
 let tabSeq = 0
 
 export const useUI = create<UIState>((set, get) => {
@@ -221,14 +223,14 @@ export const useUI = create<UIState>((set, get) => {
       get().reloadActiveLibrary()
     },
 
-    tabs: initialTabs,
-    activeTabId: initialTabs[0].id,
+    tabs: [],
+    activeTabId: '',
     openTab: (id) => {
       set({ activeTabId: id })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === id)
       if (t?.libraryId != null) get().reloadActiveLibrary()
-      else if (!t?.libraryId) set({ assets: ASSETS, mode: 'demo' })
+      else if (!t?.libraryId) set({ assets: [], folderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     closeTab: (id) => {
       const { tabs, activeTabId } = get()
@@ -240,7 +242,7 @@ export const useUI = create<UIState>((set, get) => {
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === nextActive)
       if (t?.libraryId != null) get().reloadActiveLibrary()
-      else set({ assets: ASSETS, mode: 'demo' })
+      else set({ assets: [], folderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     addTab: () => {
       // 「+」菜单路径:打开库入口下拉(新建 + 已绑定库列表)
@@ -259,28 +261,102 @@ export const useUI = create<UIState>((set, get) => {
       void window.windowApi.state.set('activeTabLibrary', String(get().tabs.find((t) => t.id === get().activeTabId)?.libraryId ?? ''))
     },
 
-    mode: 'demo',
+    mode: 'empty',
     scanProgress: null,
     thumbNonce: 0,
     setAssets: (list) => set({ assets: list }),
     reloadActiveLibrary: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) {
-        set({ assets: ASSETS, mode: 'demo' })
+        set({ assets: [], folderPaths: [], folderEditPath: null, mode: 'empty' })
         return
       }
-      void window.windowApi.assets.list(t.libraryId).then((r) => {
+      void Promise.all([window.windowApi.assets.list(t.libraryId), window.windowApi.folders.list(t.libraryId)]).then(([r, folders]) => {
         const data = r as { library?: unknown; assets?: Record<string, unknown>[]; indexes?: { id: number; name: string; path: string }[] }
-        if (Array.isArray(data?.assets)) {
-          set({
-            assets: data.assets.map(rowToAsset),
-            indexes: (data.indexes as { id: number; name: string; path: string }[]) ?? [],
-            mode: 'library'
+        const assets = data.assets
+        if (Array.isArray(assets)) {
+          set((s) => {
+            const folderPaths = 'paths' in folders ? folders.paths : []
+            const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+            return {
+              assets: assets.map(rowToAsset),
+              indexes: (data.indexes as { id: number; name: string; path: string }[]) ?? [],
+              folderPaths,
+              folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
+              nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav,
+              mode: 'library'
+            }
           })
         }
       })
     },
     bumpThumb: () => set((s) => ({ thumbNonce: s.thumbNonce + 1 })),
+    folderPaths: [],
+    folderEditPath: null,
+    refreshFolders: () => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.list(t.libraryId).then((r) => {
+        if (!('paths' in r)) return
+        set((s) => {
+          const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          return {
+            folderPaths: r.paths,
+            folderEditPath: s.folderEditPath && r.paths.includes(s.folderEditPath) ? s.folderEditPath : null,
+            nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
+          }
+        })
+      })
+    },
+    createFolder: () => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.create(t.libraryId).then((r) => {
+        if ('error' in r) {
+          alert(r.error)
+          return
+        }
+        set((s) => ({
+          folderPaths: [...new Set([...s.folderPaths, r.path])].sort((a, b) => a.localeCompare(b)),
+          folderEditPath: r.path,
+          nav: `folder:${r.path}` as NavKey
+        }))
+      })
+    },
+    renameFolder: (path, name) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      set({ folderEditPath: null })
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.rename(t.libraryId, path, name).then((r) => {
+        if ('error' in r) {
+          alert(r.error)
+          get().refreshFolders()
+          return
+        }
+        set({ nav: `folder:${r.path}` as NavKey })
+        get().refreshFolders()
+      })
+    },
+    cancelFolderRename: () => set({ folderEditPath: null }),
+    moveAssetsToFolder: (assetIds, folder) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      const requested = new Set(assetIds)
+      const ids = get().assets
+        .filter((a) => requested.has(a.id) && a.dbId != null && a.libraryId === t.libraryId && !a.sourceIndexId && !a.missing && !a.deletedAt)
+        .map((a) => a.dbId as number)
+      if (ids.length === 0) return
+      if (ids.length < assetIds.length) alert('部分素材是索引来源或缺失文件，本次未移动')
+
+      void window.windowApi.assets.move(t.libraryId, ids, folder).then((r) => {
+        if ('error' in r) {
+          alert(r.error)
+          return
+        }
+        set({ nav: `folder:${folder}` as NavKey })
+        get().reloadActiveLibrary()
+      })
+    },
 
     nav: 'all',
     setNav: (nav) => set({ nav }),
@@ -307,7 +383,7 @@ export const useUI = create<UIState>((set, get) => {
     inspHidden: false,
     toggleInspector: () => set((s) => ({ inspHidden: !s.inspHidden })),
 
-    assets: ASSETS,
+    assets: [],
     indexes: [],
     setIndexes: (indexes) => set({ indexes }),
     setRating: (id, v) =>

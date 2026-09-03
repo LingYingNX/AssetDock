@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
-import { FOLDERS, SWATCHES } from '../data/dataset'
+import { SWATCHES } from '../data/dataset'
 import { sidebarCounts } from '../data/query'
 import { Icon } from './Icons'
 
@@ -11,13 +11,18 @@ interface DirNode {
   children: DirNode[]
 }
 
-/** 库模式:由素材目录链(完整相对路径前缀)构建嵌套树 */
-function buildDirTree(assets: { folders: string[] }[]): DirNode[] {
+interface PendingMove {
+  folder: string
+  assetIds: string[]
+}
+
+/** 库模式:只用真实目录建树,素材路径仅用于节点计数 */
+function buildDirTree(paths: string[], assets: { folders: string[] }[]): DirNode[] {
   const counts = new Map<string, number>()
   for (const a of assets) for (const f of a.folders) counts.set(f, (counts.get(f) ?? 0) + 1)
   const root: DirNode[] = []
   const byPath = new Map<string, DirNode>()
-  for (const path of [...counts.keys()].sort()) {
+  for (const path of [...paths].sort((a, b) => a.localeCompare(b))) {
     const segs = path.split('/')
     const label = segs[segs.length - 1]
     const node: DirNode = { path, label, count: counts.get(path) ?? 0, children: [] }
@@ -32,24 +37,140 @@ function buildDirTree(assets: { folders: string[] }[]): DirNode[] {
   return root
 }
 
-function DirTree({ nodes, depth, nav, setNav }: { nodes: DirNode[]; depth: number; nav: string; setNav: (n: never) => void }): React.JSX.Element {
+function FolderNameEditor({ name, onCommit, onCancel }: { name: string; onCommit: (name: string) => void; onCancel: () => void }): React.JSX.Element {
+  const ref = useRef<HTMLInputElement>(null)
+  const [value, setValue] = useState(name)
+  const cancelled = useRef(false)
+
+  useEffect(() => {
+    ref.current?.focus()
+    ref.current?.select()
+  }, [])
+
+  useEffect(() => {
+    const commitOutside = (event: PointerEvent): void => {
+      if (!ref.current?.contains(event.target as Node)) ref.current?.blur()
+    }
+    document.addEventListener('pointerdown', commitOutside, true)
+    return () => document.removeEventListener('pointerdown', commitOutside, true)
+  }, [])
+
+  return (
+    <input
+      ref={ref}
+      className="folder-name-edit"
+      value={value}
+      aria-label="文件夹名称"
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          cancelled.current = true
+          onCancel()
+        }
+      }}
+      onBlur={() => {
+        if (!cancelled.current) onCommit(value)
+      }}
+    />
+  )
+}
+
+function DirTree({
+  nodes,
+  depth,
+  nav,
+  setNav,
+  editingPath,
+  onCommit,
+  onCancel,
+  dropPath,
+  pendingMove,
+  onDragOverFolder,
+  onDragLeaveFolder,
+  onDropFolder,
+  onConfirmMove,
+  onCancelMove
+}: {
+  nodes: DirNode[]
+  depth: number
+  nav: string
+  setNav: (n: never) => void
+  editingPath: string | null
+  onCommit: (path: string, name: string) => void
+  onCancel: () => void
+  dropPath: string | null
+  pendingMove: PendingMove | null
+  onDragOverFolder: (path: string) => void
+  onDragLeaveFolder: (path: string) => void
+  onDropFolder: (path: string, event: React.DragEvent<HTMLDivElement>) => void
+  onConfirmMove: () => void
+  onCancelMove: () => void
+}): React.JSX.Element {
   return (
     <>
       {nodes.map((n) => {
         const key = `folder:${n.path}`
         const on = nav === key
+        const dropping = dropPath === n.path
+        const pending = pendingMove?.folder === n.path
         return (
           <div key={n.path}>
-            <button
-              className={`nav-item${on ? ' on' : ''}`}
-              style={{ paddingLeft: 10 + depth * 14 }}
-              onClick={() => setNav(key as never)}
-            >
-              <Icon name="folder" />
-              {n.label}
-              <span className="cnt">{n.count}</span>
-            </button>
-            {n.children.length > 0 && <DirTree nodes={n.children} depth={depth + 1} nav={nav} setNav={setNav} />}
+            {editingPath === n.path ? (
+              <div className="nav-item on folder-edit" style={{ paddingLeft: 10 + depth * 14 }}>
+                <Icon name="folder" />
+                <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
+                <span className="cnt">{n.count}</span>
+              </div>
+            ) : (
+              <div
+                className={`nav-item folder-row${on ? ' on' : ''}${dropping ? ' drop-target' : ''}${pending ? ' pending-move' : ''}`}
+                style={{ paddingLeft: 10 + depth * 14 }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  onDragOverFolder(n.path)
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onDragLeaveFolder(n.path)
+                }}
+                onDrop={(e) => onDropFolder(n.path, e)}
+              >
+                <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
+                  <Icon name="folder" />
+                  <span className="folder-label">{n.label}</span>
+                  <span className="cnt">{n.count}</span>
+                </button>
+                {pending && (
+                  <span className="folder-actions">
+                    <button className="folder-move" onClick={onConfirmMove}>
+                      移动 {pendingMove?.assetIds.length ?? 0}
+                    </button>
+                    <button className="folder-cancel" onClick={onCancelMove}>
+                      取消
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+            {n.children.length > 0 && (
+              <DirTree
+                nodes={n.children}
+                depth={depth + 1}
+                nav={nav}
+                setNav={setNav}
+                editingPath={editingPath}
+                onCommit={onCommit}
+                onCancel={onCancel}
+                dropPath={dropPath}
+                pendingMove={pendingMove}
+                onDragOverFolder={onDragOverFolder}
+                onDragLeaveFolder={onDragLeaveFolder}
+                onDropFolder={onDropFolder}
+                onConfirmMove={onConfirmMove}
+                onCancelMove={onCancelMove}
+              />
+            )}
           </div>
         )
       })}
@@ -65,6 +186,14 @@ export function Sidebar(): React.JSX.Element {
   const clearSwatches = useUI((s) => s.clearSwatches)
   const assets = useUI((s) => s.assets)
   const mode = useUI((s) => s.mode)
+  const folderPaths = useUI((s) => s.folderPaths)
+  const folderEditPath = useUI((s) => s.folderEditPath)
+  const createFolder = useUI((s) => s.createFolder)
+  const renameFolder = useUI((s) => s.renameFolder)
+  const cancelFolderRename = useUI((s) => s.cancelFolderRename)
+  const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
+  const [dropPath, setDropPath] = useState<string | null>(null)
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const c = sidebarCounts(assets)
   const tagStats = assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
     for (const t of a.tags) {
@@ -74,11 +203,22 @@ export function Sidebar(): React.JSX.Element {
     return acc
   }, {})
 
-  const [expFolders, setExpFolders] = useState<string[]>(['03 视频素材'])
-  const toggleFolder = (name: string): void =>
-    setExpFolders((xs) => (xs.includes(name) ? xs.filter((x) => x !== name) : [...xs, name]))
+  const dirTree = mode === 'library' ? buildDirTree(folderPaths, assets) : []
 
-  const dirTree = mode === 'library' ? buildDirTree(assets) : null
+  const readDraggedAssets = (event: React.DragEvent<HTMLDivElement>): string[] => {
+    try {
+      const value = JSON.parse(event.dataTransfer.getData('application/x-mediahub-assets'))
+      return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  const confirmMove = (): void => {
+    if (!pendingMove) return
+    moveAssetsToFolder(pendingMove.assetIds, pendingMove.folder)
+    setPendingMove(null)
+  }
 
   return (
     <aside className="sidebar glass-sidebar">
@@ -102,56 +242,39 @@ export function Sidebar(): React.JSX.Element {
           </button>
         </section>
 
-        {(mode !== 'library' || dirTree!.length > 0) && (
-          <section className="side-sec">
-            <div className="side-title"><Icon name="folder" />文件夹</div>
-            {dirTree ? (
-              <DirTree nodes={dirTree} depth={0} nav={nav} setNav={setNav} />
-            ) : (
-              <>
-                {FOLDERS.map((f) => {
-                  const key = `folder:${f.name}` as const
-                  const exp = expFolders.includes(f.name)
-                  return (
-                    <div key={f.name}>
-                      <button
-                        className={`nav-item${exp ? ' exp' : ''}${nav === key ? ' on' : ''}`}
-                        onClick={() => {
-                          setNav(key)
-                          if (f.children) toggleFolder(f.name)
-                        }}
-                      >
-                        {f.children ? <Icon name="chev-r" className="chev" /> : <span style={{ width: 15 }} />}
-                        <Icon name="folder" />
-                        {f.name}
-                        <span className="cnt">{c.folders[f.name] ?? 0}</span>
-                      </button>
-                      {exp && f.children && (
-                        <div className="nav-tree">
-                          {f.children.map((ch) => {
-                            const ck = `folder:${ch}` as const
-                            return (
-                              <button
-                                key={ch}
-                                className={`nav-item${nav === ck ? ' on' : ''}`}
-                                onClick={() => setNav(ck)}
-                              >
-                                <Icon name="folder" />
-                                {ch}
-                                <span className="cnt">{c.folders[ch] ?? 0}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </>
+        <section className="side-sec">
+          <div className="side-title">
+            <span className="side-title-label"><Icon name="folder" />文件夹</span>
+            {mode === 'library' && (
+              <button className="side-title-add" title="新建文件夹" aria-label="新建文件夹" onClick={createFolder}>
+                <Icon name="plus" />
+              </button>
             )}
-            <button className="side-add"><Icon name="plus" />新建文件夹</button>
-          </section>
-        )}
+          </div>
+          {mode === 'library' && (
+            <DirTree
+              nodes={dirTree}
+              depth={0}
+              nav={nav}
+              setNav={setNav}
+              editingPath={folderEditPath}
+              onCommit={renameFolder}
+              onCancel={cancelFolderRename}
+              dropPath={dropPath}
+              pendingMove={pendingMove}
+              onDragOverFolder={setDropPath}
+              onDragLeaveFolder={(path) => setDropPath((current) => (current === path ? null : current))}
+              onDropFolder={(path, event) => {
+                event.preventDefault()
+                setDropPath(null)
+                const assetIds = readDraggedAssets(event)
+                if (assetIds.length > 0) setPendingMove({ folder: path, assetIds })
+              }}
+              onConfirmMove={confirmMove}
+              onCancelMove={() => setPendingMove(null)}
+            />
+          )}
+        </section>
 
         <section className="side-sec">
           <div className="side-title"><Icon name="tag" />标签</div>

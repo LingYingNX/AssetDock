@@ -48,12 +48,26 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
   const isVideo = a.type === 'video'
+  const canMove = a.dbId != null && a.libraryId != null && !a.sourceIndexId && !a.missing && !a.deletedAt
 
   return (
     <figure
       className={cls}
       data-asset-id={a.id}
       tabIndex={0}
+      draggable={canMove}
+      onDragStart={(e) => {
+        if (!canMove) {
+          e.preventDefault()
+          return
+        }
+        const state = useUI.getState()
+        const ids = selected
+          ? state.selectedIds.filter((id) => state.assets.some((asset) => asset.id === id && asset.dbId != null && !asset.sourceIndexId && !asset.missing && !asset.deletedAt))
+          : [a.id]
+        e.dataTransfer.setData('application/x-mediahub-assets', JSON.stringify(ids))
+        e.dataTransfer.effectAllowed = 'move'
+      }}
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('.qa')) return
