@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import type { Asset } from '../data/types'
+import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 
@@ -63,10 +64,13 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
         }
         const state = useUI.getState()
         const ids = selected
-          ? state.selectedIds.filter((id) => state.assets.some((asset) => asset.id === id && asset.dbId != null && !asset.sourceIndexId && !asset.missing && !asset.deletedAt))
+          ? state.selectedIds.filter((id) => {
+            const asset = state.assets.find((item) => item.id === id)
+            return asset?.dbId != null && asset.libraryId === a.libraryId && !asset.sourceIndexId && !asset.missing && !asset.deletedAt
+          })
           : [a.id]
-        e.dataTransfer.setData('application/x-mediahub-assets', JSON.stringify(ids))
         e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData(MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag(ids))
       }}
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { SWATCHES } from '../data/dataset'
 import { sidebarCounts } from '../data/query'
+import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 
 interface DirNode {
@@ -84,8 +85,9 @@ function DirTree({
   editingPath,
   onCommit,
   onCancel,
-  dropPath,
+  dropTargetPath,
   pendingMove,
+  onDragEnterFolder,
   onDragOverFolder,
   onDragLeaveFolder,
   onDropFolder,
@@ -99,10 +101,11 @@ function DirTree({
   editingPath: string | null
   onCommit: (path: string, name: string) => void
   onCancel: () => void
-  dropPath: string | null
+  dropTargetPath: string | null
   pendingMove: PendingMove | null
+  onDragEnterFolder: (path: string) => void
   onDragOverFolder: (path: string) => void
-  onDragLeaveFolder: (path: string) => void
+  onDragLeaveFolder: (path: string, event: React.DragEvent<HTMLDivElement>) => void
   onDropFolder: (path: string, event: React.DragEvent<HTMLDivElement>) => void
   onConfirmMove: () => void
   onCancelMove: () => void
@@ -112,7 +115,7 @@ function DirTree({
       {nodes.map((n) => {
         const key = `folder:${n.path}`
         const on = nav === key
-        const dropping = dropPath === n.path
+        const dropping = dropTargetPath === n.path
         const pending = pendingMove?.folder === n.path
         return (
           <div key={n.path}>
@@ -126,15 +129,16 @@ function DirTree({
               <div
                 className={`nav-item folder-row${on ? ' on' : ''}${dropping ? ' drop-target' : ''}${pending ? ' pending-move' : ''}`}
                 style={{ paddingLeft: 10 + depth * 14 }}
+                onDragEnter={() => onDragEnterFolder(n.path)}
                 onDragOver={(e) => {
+                  if (!isAssetDrag(e)) return
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
                   onDragOverFolder(n.path)
                 }}
-                onDragLeave={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onDragLeaveFolder(n.path)
-                }}
+                onDragLeave={(e) => onDragLeaveFolder(n.path, e)}
                 onDrop={(e) => onDropFolder(n.path, e)}
+                data-folder-path={n.path}
               >
                 <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
                   <Icon name="folder" />
@@ -144,7 +148,7 @@ function DirTree({
                 {pending && (
                   <span className="folder-actions">
                     <button className="folder-move" onClick={onConfirmMove}>
-                      移动 {pendingMove?.assetIds.length ?? 0}
+                      移动 {pendingMove.assetIds.length}
                     </button>
                     <button className="folder-cancel" onClick={onCancelMove}>
                       取消
@@ -162,8 +166,9 @@ function DirTree({
                 editingPath={editingPath}
                 onCommit={onCommit}
                 onCancel={onCancel}
-                dropPath={dropPath}
+                dropTargetPath={dropTargetPath}
                 pendingMove={pendingMove}
+                onDragEnterFolder={onDragEnterFolder}
                 onDragOverFolder={onDragOverFolder}
                 onDragLeaveFolder={onDragLeaveFolder}
                 onDropFolder={onDropFolder}
@@ -192,7 +197,7 @@ export function Sidebar(): React.JSX.Element {
   const renameFolder = useUI((s) => s.renameFolder)
   const cancelFolderRename = useUI((s) => s.cancelFolderRename)
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
-  const [dropPath, setDropPath] = useState<string | null>(null)
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null)
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const c = sidebarCounts(assets)
   const tagStats = assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
@@ -204,15 +209,6 @@ export function Sidebar(): React.JSX.Element {
   }, {})
 
   const dirTree = mode === 'library' ? buildDirTree(folderPaths, assets) : []
-
-  const readDraggedAssets = (event: React.DragEvent<HTMLDivElement>): string[] => {
-    try {
-      const value = JSON.parse(event.dataTransfer.getData('application/x-mediahub-assets'))
-      return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
-    } catch {
-      return []
-    }
-  }
 
   const confirmMove = (): void => {
     if (!pendingMove) return
@@ -260,14 +256,18 @@ export function Sidebar(): React.JSX.Element {
               editingPath={folderEditPath}
               onCommit={renameFolder}
               onCancel={cancelFolderRename}
-              dropPath={dropPath}
+              dropTargetPath={dropTargetPath}
               pendingMove={pendingMove}
-              onDragOverFolder={setDropPath}
-              onDragLeaveFolder={(path) => setDropPath((current) => (current === path ? null : current))}
+              onDragEnterFolder={setDropTargetPath}
+              onDragOverFolder={setDropTargetPath}
+              onDragLeaveFolder={(path, event) => {
+                if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+                setDropTargetPath((current) => (current === path ? null : current))
+              }}
               onDropFolder={(path, event) => {
                 event.preventDefault()
-                setDropPath(null)
-                const assetIds = readDraggedAssets(event)
+                setDropTargetPath(null)
+                const assetIds = decodeAssetDrag(event.dataTransfer.getData(MEDIA_ASSETS_DRAG_TYPE))
                 if (assetIds.length > 0) setPendingMove({ folder: path, assetIds })
               }}
               onConfirmMove={confirmMove}

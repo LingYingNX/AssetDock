@@ -64,6 +64,16 @@ ALTER TABLE assets ADD COLUMN codec TEXT;
 ALTER TABLE assets ADD COLUMN fps REAL;
 `
 
+const SCHEMA_V3 = `
+CREATE TABLE IF NOT EXISTS index_sources (
+  id INTEGER PRIMARY KEY,
+  path TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE;
+`
+
 export function initDb(userDataDir: string): Database.Database {
   if (db) return db
   db = new Database(join(userDataDir, 'mediahub.db'))
@@ -77,6 +87,10 @@ export function initDb(userDataDir: string): Database.Database {
   if (version < 2) {
     db.exec(SCHEMA_V2)
     db.pragma('user_version = 2')
+  }
+  if (version < 3) {
+    db.exec(SCHEMA_V3)
+    db.pragma('user_version = 3')
   }
   return db
 }
