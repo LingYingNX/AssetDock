@@ -123,9 +123,6 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
             <div className="scrub"><i /></div>
           </>
         )}
-        {a.type === 'model' && (
-          <span className="orb" title="转台预览"><Icon name="rotate-3d" /></span>
-        )}
         <span className="type-chip">
           {FORMAT_DOT[a.format] ? (
             <span className="dot" style={{ background: FORMAT_DOT[a.format] }} />

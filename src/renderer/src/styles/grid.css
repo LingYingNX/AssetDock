@@ -14,7 +14,7 @@
 .v-list .card{margin:0;padding:5px 10px;border-radius:8px;border-color:transparent}
 .v-list .card:hover{border-color:var(--line);background:var(--bg2)}
 .v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:6px;flex:none}
-.v-list .thumb .dur,.v-list .thumb .qa,.v-list .play-big,.v-list .scrub,.v-list .orb{display:none}
+.v-list .thumb .dur,.v-list .thumb .qa,.v-list .play-big,.v-list .scrub{display:none}
 .v-list .thumb .cube3d{--cs:30px;animation-duration:24s}
 .v-list figcaption{display:contents;padding:0}
 .v-list .name-row{display:block}
@@ -28,11 +28,9 @@
 .v-list .lc-acts button:hover{background:var(--bg4);color:var(--t1)}
 
 /* ---------- 卡片 ---------- */
-.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:default;transition:border-color .3s ease,transform .45s cubic-bezier(.2,.7,.2,1);position:relative}
-.card:hover{border-color:rgba(255,255,255,.9);transform:translateY(-3px)}
-.thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
-.card:hover .thumb{transform:scale(1.05)}
-.v-list .card:hover .thumb{transform:none}
+.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:default;transition:border-color .3s ease;position:relative}
+.card:hover{border-color:rgba(255,255,255,.9)}
+.thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 18% 0%,rgba(255,255,255,.16),transparent 52%),linear-gradient(180deg,transparent 62%,rgba(0,0,0,.28));pointer-events:none}
 .thumb img,.thumb video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .4s ease}
 .thumb img.loaded,.thumb video.loaded{opacity:1}
@@ -71,9 +69,6 @@
 .card.video:hover .scrub{opacity:1}
 
 /* 三维模型:CSS 转台立方体 */
-.orb{position:absolute;left:50%;top:50%;z-index:2;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.5);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(5px);opacity:0;transition:opacity .15s}
-.orb .ic{width:14px;height:14px}
-.card.c3d:hover .orb{opacity:1}
 .c3d-wrap{position:relative;display:grid;place-items:center;perspective:640px}
 .thumb .c3d-wrap{position:absolute;inset:0}
 .cube3d{--h:calc(var(--cs,58px)/2);width:var(--cs,58px);height:var(--cs,58px);position:relative;transform-style:preserve-3d;animation:turnY 18s linear infinite}
