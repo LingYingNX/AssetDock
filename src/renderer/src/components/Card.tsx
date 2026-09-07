@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
+import { Viewer3D } from './Viewer3D'
 
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
@@ -16,7 +17,15 @@ const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   OBJ: '#22D3EE'
 }
 
-export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element {
+function dragPreview(count: number): HTMLDivElement {
+  const preview = document.createElement('div')
+  preview.className = 'asset-drag-preview'
+  preview.innerHTML = `<span class="asset-drag-icon"></span><strong>${count}</strong>`
+  document.body.appendChild(preview)
+  return preview
+}
+
+export function Card({ a, view, selectionOrder }: { a: Asset; view: string; selectionOrder?: string[] }): React.JSX.Element {
   const selected = useUI((s) => s.selectedIds.includes(a.id))
   const clickCard = useUI((s) => s.clickCard)
   const openLightbox = useUI((s) => s.openLightbox)
@@ -25,6 +34,8 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
   const toggleFavorite = useUI((s) => s.toggleFavorite)
   const nonce = useUI((s) => s.thumbNonce)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [modelFailed, setModelFailed] = useState(false)
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null)
 
   const cls = [
     'card',
@@ -49,7 +60,7 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
   const isVideo = a.type === 'video'
-  const canMove = a.dbId != null && a.libraryId != null && !a.sourceIndexId && !a.missing && !a.deletedAt
+  const canMove = a.dbId != null && a.libraryId != null && !a.missing && !a.deletedAt
 
   return (
     <figure
@@ -66,16 +77,30 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
         const ids = selected
           ? state.selectedIds.filter((id) => {
             const asset = state.assets.find((item) => item.id === id)
-            return asset?.dbId != null && asset.libraryId === a.libraryId && !asset.sourceIndexId && !asset.missing && !asset.deletedAt
+            return asset != null && asset.dbId != null && asset.libraryId === a.libraryId && !asset.missing && !asset.deletedAt
           })
           : [a.id]
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData(MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag(ids))
+        e.dataTransfer.setData('text/plain', encodeAssetDrag(ids))
+        const preview = dragPreview(ids.length)
+        dragPreviewRef.current?.remove()
+        dragPreviewRef.current = preview
+        e.dataTransfer.setDragImage(preview, 22, 18)
+        window.setTimeout(() => {
+          if (dragPreviewRef.current !== preview) return
+          preview.remove()
+          dragPreviewRef.current = null
+        }, 1000)
+      }}
+      onDragEnd={() => {
+        dragPreviewRef.current?.remove()
+        dragPreviewRef.current = null
       }}
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('.qa')) return
-        clickCard(a.id)
+        clickCard(a.id, { shift: e.shiftKey, order: selectionOrder })
       }}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('.qa')) return
@@ -96,6 +121,17 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
         {a.type === 'model' && a.dbId == null ? (
           <div className="c3d-wrap">
             <Cube3D cs="58px" />
+          </div>
+        ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
+          <div className="model-card-preview">
+            <Viewer3D
+              url={a.originalUrl}
+              format={a.format as 'GLB' | 'FBX' | 'OBJ'}
+              turntable
+              wireframe={false}
+              view="auto"
+              onError={() => setModelFailed(true)}
+            />
           </div>
         ) : a.dbId != null ? (
           <img

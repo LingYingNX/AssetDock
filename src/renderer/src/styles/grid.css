@@ -28,7 +28,7 @@
 .v-list .lc-acts button:hover{background:var(--bg4);color:var(--t1)}
 
 /* ---------- 卡片 ---------- */
-.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:default;transition:border-color .3s ease;position:relative}
+.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:default;transition:background-color .15s ease;position:relative}
 .card:hover{border-color:rgba(255,255,255,.9)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 18% 0%,rgba(255,255,255,.16),transparent 52%),linear-gradient(180deg,transparent 62%,rgba(0,0,0,.28));pointer-events:none}
@@ -53,8 +53,12 @@
 .type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:18px;padding:0 6px;border-radius:5px;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 .type-chip .dot{width:6px;height:6px}
 .dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:1px 6px;border-radius:5px;font-size:10.5px;font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
-.card.is-selected{border-color:var(--acc);outline:1px solid var(--acc);outline-offset:-1px}
+.card.is-selected{border-color:var(--acc);outline:2px solid var(--acc);outline-offset:-2px}
 .marquee{position:fixed;z-index:60;border:1px solid var(--acc);background:rgba(10,132,255,.16);pointer-events:none}
+.model-card-preview{position:absolute;inset:0;pointer-events:none}
+.asset-drag-preview{position:fixed;left:-10000px;top:-10000px;z-index:-1;width:44px;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid rgba(255,255,255,.9);border-radius:7px;background:rgba(20,40,70,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:11px}
+.asset-drag-icon{position:relative;width:17px;height:13px;border:1.5px solid currentColor;border-radius:2px}
+.asset-drag-icon::before{content:"";position:absolute;left:1px;top:-4px;width:7px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}
 .qa{position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:4px;opacity:0;transform:translateY(-4px);transition:opacity .14s,transform .14s}
 .card:hover .qa{opacity:1;transform:none}
 .qa button{width:25px;height:25px;border-radius:6px;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.55);backdrop-filter:blur(4px)}

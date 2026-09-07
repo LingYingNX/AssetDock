@@ -206,7 +206,7 @@ function ListRows({
       <div className="grid v-list">
         {head}
         {items.map((a) => (
-          <Card key={a.id} a={a} view="list" />
+          <Card key={a.id} a={a} view="list" selectionOrder={items.map((item) => item.id)} />
         ))}
       </div>
     )
@@ -222,7 +222,7 @@ function ListRows({
             ref={rowV.measureElement}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}
           >
-            <Card a={items[vi.index]} view="list" />
+            <Card a={items[vi.index]} view="list" selectionOrder={items.map((item) => item.id)} />
           </div>
         ))}
       </div>
@@ -249,7 +249,7 @@ function CardRows({
     return (
       <div className="grid v-grid">
         {items.map((a) => (
-          <Card key={a.id} a={a} view="grid" />
+          <Card key={a.id} a={a} view="grid" selectionOrder={items.map((item) => item.id)} />
         ))}
       </div>
     )
@@ -294,7 +294,7 @@ function GridVirtualRows({
             <div style={{ display: 'flex', gap: 12 }}>
               {rows[vi.index].map((a) => (
                 <div key={a.id} style={{ width: colw, flex: `0 0 ${colw}px` }}>
-                  <Card a={a} view="grid" />
+                  <Card a={a} view="grid" selectionOrder={rows.flat().map((item) => item.id)} />
                 </div>
               ))}
             </div>
@@ -324,7 +324,7 @@ function Waterfall({
     return (
       <div className="grid">
         {items.map((a) => (
-          <Card key={a.id} a={a} view="waterfall" />
+          <Card key={a.id} a={a} view="waterfall" selectionOrder={items.map((item) => item.id)} />
         ))}
       </div>
     )
@@ -378,7 +378,7 @@ function WaterColumn({
             data-index={vi.index}
             style={{ position: 'absolute', top: 0, left: 0, width, transform: `translateY(${vi.start}px)` }}
           >
-            <Card a={items[vi.index].a} view="waterfall" />
+            <Card a={items[vi.index].a} view="waterfall" selectionOrder={items.map((item) => item.a.id)} />
           </div>
         ))}
       </div>

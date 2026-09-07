@@ -147,7 +147,7 @@ export function Lightbox(): React.JSX.Element | null {
   const visible = assets.filter((x) => !x.deletedAt)
   const idx = visible.findIndex((x) => x.id === a.id)
   const isModel = a.type === 'model'
-  const realModel = isModel && a.dbId != null && a.format === 'GLB' && !!a.originalUrl
+  const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
 
   const sub =
     a.type === 'model'
@@ -254,6 +254,7 @@ export function Lightbox(): React.JSX.Element | null {
                 <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
                 <Viewer3D
                   url={a.originalUrl ?? ''}
+                  format={a.format as 'GLB' | 'FBX' | 'OBJ'}
                   turntable={realTurn}
                   wireframe={realWire}
                   view={realView}

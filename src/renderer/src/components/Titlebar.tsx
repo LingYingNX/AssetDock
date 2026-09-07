@@ -79,7 +79,6 @@ export function Titlebar(): React.JSX.Element {
             title={`${t.name} · 本地库`}
             onClick={() => openTab(t.id)}
           >
-            <Icon name="drive" />
             {t.name}
             <span
               className="ic x"

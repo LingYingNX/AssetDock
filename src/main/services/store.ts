@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3'
+import { canonicalIndexRelPath } from './libResolve'
 
 /** 标签默认色板(与设计稿标签色一致,超出按序循环) */
 const TAG_COLORS = ['#22D3EE', '#F97316', '#3ECF8E', '#E8A33D', '#FF7A93', '#3B82F6', '#A855F7', '#64748B']
@@ -37,6 +38,7 @@ export interface AssetRow {
   palette: string
   imported_at: string
   source_index_id: number | null
+  folder_path: string | null
   tags: { name: string; color: string }[]
 }
 
@@ -67,6 +69,18 @@ export function listAssets(d: Database, libraryId: number): AssetRow[] {
     r.tags = tagStmt.all(r.id) as { name: string; color: string }[]
   }
   return rows as AssetRow[]
+}
+
+/** 单个完整资产行(含标签),供索引 sidecar 物化使用。 */
+export function assetById(d: Database, libraryId: number, assetId: number): AssetRow | undefined {
+  const row = d.prepare('SELECT * FROM assets WHERE library_id = ? AND id = ?').get(libraryId, assetId) as
+    | (Omit<AssetRow, 'tags'> & { tags?: unknown })
+    | undefined
+  if (!row) return undefined
+  row.tags = d
+    .prepare('SELECT t.name, t.color FROM asset_tags at JOIN tags t ON t.id = at.tag_id WHERE at.asset_id = ?')
+    .all(assetId) as { name: string; color: string }[]
+  return row as AssetRow
 }
 
 export interface AssetPatch {
@@ -100,11 +114,36 @@ export function updateAsset(d: Database, id: number, patch: AssetPatch): void {
   d.prepare(`UPDATE assets SET ${sets} WHERE id = ?`).run(...vals, id)
 }
 
-export function setAssetMissing(d: Database, relPath: string, missing: boolean): boolean {
+export function setAssetMissing(d: Database, libraryId: number, relPath: string, missing: boolean): boolean {
   const r = d
-    .prepare('UPDATE assets SET missing = ? WHERE rel_path = ?')
-    .run(missing ? 1 : 0, relPath)
+    .prepare('UPDATE assets SET missing = ? WHERE library_id = ? AND rel_path = ?')
+    .run(missing ? 1 : 0, libraryId, relPath)
   return r.changes > 0
+}
+
+export function setAssetFolder(d: Database, assetId: number, folderPath: string | null): void {
+  d.prepare('UPDATE assets SET folder_path = ? WHERE id = ?').run(folderPath, assetId)
+}
+
+export function renameAssetFolder(d: Database, libraryId: number, oldPath: string, newPath: string): void {
+  d.transaction(() => {
+    d.prepare(
+      `UPDATE assets
+       SET rel_path = CASE
+         WHEN rel_path = ? THEN ?
+         ELSE ? || substr(rel_path, length(?) + 1)
+       END
+       WHERE library_id = ? AND source_index_id IS NULL AND (rel_path = ? OR instr(rel_path, ?) = 1)`
+    ).run(oldPath, newPath, newPath, oldPath, libraryId, oldPath, `${oldPath}/`)
+    d.prepare(
+      `UPDATE assets
+       SET folder_path = CASE
+         WHEN folder_path = ? THEN ?
+         ELSE ? || substr(folder_path, length(?) + 1)
+       END
+       WHERE library_id = ? AND (folder_path = ? OR instr(folder_path, ?) = 1)`
+    ).run(oldPath, newPath, newPath, oldPath, libraryId, oldPath, `${oldPath}/`)
+  })()
 }
 
 export function addTag(d: Database, assetId: number, name: string): void {
@@ -139,28 +178,147 @@ export interface ScanEntry {
   vertices?: number
 }
 
-export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[], sourceIndexId?: number): void {
-  const existing = d.prepare('SELECT id, size_bytes, mtime_ms FROM assets WHERE rel_path = ?')
+export interface ScanUpsertResult {
+  assetId: number
+  action: 'added' | 'changed' | 'unchanged' | 'relocated'
+  relPath: string
+  previousRelPath?: string
+}
+
+export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[], sourceIndexId?: number): ScanUpsertResult[] {
+  const existing = d.prepare(
+    'SELECT id, size_bytes, mtime_ms, fingerprint, source_index_id FROM assets WHERE library_id = ? AND rel_path = ?'
+  )
+  const missingIndexed = d.prepare(
+    `SELECT id, rel_path FROM assets
+     WHERE library_id = ? AND source_index_id = ? AND fingerprint = ? AND missing = 1
+     LIMIT 2`
+  )
   const insert = d.prepare(
     `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices, size_bytes, mtime_ms, fingerprint, source_index_id, imported_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-  const updateMeta = d.prepare('UPDATE assets SET size_bytes = ?, mtime_ms = ?, missing = 0 WHERE id = ?')
-  const updateDims = d.prepare('UPDATE assets SET width = ?, height = ?, duration = ?, codec = ?, fps = ?, face_count = ?, vertices = ? WHERE id = ?')
+  const updateScanned = d.prepare(
+    `UPDATE assets
+     SET name = ?, type = ?, format = ?, width = ?, height = ?, duration = ?, codec = ?, fps = ?, face_count = ?, vertices = ?,
+         size_bytes = ?, mtime_ms = ?, fingerprint = ?, missing = 0
+     WHERE id = ?`
+  )
+  const relocate = d.prepare('UPDATE assets SET rel_path = ?, source_index_id = ? WHERE id = ?')
   const now = new Date().toISOString().slice(0, 16)
+  const results: ScanUpsertResult[] = []
+  const writeScanned = (entry: ScanEntry, assetId: number): void => {
+    updateScanned.run(
+      entry.name,
+      entry.type,
+      entry.format,
+      entry.width ?? null,
+      entry.height ?? null,
+      entry.duration ?? null,
+      entry.codec ?? null,
+      entry.fps ?? null,
+      entry.faceCount ?? null,
+      entry.vertices ?? null,
+      entry.sizeBytes,
+      entry.mtimeMs,
+      entry.fingerprint,
+      assetId
+    )
+  }
   d.transaction(() => {
     for (const e of entries) {
-      const row = existing.get(e.relPath) as { id: number; size_bytes: number; mtime_ms: number } | undefined
+      const relPath = sourceIndexId != null ? canonicalIndexRelPath(sourceIndexId, e.relPath) : e.relPath
+      const row = existing.get(libraryId, relPath) as
+        | { id: number; size_bytes: number; mtime_ms: number; fingerprint: string; source_index_id: number | null }
+        | undefined
       if (row) {
-        updateMeta.run(e.sizeBytes, e.mtimeMs, row.id)
-        if (e.width != null || e.duration != null || e.codec != null || e.faceCount != null) {
-          updateDims.run(e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, row.id)
+        const action =
+          row.size_bytes === e.sizeBytes && row.mtime_ms === e.mtimeMs && row.fingerprint === e.fingerprint
+            ? 'unchanged'
+            : 'changed'
+        writeScanned(e, row.id)
+        if (sourceIndexId != null && row.source_index_id !== sourceIndexId) {
+          d.prepare('UPDATE assets SET source_index_id = ? WHERE id = ?').run(sourceIndexId, row.id)
+        }
+        results.push({ assetId: row.id, action, relPath })
+      } else if (sourceIndexId != null) {
+        const candidates = missingIndexed.all(libraryId, sourceIndexId, e.fingerprint) as { id: number; rel_path: string }[]
+        if (candidates.length === 1) {
+          const previousRelPath = candidates[0].rel_path
+          relocate.run(relPath, sourceIndexId, candidates[0].id)
+          writeScanned(e, candidates[0].id)
+          results.push({ assetId: candidates[0].id, action: 'relocated', relPath, previousRelPath })
+        } else {
+          const info = insert.run(
+            libraryId,
+            relPath,
+            e.name,
+            e.type,
+            e.format,
+            e.width ?? null,
+            e.height ?? null,
+            e.duration ?? null,
+            e.codec ?? null,
+            e.fps ?? null,
+            e.faceCount ?? null,
+            e.vertices ?? null,
+            e.sizeBytes,
+            e.mtimeMs,
+            e.fingerprint,
+            sourceIndexId,
+            now
+          )
+          results.push({ assetId: Number(info.lastInsertRowid), action: 'added', relPath })
         }
       } else {
-        insert.run(libraryId, e.relPath, e.name, e.type, e.format, e.width ?? null, e.height ?? null, e.duration ?? null, e.codec ?? null, e.fps ?? null, e.faceCount ?? null, e.vertices ?? null, e.sizeBytes, e.mtimeMs, e.fingerprint, sourceIndexId ?? null, now)
+        const info = insert.run(
+          libraryId,
+          relPath,
+          e.name,
+          e.type,
+          e.format,
+          e.width ?? null,
+          e.height ?? null,
+          e.duration ?? null,
+          e.codec ?? null,
+          e.fps ?? null,
+          e.faceCount ?? null,
+          e.vertices ?? null,
+          e.sizeBytes,
+          e.mtimeMs,
+          e.fingerprint,
+          null,
+          now
+        )
+        results.push({ assetId: Number(info.lastInsertRowid), action: 'added', relPath })
       }
     }
   })()
+  return results
+}
+
+/** 新路径先被监听到时，合并临时索引记录并保留原记录的用户元数据。 */
+export function mergeIndexedRename(
+  d: Database,
+  libraryId: number,
+  sourceIndexId: number,
+  oldSourceRel: string,
+  newSourceRel: string
+): number | null {
+  const oldRel = canonicalIndexRelPath(sourceIndexId, oldSourceRel)
+  const newRel = canonicalIndexRelPath(sourceIndexId, newSourceRel)
+  const original = d
+    .prepare('SELECT id, fingerprint FROM assets WHERE library_id = ? AND source_index_id = ? AND rel_path = ?')
+    .get(libraryId, sourceIndexId, oldRel) as { id: number; fingerprint: string } | undefined
+  const transient = d
+    .prepare('SELECT id, fingerprint FROM assets WHERE library_id = ? AND source_index_id = ? AND rel_path = ?')
+    .get(libraryId, sourceIndexId, newRel) as { id: number; fingerprint: string } | undefined
+  if (!original || !transient || original.id === transient.id || original.fingerprint !== transient.fingerprint) return null
+  d.transaction(() => {
+    d.prepare('DELETE FROM assets WHERE id = ?').run(transient.id)
+    d.prepare('UPDATE assets SET rel_path = ?, missing = 0 WHERE id = ?').run(newRel, original.id)
+  })()
+  return original.id
 }
 
 /* ---- 标签页持久化 ---- */

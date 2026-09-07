@@ -1,8 +1,9 @@
-import { mkdir, writeFile, access } from 'node:fs/promises'
+import { mkdir, access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import sharp from 'sharp'
 import ffmpegPath from 'ffmpeg-static'
+import { writeFileAtomically } from './cacheFiles'
 
 let thumbsDir = join(process.env.APPDATA ?? '.', 'mediahub', 'thumbs')
 
@@ -80,6 +81,10 @@ export interface ThumbRequest {
   format: string
   /** 缓存目录(库内 .mediahub/thumbs);缺省用全局 thumbs */
   dir?: string
+  /** 索引素材的层级化缓存文件路径 */
+  targetPath?: string
+  /** 源文件内容变更时覆盖已有缩略图 */
+  force?: boolean
 }
 
 function dirOf(req: ThumbRequest): string {
@@ -88,7 +93,7 @@ function dirOf(req: ThumbRequest): string {
 
 /** 确保缩略图存在;返回缓存路径。生成串行执行,失败回退占位图。 */
 export async function ensureThumb(req: ThumbRequest): Promise<{ path: string; placeholder: boolean }> {
-  const target = thumbPathIn(dirOf(req), req.fingerprint)
+  const target = req.targetPath ?? thumbPathIn(dirOf(req), req.fingerprint)
   const exists = async (): Promise<boolean> => {
     try {
       await access(target)
@@ -97,9 +102,9 @@ export async function ensureThumb(req: ThumbRequest): Promise<{ path: string; pl
       return false
     }
   }
-  if (await exists()) return { path: target, placeholder: false }
+  if (!req.force && await exists()) return { path: target, placeholder: false }
   return enqueue(async () => {
-    if (await exists()) return { path: target, placeholder: false }
+    if (!req.force && await exists()) return { path: target, placeholder: false }
     let buf: Buffer
     try {
       if (req.type === 'video') {
@@ -116,10 +121,10 @@ export async function ensureThumb(req: ThumbRequest): Promise<{ path: string; pl
       }
     } catch {
       buf = await placeholderWebp(req.format)
-      await writeFile(target, buf)
+      await writeFileAtomically(target, buf)
       return { path: target, placeholder: true }
     }
-    await writeFile(target, buf)
+    await writeFileAtomically(target, buf)
     return { path: target, placeholder: false }
   })
 }

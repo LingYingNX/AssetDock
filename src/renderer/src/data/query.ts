@@ -104,6 +104,12 @@ export interface QueryOptions {
 
 const RES_PX = (a: Asset): number => Math.max(a.width ?? 0, a.height ?? 0)
 
+function indexedRelativePath(a: Asset, indexId: number): string | null {
+  if (a.sourceIndexId !== indexId || !a.relPath) return null
+  const prefix = `@index:${indexId}/`
+  return a.relPath.startsWith(prefix) ? a.relPath.slice(prefix.length) : null
+}
+
 function matchNav(a: Asset, nav: NavKey): boolean {
   if (nav === 'trash') return !!a.deletedAt
   if (a.missing) return false
@@ -114,10 +120,16 @@ function matchNav(a: Asset, nav: NavKey): boolean {
     case 'recent':
       return Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000
     case 'untagged':
-      return a.tags.length === 0
+      return a.folders.length === 0
     case 'fav':
       return a.favorite
     default:
+      if (nav.startsWith('index-folder:')) {
+        const [indexText, folder] = nav.slice('index-folder:'.length).split(':', 2)
+        const rel = indexedRelativePath(a, Number(indexText))
+        return rel != null && (rel === folder || rel.startsWith(`${folder}/`))
+      }
+      if (nav.startsWith('index:')) return a.sourceIndexId === Number(nav.slice('index:'.length))
       if (nav.startsWith('folder:')) {
         const f = nav.slice(7)
         return a.folders.includes(f)
@@ -190,19 +202,19 @@ export interface SidebarCounts {
 }
 
 export function sidebarCounts(assets: Asset[]): SidebarCounts {
-  const live = assets.filter((a) => !a.deletedAt)
+  const live = assets.filter((a) => !a.deletedAt && !a.missing)
   const c: SidebarCounts = {
     all: live.length,
     recent: 0,
     untagged: 0,
     fav: 0,
-    trash: assets.length - live.length,
+    trash: assets.filter((a) => !!a.deletedAt).length,
     folders: {},
     tags: {}
   }
   for (const a of live) {
     if (Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000) c.recent++
-    if (a.tags.length === 0) c.untagged++
+    if (a.folders.length === 0) c.untagged++
     if (a.favorite) c.fav++
     for (const f of a.folders) c.folders[f] = (c.folders[f] ?? 0) + 1
     for (const t of a.tags) c.tags[t.name] = (c.tags[t.name] ?? 0) + 1

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Asset, LibraryTab, NavKey, PaletteColor } from '../data/types'
 import { TAGS } from '../data/dataset'
-import { DEFAULT_FILTERS, type Filters } from '../data/query'
+import { DEFAULT_FILTERS, queryAssets, type Filters } from '../data/query'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -21,15 +21,26 @@ const mmss = (sec: number): string => {
 /** 主进程资产行 → Asset */
 function rowToAsset(r: Record<string, unknown>): Asset {
   const tags = (r.tags as { name: string; color: string }[]) ?? []
-  const segs = String(r.rel_path ?? '').split('/')
+  const relPath = String(r.rel_path ?? '')
+  const folderPath = typeof r.folder_path === 'string' && r.folder_path ? r.folder_path : null
+  const sourceIndexId = typeof r.source_index_id === 'number' ? r.source_index_id : undefined
+  const folderChain = (path: string): string[] => {
+    const parts = path.split('/').filter(Boolean).slice(0, -1)
+    return parts.map((_, i) => parts.slice(0, i + 1).join('/'))
+  }
+  const folders = sourceIndexId == null
+    ? folderChain(relPath)
+    : folderPath
+      ? folderChain(`${folderPath}/_`)
+      : []
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
     libraryId: r.library_id as number,
-    relPath: r.rel_path as string,
+    relPath,
     fingerprint: r.fingerprint as string,
     missing: (r.missing as number) === 1,
-    sourceIndexId: (r.source_index_id as number) ?? undefined,
+    sourceIndexId,
     indexName: (r.index_name as string) ?? undefined,
     type: r.type as Asset['type'],
     format: r.format as Asset['format'],
@@ -49,12 +60,12 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     reviewFlag: (r.review_flag as number) === 1,
     tags,
     /* 目录链:完整相对目录前缀(sub、sub/inner),树构建与导航共用 */
-    folders: segs.slice(0, -1).map((_, i) => segs.slice(0, i + 1).join('/')),
+    folders,
     note: (r.note as string) ?? '',
     sourceUrl: (r.source_url as string) ?? undefined,
     palette: JSON.parse((r.palette as string) || '[]') as PaletteColor[],
     previewUrl: `thumb://${r.fingerprint as string}.webp`,
-    originalUrl: `media://${r.library_id as number}/${encodeURIComponent(r.rel_path as string)}`,
+    originalUrl: `media://${r.library_id as number}/${encodeURIComponent(r.rel_path as string)}${sourceIndexId != null ? `?source=${sourceIndexId}` : ''}`,
     absPath: r.absPath as string,
     deletedAt: (r.deleted_at as string) ?? undefined
   }
@@ -139,9 +150,11 @@ interface UIState {
 
   /* 选中与焦点 */
   selectedIds: string[]
+  selectionAnchorId: string | null
   activeId: string | null
   focusedCardId: string | null
-  clickCard: (id: string) => void
+  clickCard: (id: string, options?: { shift?: boolean; order?: string[] }) => void
+  selectAllVisible: () => void
   setSelectedIds: (ids: string[]) => void
   setFocusedCard: (id: string | null) => void
   clearSelection: () => void
@@ -164,6 +177,7 @@ interface UIState {
 }
 
 let tabSeq = 0
+let reloadSeq = 0
 
 export const useUI = create<UIState>((set, get) => {
   /** 编辑动作:本地立即生效 + 库模式落库(失败提示) */
@@ -193,6 +207,7 @@ export const useUI = create<UIState>((set, get) => {
           return
         }
         get().setLibraries([...libs, r])
+        if (r.warning) alert(r.warning)
         get().openLibrary(r.id, r.name)
       })
     },
@@ -272,7 +287,10 @@ export const useUI = create<UIState>((set, get) => {
         set({ assets: [], folderPaths: [], folderEditPath: null, mode: 'empty' })
         return
       }
-      void Promise.all([window.windowApi.assets.list(t.libraryId), window.windowApi.folders.list(t.libraryId)]).then(([r, folders]) => {
+      const libraryId = t.libraryId
+      const request = ++reloadSeq
+      void Promise.all([window.windowApi.assets.list(libraryId), window.windowApi.folders.list(libraryId)]).then(([r, folders]) => {
+        if (request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId) return
         const data = r as { library?: unknown; assets?: Record<string, unknown>[]; indexes?: { id: number; name: string; path: string }[] }
         const assets = data.assets
         if (Array.isArray(assets)) {
@@ -344,17 +362,18 @@ export const useUI = create<UIState>((set, get) => {
       if (t?.libraryId == null) return
       const requested = new Set(assetIds)
       const ids = get().assets
-        .filter((a) => requested.has(a.id) && a.dbId != null && a.libraryId === t.libraryId && !a.sourceIndexId && !a.missing && !a.deletedAt)
+        .filter((a) => requested.has(a.id) && a.dbId != null && a.libraryId === t.libraryId && !a.missing && !a.deletedAt)
         .map((a) => a.dbId as number)
       if (ids.length === 0) return
-      if (ids.length < assetIds.length) alert('部分素材是索引来源或缺失文件，本次未移动')
+      if (ids.length < assetIds.length) alert('部分素材不可处理,本次已跳过')
 
       void window.windowApi.assets.move(t.libraryId, ids, folder).then((r) => {
         if ('error' in r) {
+          if (r.moved) get().reloadActiveLibrary()
           alert(r.error)
           return
         }
-        set({ nav: `folder:${folder}` as NavKey })
+        set({ nav: folder ? `folder:${folder}` as NavKey : 'untagged' })
         get().reloadActiveLibrary()
       })
     },
@@ -437,17 +456,45 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     selectedIds: [],
+    selectionAnchorId: null,
     activeId: null,
     focusedCardId: null,
-    clickCard: (id) =>
-      set((s) => ({
-        selectedIds: s.selectedIds.includes(id) ? s.selectedIds.filter((x) => x !== id) : [...s.selectedIds, id],
-        activeId: id,
-        focusedCardId: id
-      })),
-    setSelectedIds: (ids) => set({ selectedIds: ids }),
+    clickCard: (id, options) =>
+      set((s) => {
+        const selected = new Set(s.selectedIds)
+        const order = options?.order ?? s.assets.map((a) => a.id)
+        const anchor = options?.shift ? s.selectionAnchorId : id
+        if (options?.shift && anchor) {
+          const start = order.indexOf(anchor)
+          const end = order.indexOf(id)
+          if (start >= 0 && end >= 0) {
+            const [from, to] = start < end ? [start, end] : [end, start]
+            for (const rangeId of order.slice(from, to + 1)) selected.add(rangeId)
+          } else {
+            selected.add(id)
+          }
+        } else {
+          if (selected.has(id)) selected.delete(id)
+          else selected.add(id)
+        }
+        return { selectedIds: [...selected], selectionAnchorId: anchor, activeId: id, focusedCardId: id }
+      }),
+    selectAllVisible: () =>
+      set((s) => {
+        const visible = queryAssets(s.assets, {
+          nav: s.nav,
+          search: s.search,
+          filters: s.filters,
+          swatches: s.swatches,
+          stripColor: s.stripColor
+        })
+        const selectedIds = visible.map((a) => a.id)
+        const lastId = selectedIds[selectedIds.length - 1] ?? null
+        return { selectedIds, selectionAnchorId: lastId, activeId: lastId, focusedCardId: lastId }
+      }),
+    setSelectedIds: (ids) => set({ selectedIds: ids, selectionAnchorId: ids[ids.length - 1] ?? null }),
     setFocusedCard: (focusedCardId) => set({ focusedCardId }),
-    clearSelection: () => set({ selectedIds: [] }),
+    clearSelection: () => set({ selectedIds: [], selectionAnchorId: null }),
 
     renaming: false,
     setRenaming: (renaming) => set({ renaming }),

@@ -8,8 +8,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "test": "vitest run",
+    "test": "node tools/rebuild-native-dual.mjs --ensure && vitest run",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:dual": "node tools/rebuild-native-dual.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web"

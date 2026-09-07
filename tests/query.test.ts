@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { queryAssets, DEFAULT_FILTERS } from '../src/renderer/src/data/query'
-import type { Asset } from '../src/renderer/src/data/types'
+import { queryAssets, DEFAULT_FILTERS, sidebarCounts } from '../src/renderer/src/data/query'
+import type { Asset, NavKey } from '../src/renderer/src/data/types'
 
 function asset(partial: Partial<Asset>): Asset {
   return {
@@ -48,7 +48,32 @@ describe('queryAssets semantics (Change 1 锁定)', () => {
   it('缺失文件不出现在任何默认视图(仅回收站看 deleted)', () => {
     const withMissing: Asset[] = [asset({ id: '4', missing: true }), ...list]
     expect(queryAssets(withMissing, { ...base(), nav: 'all' }).map((a) => a.id)).toEqual(['1', '2'])
-    expect(queryAssets(withMissing, { ...base(), nav: 'recent' }).map((a) => a.id)).toEqual(['1', '2'])
+    const recent = list.map((a) => ({ ...a, importedAt: new Date(Date.now() - 86_400_000).toISOString() }))
+    expect(queryAssets([asset({ id: '4', missing: true }), ...recent], { ...base(), nav: 'recent' }).map((a) => a.id)).toEqual(['1', '2'])
+  })
+
+  it('索引来源及其目录可单独筛选', () => {
+    const indexed = [
+      asset({ id: '4', sourceIndexId: 7, relPath: '@index:7/root.jpg' }),
+      asset({ id: '5', sourceIndexId: 7, relPath: '@index:7/reference/a.jpg' }),
+      asset({ id: '6', sourceIndexId: 8, relPath: '@index:8/reference/b.jpg' })
+    ]
+    expect(queryAssets(indexed, { ...base(), nav: 'index:7' as NavKey }).map((a) => a.id)).toEqual(['4', '5'])
+    expect(queryAssets(indexed, { ...base(), nav: 'index-folder:7:reference' as NavKey }).map((a) => a.id)).toEqual(['5'])
+  })
+
+  it('侧栏计数不把缺失素材误算为可浏览素材', () => {
+    const counts = sidebarCounts([
+      asset({ id: '1' }),
+      asset({ id: '2', missing: true }),
+      asset({ id: '3', deletedAt: '2026-08-31T11:00' })
+    ])
+    expect(counts).toMatchObject({ all: 1, untagged: 1, trash: 1 })
+  })
+
+  it('未分类按文件夹判断,已有目录的素材不再计入', () => {
+    expect(sidebarCounts([asset({ id: 'root' }), asset({ id: 'foldered', folders: ['人物'] })]).untagged).toBe(1)
+    expect(queryAssets([asset({ id: 'foldered', folders: ['人物'] })], { ...base(), nav: 'untagged' })).toEqual([])
   })
 })
 

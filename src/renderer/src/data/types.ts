@@ -79,3 +79,5 @@ export type NavKey =
   | 'all' | 'recent' | 'untagged' | 'fav' | 'trash'
   | `folder:${string}`
   | `tag:${string}`
+  | `index:${number}`
+  | `index-folder:${number}:${string}`

@@ -17,9 +17,10 @@ const api = {
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
 
   library: {
-    create: (folderPath: string): Promise<{ id: number; name: string; path: string } | { error: string }> =>
+    create: (folderPath: string): Promise<{ id: number; name: string; path: string; warning?: string } | { error: string }> =>
       ipcRenderer.invoke('library:create', folderPath),
     list: (): Promise<{ id: number; name: string; path: string }[]> => ipcRenderer.invoke('library:list'),
+    takeMigrationFailures: (): Promise<{ names: string[] }> => ipcRenderer.invoke('library:takeMigrationFailures'),
     legacyStats: (): Promise<{ assets: number }> => ipcRenderer.invoke('library:legacyStats'),
     purgeLegacy: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:purgeLegacy')
   },

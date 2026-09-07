@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import type { AssetFormat } from '../data/types'
 
 export type ViewKey = 'auto' | 'front' | 'side' | 'top' | 'back'
 
 interface Viewer3DProps {
   url: string
+  format: Extract<AssetFormat, 'GLB' | 'FBX' | 'OBJ'>
   turntable: boolean
   wireframe: boolean
   view: ViewKey
@@ -43,7 +47,7 @@ const VIEW_POS: Record<Exclude<ViewKey, 'auto'>, [number, number, number]> = {
  * GLTFLoader(+Draco) 经 media 流加载,包围盒自适应取景;
  * 转台=模型绕 Y 自转,定格=相机切正交向;卸载对称释放。
  */
-export function Viewer3D({ url, turntable, wireframe, view, exposure = 1, onProgress, onError, onLoaded }: Viewer3DProps): React.JSX.Element {
+export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1, onProgress, onError, onLoaded }: Viewer3DProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<ViewerApi | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -181,9 +185,9 @@ export function Viewer3D({ url, turntable, wireframe, view, exposure = 1, onProg
       .then((buf) => {
         if (disposed) return
         onProgressRef.current?.(null) // null = 解析阶段(旋转指示)
-        return new Promise<THREE.Group>((res, rej) =>
-          loader.parse(buf, '', (g) => res(g.scene as THREE.Group), rej)
-        )
+        if (format === 'OBJ') return new OBJLoader().parse(new TextDecoder().decode(buf))
+        if (format === 'FBX') return new FBXLoader().parse(buf, '')
+        return new Promise<THREE.Group>((res, rej) => loader.parse(buf, '', (g) => res(g.scene as THREE.Group), rej))
       })
       .then((model) => {
         if (disposed || !model) return
@@ -241,7 +245,7 @@ export function Viewer3D({ url, turntable, wireframe, view, exposure = 1, onProg
       apiRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url])
+  }, [url, format])
 
   /* 控制属性同步 */
   useEffect(() => {

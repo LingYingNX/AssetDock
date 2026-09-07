@@ -1,5 +1,6 @@
-import Database from 'better-sqlite3'
+import type Database from 'better-sqlite3'
 import { join } from 'node:path'
+import { openSqlite } from './sqlite'
 
 let db: Database.Database | null = null
 
@@ -74,9 +75,13 @@ CREATE TABLE IF NOT EXISTS index_sources (
 ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE;
 `
 
+const SCHEMA_V4 = `
+ALTER TABLE assets ADD COLUMN folder_path TEXT;
+`
+
 export function initDb(userDataDir: string): Database.Database {
   if (db) return db
-  db = new Database(join(userDataDir, 'mediahub.db'))
+  db = openSqlite(join(userDataDir, 'mediahub.db'))
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   const version = (db.pragma('user_version', { simple: true }) as number) ?? 0
@@ -92,6 +97,10 @@ export function initDb(userDataDir: string): Database.Database {
     db.exec(SCHEMA_V3)
     db.pragma('user_version = 3')
   }
+  if (version < 4) {
+    db.exec(SCHEMA_V4)
+    db.pragma('user_version = 4')
+  }
   return db
 }
 
@@ -102,7 +111,10 @@ export function getDb(): Database.Database {
 
 /** 供测试使用 */
 export function openMemoryDb(): Database.Database {
-  const d = new Database(':memory:')
+  const d = openSqlite(':memory:')
   d.exec(SCHEMA_V1)
+  d.exec(SCHEMA_V2)
+  d.exec(SCHEMA_V3)
+  d.exec(SCHEMA_V4)
   return d
 }

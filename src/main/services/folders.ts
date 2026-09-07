@@ -20,6 +20,10 @@ function libraryPath(root: string, relPath: string): { abs: string; rel: string 
   return { abs, rel: fromBase.replace(/\\/g, '/') }
 }
 
+function targetFolderPath(root: string, relPath: string): { abs: string; rel: string } {
+  return relPath === '' ? { abs: resolve(root), rel: '' } : libraryPath(root, relPath)
+}
+
 function folderName(name: string): string {
   const value = name.trim()
   if (!value || value === '.' || value === '..' || INVALID_NAME.test(value) || RESERVED_NAME.test(value) || /[. ]$/.test(value)) {
@@ -92,7 +96,7 @@ async function uniqueAssetTarget(directory: string, fileName: string): Promise<s
 
 export async function moveLibraryAsset(root: string, relPath: string, targetFolder: string): Promise<string> {
   const source = libraryPath(root, relPath)
-  const targetDir = libraryPath(root, targetFolder)
+  const targetDir = targetFolderPath(root, targetFolder)
   if (dirname(source.abs).toLowerCase() === targetDir.abs.toLowerCase()) return source.rel
   if (!(await lstat(source.abs)).isFile()) fail('素材不存在')
   if (!(await lstat(targetDir.abs)).isDirectory()) fail('目标文件夹不存在')
@@ -100,4 +104,9 @@ export async function moveLibraryAsset(root: string, relPath: string, targetFold
   const target = await uniqueAssetTarget(targetDir.abs, fileName)
   await rename(source.abs, target)
   return libraryPath(root, relative(resolve(root), target)).rel
+}
+
+export async function assertLibraryFolder(root: string, targetFolder: string): Promise<void> {
+  const target = targetFolderPath(root, targetFolder)
+  if (!(await lstat(target.abs)).isDirectory()) fail('目标文件夹不存在')
 }

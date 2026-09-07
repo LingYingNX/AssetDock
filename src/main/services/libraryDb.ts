@@ -1,6 +1,7 @@
-import Database from 'better-sqlite3'
+import type Database from 'better-sqlite3'
 import { join, dirname } from 'node:path'
 import { mkdirSync, existsSync, renameSync, rmSync, copyFileSync, readdirSync } from 'node:fs'
+import { openSqlite } from './sqlite'
 
 /** 每库 .mediahub/library.db;registry(全局库注册表)仍存全局 db */
 
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS assets (
   palette TEXT NOT NULL DEFAULT '[]',
   imported_at TEXT NOT NULL,
   source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE,
+  folder_path TEXT,
   UNIQUE(library_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_assets_lib ON assets(library_id);
@@ -66,14 +68,19 @@ export function libDbPath(libPath: string): string {
 export function libThumbsDir(libPath: string): string {
   return join(mediaDir(libPath), 'thumbs')
 }
+export function libIndexCacheDir(libPath: string): string {
+  return join(mediaDir(libPath), 'index-cache')
+}
 
 /** 打开(或创建)库内 db;句柄缓存由调用方管理 */
 export function openLibDb(libPath: string): Database.Database {
   mkdirSync(libThumbsDir(libPath), { recursive: true })
-  const db = new Database(libDbPath(libPath))
+  const db = openSqlite(libDbPath(libPath))
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.exec(PER_LIB_SCHEMA)
+  const columns = db.pragma('table_info(assets)') as { name: string }[]
+  if (!columns.some((column) => column.name === 'folder_path')) db.exec('ALTER TABLE assets ADD COLUMN folder_path TEXT')
   return db
 }
 
@@ -96,21 +103,28 @@ export function migrateLibrary(
   mkdirSync(mediaDir(lib.path), { recursive: true })
   const tmp = libDbPath(lib.path) + `.tmp-${process.pid}`
   try {
-    const db = new Database(tmp)
+    const db = openSqlite(tmp)
     db.pragma('journal_mode = WAL')
     db.exec(PER_LIB_SCHEMA)
     const tx = db.transaction(() => {
       db.prepare("INSERT INTO meta(key, value) VALUES ('name', ?), ('library_id', ?)").run(lib.name, String(lib.id))
       const assets = globalDb.prepare('SELECT * FROM assets WHERE library_id = ?').all(lib.id) as Record<string, unknown>[]
+      const sources = globalDb
+        .prepare(
+          'SELECT id, path, name, created_at FROM index_sources WHERE id IN (SELECT DISTINCT source_index_id FROM assets WHERE library_id = ? AND source_index_id IS NOT NULL)'
+        )
+        .all(lib.id) as { id: number; path: string; name: string; created_at: string }[]
+      const insSource = db.prepare('INSERT INTO index_sources(id, path, name, created_at) VALUES (?, ?, ?, ?)')
+      for (const source of sources) insSource.run(source.id, source.path, source.name, source.created_at)
       const insAsset = db.prepare(
-        `INSERT INTO assets(rel_path, name, type, format, width, height, duration, face_count, vertices, material_info, codec, fps,
-          size_bytes, mtime_ms, fingerprint, rating, favorite, review_flag, note, source_url, deleted_at, missing, palette, imported_at)
-         VALUES (@rel_path, @name, @type, @format, @width, @height, @duration, @face_count, @vertices, @material_info, @codec, @fps,
-          @size_bytes, @mtime_ms, @fingerprint, @rating, @favorite, @review_flag, @note, @source_url, @deleted_at, @missing, @palette, @imported_at)`
+        `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, face_count, vertices, material_info, codec, fps,
+          size_bytes, mtime_ms, fingerprint, rating, favorite, review_flag, note, source_url, deleted_at, missing, palette, imported_at, source_index_id, folder_path)
+         VALUES (@library_id, @rel_path, @name, @type, @format, @width, @height, @duration, @face_count, @vertices, @material_info, @codec, @fps,
+          @size_bytes, @mtime_ms, @fingerprint, @rating, @favorite, @review_flag, @note, @source_url, @deleted_at, @missing, @palette, @imported_at, @source_index_id, @folder_path)`
       )
       const idMap = new Map<number, number>()
       for (const a of assets) {
-        const info = insAsset.run(a)
+        const info = insAsset.run({ ...a, library_id: lib.id, folder_path: a.folder_path ?? null })
         idMap.set(a.id as number, Number(info.lastInsertRowid))
       }
       // 标签:仅本库引用的
@@ -154,6 +168,19 @@ export function migrateLibrary(
   }
 }
 
+export function ensureLibraryStorage(
+  globalDb: Database.Database,
+  lib: { id: number; path: string; name: string },
+  globalThumbsDir: string
+): boolean {
+  try {
+    migrateLibrary(globalDb, lib, globalThumbsDir)
+    return hasLibDb(lib.path)
+  } catch {
+    return false
+  }
+}
+
 /** 句柄 LRU(上限 8) */
 const handles = new Map<string, Database.Database>()
 const MAX_HANDLES = 8
@@ -185,7 +212,7 @@ export function closeAllLibHandles(): void {
 
 /** 测试辅助:内存库(同 schema) */
 export function openMemoryLibDb(): Database.Database {
-  const d = new Database(':memory:')
+  const d = openSqlite(':memory:')
   d.exec(PER_LIB_SCHEMA)
   return d
 }

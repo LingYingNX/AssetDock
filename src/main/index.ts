@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
+import { openSqlite } from './services/sqlite'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries } from './services/store'
@@ -12,7 +13,7 @@ function checkpointAllLibraries(): void {
   try {
     for (const l of listLibraries(getDb())) {
       try {
-        const d = new (require('better-sqlite3') as typeof import('better-sqlite3'))(libDbPath(l.path))
+        const d = openSqlite(libDbPath(l.path))
         d.pragma('wal_checkpoint(TRUNCATE)')
         d.close()
       } catch { /* 单库失败不影响其余 */ }
@@ -72,7 +73,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     const userData = app.getPath('userData')
     initServices(userData)
-    registerMediaProtocol(getDb())
+    registerMediaProtocol()
     registerIpc(userData)
     attachWatchersFor(listLibraries(getDb()))
 
@@ -80,14 +81,15 @@ if (!app.requestSingleInstanceLock()) {
   protocol.handle('thumb', async (request) => {
     const fp = new URL(request.url).hostname.replace(/\.webp$/, '')
     const { findByFingerprint } = await import('./services/libResolve')
-    const { hasThumbIn, thumbPathIn, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
-    const hit = findByFingerprint(fp)
+    const { fileExists, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
+    const fallbackThumbs = join(app.getPath('userData'), 'thumbs')
+    const hit = findByFingerprint(fp, fallbackThumbs)
     if (!hit) return new Response('not found', { status: 404 })
-    if (!(await hasThumbIn(hit.thumbsDir, fp))) {
-      if (!ensureThumbByFingerprint(fp)) return new Response('not found', { status: 404 })
+    if (!(await fileExists(hit.thumbPath)) || (hit.sidecarPath != null && !(await fileExists(hit.sidecarPath)))) {
+      if (!ensureThumbByFingerprint(fp, fallbackThumbs)) return new Response('not found', { status: 404 })
     }
     try {
-      const buf = await import('node:fs/promises').then((f) => f.readFile(thumbPathIn(hit.thumbsDir, fp)))
+      const buf = await import('node:fs/promises').then((f) => f.readFile(hit.thumbPath))
       return new Response(buf, { headers: { 'content-type': 'image/webp' } })
     } catch {
       return new Response('not found', { status: 404 })

@@ -29,17 +29,9 @@
 .folder-edit{cursor:text}
 .folder-row{cursor:default;padding-right:6px}
 .folder-row.drop-target{background:rgba(10,132,255,.16);outline:1.5px solid var(--acc);outline-offset:-1.5px;color:#0A5AC2}
-.folder-row.pending-move{background:rgba(10,132,255,.12);outline:1px solid var(--acc-line);outline-offset:-1px}
 .folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
 .folder-main:hover{background:none}
 .folder-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.folder-row.pending-move .cnt{display:none}
-.folder-actions{display:flex;flex:none;gap:4px;margin-left:6px}
-.folder-move,.folder-cancel{height:21px;padding:0 6px;border-radius:5px;font-size:10.5px;font-weight:600;white-space:nowrap}
-.folder-move{background:var(--acc);border:1px solid var(--acc);color:#fff}
-.folder-cancel{border:1px solid var(--line);color:var(--t2);background:rgba(255,255,255,.72)}
-.folder-move:hover{filter:brightness(.95)}
-.folder-cancel:hover{color:var(--t1);background:var(--bg4)}
 .folder-name-edit{min-width:0;flex:1;height:21px;padding:0 3px;border:1px solid var(--acc);border-radius:2px;background:rgba(255,255,255,.82);color:var(--t1);font:inherit;outline:none}
 .swatches{display:flex;flex-wrap:wrap;gap:7px;padding:4px 10px 2px}
 .sw{width:15px;height:15px;border-radius:50%;border:1px solid rgba(255,255,255,.6);position:relative;cursor:pointer;transition:transform .12s}

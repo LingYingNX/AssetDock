@@ -1,5 +1,5 @@
 import { readdir, stat } from 'node:fs/promises'
-import { join, relative, basename } from 'node:path'
+import { join, basename } from 'node:path'
 import sharp from 'sharp'
 import { isIgnored, isIgnoredDir, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
@@ -17,7 +17,7 @@ async function collectEntry(absPath: string, relPath: string, sizeBytes: number,
     format: kind.format,
     sizeBytes,
     mtimeMs,
-    fingerprint: await fingerprint(absPath, sizeBytes)
+    fingerprint: await fingerprint(absPath, sizeBytes, mtimeMs)
   }
   if (kind.type === 'image' && kind.format !== 'PSD') {
     try {
@@ -80,6 +80,5 @@ export async function scanLibrary(
     await Promise.all(batch.map(walk))
   }
   onProgress?.(done)
-  void relative
   return entries
 }

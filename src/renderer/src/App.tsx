@@ -26,6 +26,10 @@ export default function App(): React.JSX.Element {
         const libs = await window.windowApi.library.list()
         useUI.getState().setLibraries(libs)
         if (libs.length === 0) return
+        const migration = await window.windowApi.library.takeMigrationFailures()
+        if (migration.names.length > 0) {
+          alert(`以下素材库无法创建本地数据库，当前会话将使用全局回退数据:\n${migration.names.join('\n')}`)
+        }
         const openIds = await window.windowApi.tabs.get()
         const tabs = openIds
           .map((t) => {
@@ -82,6 +86,11 @@ export default function App(): React.JSX.Element {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         document.querySelector<HTMLInputElement>('.searchbox input')?.focus()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        st.selectAllVisible()
         return
       }
       if (st.lightboxId) {

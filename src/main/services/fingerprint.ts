@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 
 /**
- * 内容指纹:sha1(前 64KB + size) 截断 20 位。
- * 读 64KB 而非全文件,速度与抗碰折中;用于缩略图缓存键。
+ * 缓存指纹:sha1(前 64KB + size + mtime) 截断 20 位。
+ * 读 64KB 而非全文件,速度与抗碰折中;mtime 让等大小修改刷新缩略图。
  */
-export async function fingerprint(absPath: string, size: number): Promise<string> {
+export async function fingerprint(absPath: string, size: number, mtimeMs = 0): Promise<string> {
   const h = createHash('sha1')
   const fh = await open(absPath, 'r')
   try {
@@ -17,6 +17,6 @@ export async function fingerprint(absPath: string, size: number): Promise<string
   } finally {
     await fh.close()
   }
-  h.update(`:${size}`)
+  h.update(`:${size}:${mtimeMs}`)
   return h.digest('hex').slice(0, 20)
 }

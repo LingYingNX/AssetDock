@@ -27,4 +27,8 @@ describe('fingerprint', () => {
     const [f1, f3] = await Promise.all([fingerprint(join(dir, 'a.bin'), 100), fingerprint(join(dir, 'big.bin'), 101)])
     expect(f1).not.toBe(f3)
   })
+  it('same content and size with a new modification time → different fingerprint', async () => {
+    const [f1, f2] = await Promise.all([fingerprint(join(dir, 'a.bin'), 100, 1), fingerprint(join(dir, 'a.bin'), 100, 2)])
+    expect(f1).not.toBe(f2)
+  })
 })
