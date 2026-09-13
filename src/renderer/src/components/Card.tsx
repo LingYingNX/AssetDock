@@ -32,7 +32,6 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
-  const nonce = useUI((s) => s.thumbNonce)
   const [imgLoaded, setImgLoaded] = useState(false)
   const [modelFailed, setModelFailed] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
@@ -133,13 +132,21 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               onError={() => setModelFailed(true)}
             />
           </div>
-        ) : a.dbId != null ? (
+        ) : a.dbId != null && a.type === 'image' ? (
           <img
-            src={`${a.previewUrl}?v=${nonce}`}
+            src={a.previewUrl}
             alt={a.name}
             className={imgLoaded ? 'loaded' : ''}
             onLoad={() => setImgLoaded(true)}
             draggable={false}
+          />
+        ) : a.dbId != null && isVideo ? (
+          <video
+            src={a.previewUrl}
+            muted
+            preload="auto"
+            className={imgLoaded ? 'loaded' : ''}
+            onLoadedData={() => setImgLoaded(true)}
           />
         ) : a.previewUrl && a.type === 'image' ? (
           <img
@@ -153,7 +160,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           <video
             src={`/@fs/${a.previewUrl}`}
             muted
-            preload="metadata"
+            preload="auto"
             className={imgLoaded ? 'loaded' : ''}
             onLoadedMetadata={() => setImgLoaded(true)}
           />

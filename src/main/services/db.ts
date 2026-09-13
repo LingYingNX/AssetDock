@@ -79,6 +79,15 @@ const SCHEMA_V4 = `
 ALTER TABLE assets ADD COLUMN folder_path TEXT;
 `
 
+const SCHEMA_V5 = `
+CREATE TABLE IF NOT EXISTS folder_orders (
+  library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  PRIMARY KEY(library_id, path)
+);
+`
+
 export function initDb(userDataDir: string): Database.Database {
   if (db) return db
   db = openSqlite(join(userDataDir, 'mediahub.db'))
@@ -101,6 +110,10 @@ export function initDb(userDataDir: string): Database.Database {
     db.exec(SCHEMA_V4)
     db.pragma('user_version = 4')
   }
+  if (version < 5) {
+    db.exec(SCHEMA_V5)
+    db.pragma('user_version = 5')
+  }
   return db
 }
 
@@ -116,5 +129,6 @@ export function openMemoryDb(): Database.Database {
   d.exec(SCHEMA_V2)
   d.exec(SCHEMA_V3)
   d.exec(SCHEMA_V4)
+  d.exec(SCHEMA_V5)
   return d
 }

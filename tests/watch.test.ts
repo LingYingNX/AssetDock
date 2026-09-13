@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { openMemoryDb } from '../src/main/services/db'
-import { listAssets, updateAsset, upsertScanned } from '../src/main/services/store'
+import { listAssets, upsertScanned } from '../src/main/services/store'
 import { WATCH_OPTIONS, watchLibrary } from '../src/main/services/watch'
 
 describe('library watcher', () => {
@@ -60,88 +60,4 @@ describe('library watcher', () => {
     }
   })
 
-  it('retains indexed metadata when an external file is renamed', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mediahub-watch-index-'))
-    const db = openMemoryDb()
-    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
-    db.prepare('INSERT INTO index_sources(id, path, name) VALUES (?, ?, ?)').run(1, root, 'source')
-    const watcher = watchLibrary(db, 1, root, {
-      onAdded: () => undefined,
-      onChanged: () => undefined,
-      onMissing: () => undefined
-    }, { sourceIndexId: 1 })
-
-    try {
-      await once(watcher, 'ready')
-      await writeFile(join(root, 'old.jpg'), 'one')
-      await vi.waitFor(() => expect(listAssets(db, 1)).toHaveLength(1), { timeout: 5000 })
-      const original = listAssets(db, 1)[0]
-      updateAsset(db, original.id, { note: 'preserved' })
-
-      await rename(join(root, 'old.jpg'), join(root, 'new.jpg'))
-      await vi.waitFor(() => expect(listAssets(db, 1)).toEqual([
-        expect.objectContaining({
-          id: original.id,
-          rel_path: '@index:1/new.jpg',
-          note: 'preserved',
-          missing: 0
-        })
-      ]), { timeout: 5000 })
-    } finally {
-      await watcher.close()
-      db.close()
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it('removes a truly deleted indexed record after the rename window', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mediahub-watch-index-delete-'))
-    const db = openMemoryDb()
-    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
-    db.prepare('INSERT INTO index_sources(id, path, name) VALUES (?, ?, ?)').run(1, root, 'source')
-    const watcher = watchLibrary(db, 1, root, {
-      onAdded: () => undefined,
-      onChanged: () => undefined,
-      onMissing: () => undefined
-    }, { sourceIndexId: 1 })
-
-    try {
-      await once(watcher, 'ready')
-      await writeFile(join(root, 'gone.jpg'), 'one')
-      await vi.waitFor(() => expect(listAssets(db, 1)).toHaveLength(1), { timeout: 5000 })
-      await rm(join(root, 'gone.jpg'))
-      await vi.waitFor(() => expect(listAssets(db, 1)).toHaveLength(0), { timeout: 5000 })
-    } finally {
-      await watcher.close()
-      db.close()
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps reporting indexed additions when derivative synchronization fails', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mediahub-watch-index-failure-'))
-    const db = openMemoryDb()
-    let changed = 0
-    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
-    db.prepare('INSERT INTO index_sources(id, path, name) VALUES (?, ?, ?)').run(1, root, 'source')
-    const watcher = watchLibrary(db, 1, root, {
-      onAdded: () => undefined,
-      onChanged: () => { changed++ },
-      onMissing: () => undefined
-    }, {
-      sourceIndexId: 1,
-      onUpsert: async () => { throw new Error('cache unavailable') }
-    })
-
-    try {
-      await once(watcher, 'ready')
-      await writeFile(join(root, 'a.jpg'), 'one')
-      await vi.waitFor(() => expect(listAssets(db, 1)).toHaveLength(1), { timeout: 5000 })
-      await vi.waitFor(() => expect(changed).toBe(1), { timeout: 5000 })
-    } finally {
-      await watcher.close()
-      db.close()
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 })

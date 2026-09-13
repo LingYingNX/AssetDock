@@ -2,14 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { queryAssets, DEFAULT_FILTERS } from '../src/renderer/src/data/query'
 
 describe('UI store', () => {
-  it('carries the index identity in media URLs', async () => {
+  it('creates media URLs from the local library path', async () => {
     vi.stubGlobal('window', { windowApi: {} })
     const { rowToAsset } = await import('../src/renderer/src/store/ui')
     const asset = rowToAsset({
       id: 3,
       library_id: 7,
-      rel_path: '@index:4/same.jpg',
-      source_index_id: 4,
+      rel_path: 'same.jpg',
       fingerprint: 'fp',
       type: 'image',
       format: 'JPG',
@@ -23,18 +22,17 @@ describe('UI store', () => {
       palette: '[]'
     })
 
-    expect(asset.originalUrl).toBe('media://7/%40index%3A4%2Fsame.jpg?source=4')
+    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp')
+    expect(asset.originalUrl).toBe(asset.previewUrl)
   })
 
-  it('uses the assigned folder for indexed asset classification', async () => {
+  it('uses the local path for asset classification', async () => {
     vi.stubGlobal('window', { windowApi: {} })
     const { rowToAsset } = await import('../src/renderer/src/store/ui')
     const asset = rowToAsset({
       id: 4,
       library_id: 7,
-      rel_path: '@index:2/1/reference/same.jpg',
-      source_index_id: 2,
-      folder_path: 'target/child',
+      rel_path: 'target/child/reference/same.jpg',
       fingerprint: 'fp',
       type: 'image',
       format: 'JPG',
@@ -48,7 +46,7 @@ describe('UI store', () => {
       palette: '[]'
     })
 
-    expect(asset.folders).toEqual(['target', 'target/child'])
+    expect(asset.folders).toEqual(['target', 'target/child', 'target/child/reference'])
     expect(queryAssets([asset], {
       nav: 'folder:target',
       search: '',
@@ -84,7 +82,7 @@ describe('UI store', () => {
     await vi.waitFor(() => expect(calls).toEqual(['reload', 'alert:second asset failed']))
   })
 
-  it('moves assets to untagged and refreshes the active library', async () => {
+  it('moves assets without changing the active view and refreshes the library', async () => {
     const move = vi.fn().mockResolvedValue({ moved: 1 })
     const reload = vi.fn()
     vi.stubGlobal('window', { windowApi: { assets: { move } } })
@@ -101,9 +99,38 @@ describe('UI store', () => {
 
     await vi.waitFor(() => {
       expect(move).toHaveBeenCalledWith(1, [1], '')
-      expect(useUI.getState().nav).toBe('untagged')
+      expect(useUI.getState().nav).toBe('folder:target')
       expect(reload).toHaveBeenCalled()
     })
+  })
+
+  it('updates the folder tree immediately while a folder move is pending', async () => {
+    let resolveMove: (value: { path: string }) => void = () => {}
+    const pending = new Promise<{ path: string }>((resolve) => { resolveMove = resolve })
+    const move = vi.fn(() => pending)
+    const reload = vi.fn()
+    vi.stubGlobal('window', { windowApi: { folders: { move } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
+      activeTabId: 'library-1',
+      nav: 'folder:source',
+      folderPaths: ['source', 'target', 'target/existing'],
+      physicalFolderPaths: ['source', 'target', 'target/existing'],
+      assets: [],
+      reloadActiveLibrary: reload
+    })
+
+    useUI.getState().moveFolder('source', 'target', 'inside')
+
+    expect(useUI.getState().folderPaths).toEqual(['target', 'target/existing', 'target/source'])
+    expect(useUI.getState().physicalFolderPaths).toEqual(['target', 'target/existing', 'target/source'])
+    expect(useUI.getState().nav).toBe('folder:target/source')
+    expect(move).toHaveBeenCalledWith(1, 'source', 'target', 'inside')
+    expect(reload).not.toHaveBeenCalled()
+
+    resolveMove({ path: 'target/source' })
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled())
   })
 
   it('shows the storage fallback warning after creating a library', async () => {
@@ -132,6 +159,19 @@ describe('UI store', () => {
     expect(openLibrary).toHaveBeenCalledWith(2, 'Library')
   })
 
+  it('creates a library with the name and directory supplied by the dialog', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 3, name: '设计素材库', path: 'C:/Libraries/Design' })
+    vi.stubGlobal('window', { windowApi: { library: { create } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    const openLibrary = vi.fn()
+    useUI.setState({ libraries: [], openLibrary })
+
+    await useUI.getState().createLibraryFlow('设计素材库', 'C:/Libraries/Design')
+
+    expect(create).toHaveBeenCalledWith('C:/Libraries/Design', '设计素材库')
+    expect(openLibrary).toHaveBeenCalledWith(3, '设计素材库')
+  })
+
   it('selects the current filtered view with Ctrl+A action', async () => {
     vi.stubGlobal('window', { windowApi: {} })
     const { useUI } = await import('../src/renderer/src/store/ui')
@@ -146,5 +186,27 @@ describe('UI store', () => {
     useUI.getState().selectAllVisible()
 
     expect(useUI.getState().selectedIds).toEqual(['foldered'])
+  })
+
+  it('reports an Eagle import failure instead of silently rejecting', async () => {
+    const alert = vi.fn()
+    vi.stubGlobal('alert', alert)
+    vi.stubGlobal('window', {
+      windowApi: {
+        pickFolder: vi.fn().mockResolvedValue('E:/图.library'),
+        library: { importEagle: vi.fn().mockRejectedValue(new Error('IPC unavailable')) }
+      }
+    })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
+      activeTabId: 'library-1',
+      scanProgress: null
+    })
+
+    useUI.getState().importEagleFlow()
+
+    await vi.waitFor(() => expect(alert).toHaveBeenCalledWith('导入 Eagle 素材失败: IPC unavailable'))
+    expect(useUI.getState().scanProgress).toBeNull()
   })
 })

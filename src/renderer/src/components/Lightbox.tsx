@@ -57,9 +57,20 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
 
 function MediaVideo({ src }: { src: string }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
   if (failed) return <MediaFallback />
-  return <video src={src} controls autoPlay onError={() => setFailed(true)} />
+  return (
+    <video
+      src={src}
+      controls
+      autoPlay
+      onError={() => {
+        setFailed(true)
+      }}
+    />
+  )
 }
 
 /** 视角预设条:5 个 64×38 玻璃小格 */
@@ -354,7 +365,7 @@ export function Lightbox(): React.JSX.Element | null {
             ) : a.type === 'image' ? (
               <img src={`/@fs/${a.previewUrl}`} alt={a.name} />
             ) : (
-              <video src={`/@fs/${a.previewUrl}`} controls autoPlay />
+              <MediaVideo src={`/@fs/${a.previewUrl}`} />
             )}
           </div>
           {isModel && (

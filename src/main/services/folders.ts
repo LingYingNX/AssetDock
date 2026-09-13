@@ -1,5 +1,5 @@
 import { lstat, mkdir, readdir, rename } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isIgnoredDir } from './ignore'
 
 const DEFAULT_NAME = '未命名'
@@ -50,6 +50,33 @@ export async function listLibraryFolders(root: string): Promise<string[]> {
   return folders.sort((a, b) => a.localeCompare(b))
 }
 
+function parentPath(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index < 0 ? '' : path.slice(0, index)
+}
+
+/** 目录顺序只影响同级节点，并始终保证父目录在子目录前。 */
+export function orderLibraryFolders(paths: readonly string[], positions: ReadonlyMap<string, number>): string[] {
+  const children = new Map<string, string[]>()
+  for (const path of paths) {
+    const parent = parentPath(path)
+    const siblings = children.get(parent) ?? []
+    siblings.push(path)
+    children.set(parent, siblings)
+  }
+  const result: string[] = []
+  const visit = (parent: string): void => {
+    const siblings = children.get(parent) ?? []
+    siblings.sort((a, b) => (positions.get(a) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b))
+    for (const path of siblings) {
+      result.push(path)
+      visit(path)
+    }
+  }
+  visit('')
+  return result
+}
+
 export async function createLibraryFolder(root: string): Promise<string> {
   for (let n = 1; ; n++) {
     const name = n === 1 ? DEFAULT_NAME : `${DEFAULT_NAME} (${n})`
@@ -73,6 +100,24 @@ export async function renameLibraryFolder(root: string, relPath: string, newName
   try {
     await lstat(target.abs)
     fail('文件夹名称已存在')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  await rename(source.abs, target.abs)
+  return target.rel
+}
+
+export async function moveLibraryFolder(root: string, relPath: string, targetParent: string): Promise<string> {
+  const source = libraryPath(root, relPath)
+  const parent = targetFolderPath(root, targetParent)
+  if (parent.rel === source.rel || parent.rel.startsWith(`${source.rel}/`)) fail('不能移动到自身或子文件夹')
+  if (!(await lstat(source.abs)).isDirectory()) fail('文件夹不存在')
+  if (!(await lstat(parent.abs)).isDirectory()) fail('目标文件夹不存在')
+  if (dirname(source.abs).toLowerCase() === parent.abs.toLowerCase()) return source.rel
+  const target = libraryPath(root, relative(resolve(root), join(parent.abs, basename(source.abs))))
+  try {
+    await lstat(target.abs)
+    fail('目标位置已有同名文件夹')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }

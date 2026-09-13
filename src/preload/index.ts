@@ -17,21 +17,26 @@ const api = {
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
 
   library: {
-    create: (folderPath: string): Promise<{ id: number; name: string; path: string; warning?: string } | { error: string }> =>
-      ipcRenderer.invoke('library:create', folderPath),
+    create: (folderPath: string, name?: string): Promise<{ id: number; name: string; path: string; warning?: string } | { error: string }> =>
+      ipcRenderer.invoke('library:create', folderPath, name),
+    open: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:open', libraryId),
     list: (): Promise<{ id: number; name: string; path: string }[]> => ipcRenderer.invoke('library:list'),
     takeMigrationFailures: (): Promise<{ names: string[] }> => ipcRenderer.invoke('library:takeMigrationFailures'),
     legacyStats: (): Promise<{ assets: number }> => ipcRenderer.invoke('library:legacyStats'),
-    purgeLegacy: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:purgeLegacy')
+    purgeLegacy: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:purgeLegacy'),
+    importEagle: (libraryId: number, folderPath: string): Promise<{ imported: number; multiFolderAssets: number } | { error: string }> =>
+      ipcRenderer.invoke('eagle:import', libraryId, folderPath)
   },
 
   folders: {
-    list: (libraryId: number): Promise<{ paths: string[] } | { error: string }> =>
+    list: (libraryId: number): Promise<{ paths: string[]; eaglePaths: string[] } | { error: string }> =>
       ipcRenderer.invoke('folders:list', libraryId),
     create: (libraryId: number): Promise<{ path: string } | { error: string }> =>
       ipcRenderer.invoke('folders:create', libraryId),
     rename: (libraryId: number, path: string, name: string): Promise<{ path: string } | { error: string }> =>
-      ipcRenderer.invoke('folders:rename', libraryId, path, name)
+      ipcRenderer.invoke('folders:rename', libraryId, path, name),
+    move: (libraryId: number, source: string, target: string, placement: 'before' | 'after' | 'inside'): Promise<{ path: string } | { error: string }> =>
+      ipcRenderer.invoke('folders:move', libraryId, source, target, placement)
   },
 
   assets: {
@@ -48,15 +53,6 @@ const api = {
     purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId)
   },
 
-  index: {
-    add: (libraryId: number, folder: string): Promise<{ id: number; name: string; path: string } | { error: string }> =>
-      ipcRenderer.invoke('index:add', libraryId, folder),
-    remove: (libraryId: number, indexId: number): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('index:remove', libraryId, indexId),
-    list: (libraryId: number): Promise<{ id: number; path: string; name: string }[]> =>
-      ipcRenderer.invoke('index:list', libraryId)
-  },
-
   tabs: {
     get: (): Promise<{ libraryId: number; position: number }[]> => ipcRenderer.invoke('tabs:get'),
     save: (ids: number[]): Promise<{ ok: boolean }> => ipcRenderer.invoke('tabs:save', ids)
@@ -68,7 +64,7 @@ const api = {
   },
 
   /** 白名单事件订阅 */
-  on: (channel: 'library:scan' | 'assets:changed' | 'thumbs:ready', cb: (payload: unknown) => void): (() => void) => {
+  on: (channel: 'library:scan' | 'assets:changed', cb: (payload: unknown) => void): (() => void) => {
     const h = (_e: unknown, payload: unknown): void => cb(payload)
     ipcRenderer.on(channel, h)
     return () => {

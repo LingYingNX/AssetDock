@@ -23,8 +23,7 @@ function checkpointAllLibraries(): void {
 
 // media:// 需要在 app ready 前声明特权(视频流/Range)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } },
-  { scheme: 'thumb', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } }
+  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } }
 ])
 
 function createWindow(): void {
@@ -70,31 +69,12 @@ if (!app.requestSingleInstanceLock()) {
     w.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const userData = app.getPath('userData')
     initServices(userData)
     registerMediaProtocol()
     registerIpc(userData)
-    attachWatchersFor(listLibraries(getDb()))
-
-  // 缩略图协议:thumb://<fingerprint>.webp,跨库指纹查找,缺失时排队生成
-  protocol.handle('thumb', async (request) => {
-    const fp = new URL(request.url).hostname.replace(/\.webp$/, '')
-    const { findByFingerprint } = await import('./services/libResolve')
-    const { fileExists, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
-    const fallbackThumbs = join(app.getPath('userData'), 'thumbs')
-    const hit = findByFingerprint(fp, fallbackThumbs)
-    if (!hit) return new Response('not found', { status: 404 })
-    if (!(await fileExists(hit.thumbPath)) || (hit.sidecarPath != null && !(await fileExists(hit.sidecarPath)))) {
-      if (!ensureThumbByFingerprint(fp, fallbackThumbs)) return new Response('not found', { status: 404 })
-    }
-    try {
-      const buf = await import('node:fs/promises').then((f) => f.readFile(hit.thumbPath))
-      return new Response(buf, { headers: { 'content-type': 'image/webp' } })
-    } catch {
-      return new Response('not found', { status: 404 })
-    }
-  })
+    await attachWatchersFor(listLibraries(getDb()))
 
   ipcMain.on('window:minimize', (e) => {
     BrowserWindow.fromWebContents(e.sender)?.minimize()

@@ -2,7 +2,7 @@ import { protocol } from 'electron'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { Readable } from 'node:stream'
 import { join, extname } from 'node:path'
-import { libScopeDb, realPathWithinRoot, registryLib, sourceRelativePath } from './libResolve'
+import { realPathWithinRoot, registryLib } from './libResolve'
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
@@ -12,8 +12,7 @@ const MIME: Record<string, string> = {
 }
 
 /**
- * media://<libraryId>/<encodeURIComponent(relPath)>?source=<sourceIndexId>
- * 索引素材按 sourceIndexId 解析;realpath + relative 防越界;支持 Range(视频拖动)。
+ * media://<libraryId>/<encodeURIComponent(relPath)>。只读取资源库内的原始素材；支持 Range(视频拖动)。
  */
 export function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {
@@ -25,23 +24,8 @@ export function registerMediaProtocol(): void {
       if (!lib || !rel || rel.includes('..')) {
         return new Response('forbidden', { status: 403 })
       }
-      const scope = libScopeDb(libId)
-      if (!scope) return new Response('forbidden', { status: 403 })
-      const sourceParam = u.searchParams.get('source')
-      const sourceIndexId = sourceParam == null ? null : Number(sourceParam)
-      let root = lib.path
-      let sourceRel = rel
-      if (sourceIndexId != null) {
-        if (!Number.isInteger(sourceIndexId) || sourceIndexId < 1) return new Response('forbidden', { status: 403 })
-        const index = scope.db.prepare('SELECT path FROM index_sources WHERE id = ?').get(sourceIndexId) as { path: string } | undefined
-        sourceRel = sourceRelativePath(rel, sourceIndexId) ?? ''
-        if (!index || !sourceRel) return new Response('forbidden', { status: 403 })
-        root = index.path
-      } else if (rel.startsWith('@index:')) {
-        return new Response('forbidden', { status: 403 })
-      }
-      const abs = join(root, sourceRel)
-      const realAbs = await realPathWithinRoot(root, abs)
+      const abs = join(lib.path, rel)
+      const realAbs = await realPathWithinRoot(lib.path, abs)
       if (!realAbs) {
         return new Response('forbidden', { status: 403 })
       }

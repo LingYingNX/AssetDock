@@ -15,6 +15,7 @@ import { Grid } from './components/Grid'
 import { Inspector } from './components/Inspector'
 import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
+import { PreferencesDialog } from './components/PreferencesDialog'
 
 export default function App(): React.JSX.Element {
   const s = useUI()
@@ -46,6 +47,7 @@ export default function App(): React.JSX.Element {
         const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0]
         useUI.setState({ tabs, activeTabId: active.id })
         if (openIds.length === 0 || restoredTabCount !== openIds.length) useUI.getState().persistTabs()
+        if (active.libraryId != null) void window.windowApi.library.open(active.libraryId)
         useUI.getState().reloadActiveLibrary()
       } catch {
         /* 引导失败保持空状态 */
@@ -53,8 +55,7 @@ export default function App(): React.JSX.Element {
     }
     void boot()
     const un1 = window.windowApi.on('assets:changed', () => useUI.getState().reloadActiveLibrary())
-    const un2 = window.windowApi.on('thumbs:ready', () => useUI.getState().bumpThumb())
-    const un3 = window.windowApi.on('library:scan', (p) => {
+    const un2 = window.windowApi.on('library:scan', (p) => {
       const d = p as { phase: string; done: number }
       useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
       if (d.phase === 'done') useUI.getState().reloadActiveLibrary()
@@ -62,7 +63,6 @@ export default function App(): React.JSX.Element {
     return () => {
       un1()
       un2()
-      un3()
     }
   }, [])
 
@@ -86,6 +86,11 @@ export default function App(): React.JSX.Element {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         document.querySelector<HTMLInputElement>('.searchbox input')?.focus()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        st.setOpenMenu('preferences')
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
@@ -137,7 +142,7 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  /* Ctrl 滚轮缩放缩略图 */
+  /* Ctrl 滚轮缩放素材预览 */
   useEffect(() => {
     const onWheel = (e: WheelEvent): void => {
       if (!e.ctrlKey) return
@@ -172,6 +177,7 @@ export default function App(): React.JSX.Element {
       </div>
       <Lightbox />
       <ContextMenu />
+      <PreferencesDialog />
     </div>
   )
 }

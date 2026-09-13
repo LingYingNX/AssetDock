@@ -7,9 +7,6 @@ export function Toolbar(): React.JSX.Element {
   return (
     <div className="toolbar glass-toolbar">
       <div className="nav-arrows">
-        <button className="tb-btn" title="软件设置" style={{ marginRight: 4 }}>
-          <Icon name="gear" />
-        </button>
         <button className="tb-btn" disabled title="后退">
           <Icon name="arr-l" />
         </button>

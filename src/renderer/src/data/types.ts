@@ -15,6 +15,11 @@ export interface PaletteColor {
   ratio: number
 }
 
+export interface FolderSort {
+  orderBy: 'IMPORT' | 'MTIME' | 'MANUAL'
+  sortIncrease: boolean
+}
+
 export interface Asset {
   id: string
   /** 库内真实素材的数据库 id;演示模式为空 */
@@ -22,10 +27,6 @@ export interface Asset {
   libraryId?: number
   relPath?: string
   fingerprint?: string
-  /** 索引素材:来源 index_sources.id */
-  sourceIndexId?: number
-  /** 索引素材:来源索引名(信息面板/树节点用) */
-  indexName?: string
   /** 缺失文件的库内素材 */
   missing?: boolean
   type: AssetType
@@ -50,7 +51,7 @@ export interface Asset {
   note: string
   sourceUrl?: string
   palette: PaletteColor[]
-  /** dev 演示模式:经 vite /@fs/ 预览;库模式:thumb:// 缩略图 */
+  /** dev 演示模式:经 vite /@fs/ 预览;库模式:media:// 原始素材 */
   previewUrl?: string
   /** 库模式:media:// 原始文件(灯箱大图/播放) */
   originalUrl?: string
@@ -79,5 +80,3 @@ export type NavKey =
   | 'all' | 'recent' | 'untagged' | 'fav' | 'trash'
   | `folder:${string}`
   | `tag:${string}`
-  | `index:${number}`
-  | `index-folder:${number}:${string}`

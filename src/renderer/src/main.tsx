@@ -10,6 +10,7 @@ import './styles/grid.css'
 import './styles/inspector.css'
 import './styles/lightbox.css'
 import './styles/menu.css'
+import './styles/preferences.css'
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { join, dirname } from 'node:path'
-import { mkdirSync, existsSync, renameSync, rmSync, copyFileSync, readdirSync } from 'node:fs'
+import { mkdirSync, existsSync, renameSync, rmSync } from 'node:fs'
 import { openSqlite } from './sqlite'
 
 /** 每库 .mediahub/library.db;registry(全局库注册表)仍存全局 db */
@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS index_sources (
   id INTEGER PRIMARY KEY,
   path TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'folder',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS assets (
@@ -42,6 +43,8 @@ CREATE TABLE IF NOT EXISTS assets (
   imported_at TEXT NOT NULL,
   source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE,
   folder_path TEXT,
+  eagle_mtime_ms INTEGER,
+  manual_order INTEGER,
   UNIQUE(library_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_assets_lib ON assets(library_id);
@@ -52,6 +55,26 @@ CREATE TABLE IF NOT EXISTS asset_tags (
   asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   tag_id INTEGER NOT NULL REFERENCES tags(id),
   UNIQUE(asset_id, tag_id)
+);
+CREATE TABLE IF NOT EXISTS eagle_folders (
+  source_index_id INTEGER NOT NULL REFERENCES index_sources(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  order_by TEXT,
+  sort_increase INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(source_index_id, path)
+);
+CREATE TABLE IF NOT EXISTS eagle_asset_folders (
+  asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  folder_path TEXT NOT NULL,
+  PRIMARY KEY(asset_id, folder_path)
+);
+CREATE INDEX IF NOT EXISTS idx_eagle_asset_folders_path ON eagle_asset_folders(folder_path);
+CREATE TABLE IF NOT EXISTS folder_orders (
+  library_id INTEGER NOT NULL,
+  path TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  PRIMARY KEY(library_id, path)
 );
 CREATE TABLE IF NOT EXISTS open_tabs (
   library_id INTEGER PRIMARY KEY,
@@ -65,22 +88,19 @@ export function mediaDir(libPath: string): string {
 export function libDbPath(libPath: string): string {
   return join(mediaDir(libPath), 'library.db')
 }
-export function libThumbsDir(libPath: string): string {
-  return join(mediaDir(libPath), 'thumbs')
-}
-export function libIndexCacheDir(libPath: string): string {
-  return join(mediaDir(libPath), 'index-cache')
-}
-
 /** 打开(或创建)库内 db;句柄缓存由调用方管理 */
 export function openLibDb(libPath: string): Database.Database {
-  mkdirSync(libThumbsDir(libPath), { recursive: true })
+  mkdirSync(mediaDir(libPath), { recursive: true })
   const db = openSqlite(libDbPath(libPath))
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.exec(PER_LIB_SCHEMA)
   const columns = db.pragma('table_info(assets)') as { name: string }[]
   if (!columns.some((column) => column.name === 'folder_path')) db.exec('ALTER TABLE assets ADD COLUMN folder_path TEXT')
+  if (!columns.some((column) => column.name === 'eagle_mtime_ms')) db.exec('ALTER TABLE assets ADD COLUMN eagle_mtime_ms INTEGER')
+  if (!columns.some((column) => column.name === 'manual_order')) db.exec('ALTER TABLE assets ADD COLUMN manual_order INTEGER')
+  const indexColumns = db.pragma('table_info(index_sources)') as { name: string }[]
+  if (!indexColumns.some((column) => column.name === 'kind')) db.exec("ALTER TABLE index_sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'")
   return db
 }
 
@@ -91,13 +111,12 @@ export function hasLibDb(libPath: string): boolean {
 
 /**
  * 复制式迁移:全局 db 中 libraryId 的数据 → <libPath>/.mediahub/library.db
- * 临时文件 + 原子 rename;源数据保留;同时拷贝全局 thumbs 缓存(按文件名去重)。
+ * 临时文件 + 原子 rename;源数据保留。
  * 返回 true=新建迁移,false=已存在跳过;抛错=失败(临时文件清理)。
  */
 export function migrateLibrary(
   globalDb: Database.Database,
-  lib: { id: number; path: string; name: string },
-  globalThumbsDir: string
+  lib: { id: number; path: string; name: string }
 ): boolean {
   if (hasLibDb(lib.path)) return false
   mkdirSync(mediaDir(lib.path), { recursive: true })
@@ -127,6 +146,9 @@ export function migrateLibrary(
         const info = insAsset.run({ ...a, library_id: lib.id, folder_path: a.folder_path ?? null })
         idMap.set(a.id as number, Number(info.lastInsertRowid))
       }
+      const folderOrders = globalDb.prepare('SELECT path, position FROM folder_orders WHERE library_id = ?').all(lib.id) as { path: string; position: number }[]
+      const insFolderOrder = db.prepare('INSERT INTO folder_orders(library_id, path, position) VALUES (?, ?, ?)')
+      for (const folder of folderOrders) insFolderOrder.run(lib.id, folder.path, folder.position)
       // 标签:仅本库引用的
       const tagRows = globalDb
         .prepare(
@@ -153,14 +175,6 @@ export function migrateLibrary(
     tx()
     db.close()
     renameSync(tmp, libDbPath(lib.path))
-    // 缩略图缓存拷贝(按文件名去重)
-    try {
-      mkdirSync(libThumbsDir(lib.path), { recursive: true })
-      for (const f of readdirSync(globalThumbsDir)) {
-        const dst = join(libThumbsDir(lib.path), f)
-        if (!existsSync(dst)) copyFileSync(join(globalThumbsDir, f), dst)
-      }
-    } catch { /* 缓存缺失可再生成 */ }
     return true
   } catch (e) {
     try { rmSync(tmp, { force: true }) } catch { /* ignore */ }
@@ -170,11 +184,10 @@ export function migrateLibrary(
 
 export function ensureLibraryStorage(
   globalDb: Database.Database,
-  lib: { id: number; path: string; name: string },
-  globalThumbsDir: string
+  lib: { id: number; path: string; name: string }
 ): boolean {
   try {
-    migrateLibrary(globalDb, lib, globalThumbsDir)
+    migrateLibrary(globalDb, lib)
     return hasLibDb(lib.path)
   } catch {
     return false

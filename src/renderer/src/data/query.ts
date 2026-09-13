@@ -104,12 +104,6 @@ export interface QueryOptions {
 
 const RES_PX = (a: Asset): number => Math.max(a.width ?? 0, a.height ?? 0)
 
-function indexedRelativePath(a: Asset, indexId: number): string | null {
-  if (a.sourceIndexId !== indexId || !a.relPath) return null
-  const prefix = `@index:${indexId}/`
-  return a.relPath.startsWith(prefix) ? a.relPath.slice(prefix.length) : null
-}
-
 function matchNav(a: Asset, nav: NavKey): boolean {
   if (nav === 'trash') return !!a.deletedAt
   if (a.missing) return false
@@ -124,12 +118,6 @@ function matchNav(a: Asset, nav: NavKey): boolean {
     case 'fav':
       return a.favorite
     default:
-      if (nav.startsWith('index-folder:')) {
-        const [indexText, folder] = nav.slice('index-folder:'.length).split(':', 2)
-        const rel = indexedRelativePath(a, Number(indexText))
-        return rel != null && (rel === folder || rel.startsWith(`${folder}/`))
-      }
-      if (nav.startsWith('index:')) return a.sourceIndexId === Number(nav.slice('index:'.length))
       if (nav.startsWith('folder:')) {
         const f = nav.slice(7)
         return a.folders.includes(f)
@@ -178,7 +166,7 @@ function matchFilters(a: Asset, f: Filters): boolean {
 
 export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
   const kw = opts.search.trim().toLowerCase()
-  return assets.filter((a) => {
+  const matched = assets.filter((a) => {
     if (!matchNav(a, opts.nav)) return false
     if (!matchFilters(a, opts.filters)) return false
     if (opts.swatches.length > 0 && !opts.swatches.some((c) => paletteHasColor(a, c))) return false
@@ -189,6 +177,7 @@ export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
     }
     return true
   })
+  return matched
 }
 
 export interface SidebarCounts {
@@ -243,7 +232,7 @@ export function infoRows(a: Asset): [string, string, string?][] {
   if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`, a.fps ? `${a.fps} fps` : undefined])
   rows.push(['大小', formatBytes(a.sizeBytes)])
   rows.push(['导入', formatFullDate(a.importedAt)])
-  rows.push(['来源', a.indexName ? `索引 · ${a.indexName}` : a.sourceUrl ? '外部链接' : '本地导入'])
+  rows.push(['来源', a.sourceUrl ? '外部链接' : '本地素材库'])
   return rows
 }
 

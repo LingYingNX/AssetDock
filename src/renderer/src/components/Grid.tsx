@@ -46,7 +46,6 @@ export function Grid(): React.JSX.Element {
   const setSelectedIds = useUI((s) => s.setSelectedIds)
   const setSearch = useUI((s) => s.setSearch)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
-  const addTab = useUI((s) => s.addTab)
   const emptyTrash = useUI((s) => s.emptyTrash)
   const tabs = useUI((s) => s.tabs)
   const activeTabId = useUI((s) => s.activeTabId)
