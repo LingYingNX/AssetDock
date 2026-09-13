@@ -15,6 +15,7 @@ import { Grid } from './components/Grid'
 import { Inspector } from './components/Inspector'
 import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
+import { PreferencesDialog } from './components/PreferencesDialog'
 
 export default function App(): React.JSX.Element {
   const s = useUI()
@@ -26,6 +27,10 @@ export default function App(): React.JSX.Element {
         const libs = await window.windowApi.library.list()
         useUI.getState().setLibraries(libs)
         if (libs.length === 0) return
+        const migration = await window.windowApi.library.takeMigrationFailures()
+        if (migration.names.length > 0) {
+          alert(`以下素材库无法创建本地数据库，当前会话将使用全局回退数据:\n${migration.names.join('\n')}`)
+        }
         const openIds = await window.windowApi.tabs.get()
         const tabs = openIds
           .map((t) => {
@@ -33,19 +38,24 @@ export default function App(): React.JSX.Element {
             return lib ? { id: `dblib-${lib.id}`, name: lib.name, libraryId: lib.id } : null
           })
           .filter((t): t is NonNullable<typeof t> => t != null)
-        if (tabs.length === 0) return
+        const restoredTabCount = tabs.length
+        if (tabs.length === 0) {
+          const first = libs[0]
+          tabs.push({ id: `dblib-${first.id}`, name: first.name, libraryId: first.id })
+        }
         const activeLib = Number(await window.windowApi.state.get('activeTabLibrary'))
         const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0]
         useUI.setState({ tabs, activeTabId: active.id })
+        if (openIds.length === 0 || restoredTabCount !== openIds.length) useUI.getState().persistTabs()
+        if (active.libraryId != null) void window.windowApi.library.open(active.libraryId)
         useUI.getState().reloadActiveLibrary()
       } catch {
-        /* 引导失败保持演示模式 */
+        /* 引导失败保持空状态 */
       }
     }
     void boot()
     const un1 = window.windowApi.on('assets:changed', () => useUI.getState().reloadActiveLibrary())
-    const un2 = window.windowApi.on('thumbs:ready', () => useUI.getState().bumpThumb())
-    const un3 = window.windowApi.on('library:scan', (p) => {
+    const un2 = window.windowApi.on('library:scan', (p) => {
       const d = p as { phase: string; done: number }
       useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
       if (d.phase === 'done') useUI.getState().reloadActiveLibrary()
@@ -53,7 +63,6 @@ export default function App(): React.JSX.Element {
     return () => {
       un1()
       un2()
-      un3()
     }
   }, [])
 
@@ -79,6 +88,16 @@ export default function App(): React.JSX.Element {
         document.querySelector<HTMLInputElement>('.searchbox input')?.focus()
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        st.setOpenMenu('preferences')
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        st.selectAllVisible()
+        return
+      }
       if (st.lightboxId) {
         if (e.key === 'ArrowLeft') st.stepLightbox(-1)
         if (e.key === 'ArrowRight') st.stepLightbox(1)
@@ -98,7 +117,12 @@ export default function App(): React.JSX.Element {
           break
         }
         case 'F2': {
-          if (st.activeId) st.setRenaming(true)
+          if (st.nav.startsWith('folder:')) {
+            e.preventDefault()
+            useUI.setState({ folderEditPath: st.nav.slice('folder:'.length) })
+          } else if (st.activeId) {
+            st.setRenaming(true)
+          }
           break
         }
         case 'Delete': {
@@ -118,7 +142,7 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  /* Ctrl 滚轮缩放缩略图 */
+  /* Ctrl 滚轮缩放素材预览 */
   useEffect(() => {
     const onWheel = (e: WheelEvent): void => {
       if (!e.ctrlKey) return
@@ -153,6 +177,7 @@ export default function App(): React.JSX.Element {
       </div>
       <Lightbox />
       <ContextMenu />
+      <PreferencesDialog />
     </div>
   )
 }

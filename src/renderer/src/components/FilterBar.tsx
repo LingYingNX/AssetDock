@@ -67,6 +67,7 @@ export function FilterBar(): React.JSX.Element {
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const assets = useUI((s) => s.assets)
+  const selectedIds = useUI((s) => s.selectedIds)
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const swatches = useUI((s) => s.swatches)
@@ -74,6 +75,7 @@ export function FilterBar(): React.JSX.Element {
   const scanProgress = useUI((s) => s.scanProgress)
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, swatches, stripColor }))
+  const selectedStats = statsOf(assets.filter((a) => selectedIds.includes(a.id)))
 
   const paintZoom = (el: HTMLInputElement): void => {
     const p = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100
@@ -125,7 +127,11 @@ export function FilterBar(): React.JSX.Element {
       ))}
       <span className="fresult">
         {scanProgress ? `${scanProgress} · ` : ''}
-        筛选结果 <b>{stats.count}</b> 项 · {stats.size}
+        {selectedStats.count > 0 ? (
+          <>已选中 <b>{selectedStats.count}</b> 项 · {selectedStats.size}</>
+        ) : (
+          <>筛选结果 <b>{stats.count}</b> 项 · {stats.size}</>
+        )}
       </span>
       <button
         className="btn"

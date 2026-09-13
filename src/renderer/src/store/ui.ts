@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { Asset, LibraryTab, NavKey, PaletteColor } from '../data/types'
-import { ASSETS, TAGS } from '../data/dataset'
-import { DEFAULT_FILTERS, type Filters } from '../data/query'
+import { TAGS } from '../data/dataset'
+import { DEFAULT_FILTERS, queryAssets, type Filters } from '../data/query'
+import { optimisticFolderMove, rebaseFolderPath } from '../data/folder-drag'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -11,25 +12,37 @@ export interface CtxMenuState {
   assetId: string
 }
 
+
 const mmss = (sec: number): string => {
   const m = Math.floor(sec / 60)
   const s = Math.round(sec % 60)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function rebaseFolderNav(nav: NavKey, source: string, target: string): NavKey {
+  if (!nav.startsWith('folder:')) return nav
+  const path = nav.slice('folder:'.length)
+  if (path === source) return `folder:${target}`
+  return path.startsWith(`${source}/`) ? `folder:${target}${path.slice(source.length)}` : nav
+}
+
 /** 主进程资产行 → Asset */
 function rowToAsset(r: Record<string, unknown>): Asset {
   const tags = (r.tags as { name: string; color: string }[]) ?? []
-  const segs = String(r.rel_path ?? '').split('/')
+  const relPath = String(r.rel_path ?? '')
+  const folderChain = (path: string): string[] => {
+    const parts = path.split('/').filter(Boolean).slice(0, -1)
+    return parts.map((_, i) => parts.slice(0, i + 1).join('/'))
+  }
+  const folders = folderChain(relPath)
+  const sourceUrl = `media://${r.library_id as number}/${encodeURIComponent(relPath)}?v=${encodeURIComponent(String(r.fingerprint ?? ''))}`
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
     libraryId: r.library_id as number,
-    relPath: r.rel_path as string,
+    relPath,
     fingerprint: r.fingerprint as string,
     missing: (r.missing as number) === 1,
-    sourceIndexId: (r.source_index_id as number) ?? undefined,
-    indexName: (r.index_name as string) ?? undefined,
     type: r.type as Asset['type'],
     format: r.format as Asset['format'],
     name: r.name as string,
@@ -48,12 +61,12 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     reviewFlag: (r.review_flag as number) === 1,
     tags,
     /* 目录链:完整相对目录前缀(sub、sub/inner),树构建与导航共用 */
-    folders: segs.slice(0, -1).map((_, i) => segs.slice(0, i + 1).join('/')),
+    folders,
     note: (r.note as string) ?? '',
     sourceUrl: (r.source_url as string) ?? undefined,
     palette: JSON.parse((r.palette as string) || '[]') as PaletteColor[],
-    previewUrl: `thumb://${r.fingerprint as string}.webp`,
-    originalUrl: `media://${r.library_id as number}/${encodeURIComponent(r.rel_path as string)}`,
+    previewUrl: sourceUrl,
+    originalUrl: sourceUrl,
     absPath: r.absPath as string,
     deletedAt: (r.deleted_at as string) ?? undefined
   }
@@ -67,8 +80,8 @@ interface UIState {
   /* 已绑定库列表(「+」菜单与引导卡共用) */
   libraries: { id: number; name: string; path: string }[]
   setLibraries: (list: { id: number; name: string; path: string }[]) => void
-  createLibraryFlow: () => void
-  indexFlow: () => void
+  createLibraryFlow: (name?: string, folderPath?: string) => Promise<boolean>
+  importEagleFlow: () => void
   openLibrary: (libraryId: number, name: string) => void
 
   /* 标题栏库标签页 */
@@ -76,17 +89,23 @@ interface UIState {
   activeTabId: string
   openTab: (id: string) => void
   closeTab: (id: string) => void
-  addTab: () => void
   createLibraryTab: (libraryId: number, name: string) => void
   persistTabs: () => void
 
   /* 数据源 */
-  mode: 'demo' | 'library'
+  mode: 'empty' | 'library'
   scanProgress: string | null
-  thumbNonce: number
   setAssets: (list: Asset[]) => void
   reloadActiveLibrary: () => void
-  bumpThumb: () => void
+  folderPaths: string[]
+  physicalFolderPaths: string[]
+  folderEditPath: string | null
+  refreshFolders: () => void
+  createFolder: () => void
+  renameFolder: (path: string, name: string) => void
+  cancelFolderRename: () => void
+  moveFolder: (source: string, target: string, placement: 'before' | 'after' | 'inside') => void
+  moveAssetsToFolder: (assetIds: string[], folder: string) => void
 
   /* 导航与搜索 */
   nav: NavKey
@@ -115,8 +134,6 @@ interface UIState {
 
   /* 素材数据(可变字段走 store,编辑经 IPC 落库) */
   assets: Asset[]
-  indexes: { id: number; name: string; path: string }[]
-  setIndexes: (list: { id: number; name: string; path: string }[]) => void
   setRating: (id: string, v: number) => void
   toggleFavorite: (id: string) => void
   toggleReviewFlag: (id: string) => void
@@ -131,9 +148,11 @@ interface UIState {
 
   /* 选中与焦点 */
   selectedIds: string[]
+  selectionAnchorId: string | null
   activeId: string | null
   focusedCardId: string | null
-  clickCard: (id: string) => void
+  clickCard: (id: string, options?: { shift?: boolean; order?: string[] }) => void
+  selectAllVisible: () => void
   setSelectedIds: (ids: string[]) => void
   setFocusedCard: (id: string | null) => void
   clearSelection: () => void
@@ -155,12 +174,8 @@ interface UIState {
   stepLightbox: (dir: 1 | -1) => void
 }
 
-const initialTabs: LibraryTab[] = [
-  { id: 'lib-1', name: '品牌资产 2026' },
-  { id: 'lib-2', name: '个人灵感库' }
-]
-
 let tabSeq = 0
+let reloadSeq = 0
 
 export const useUI = create<UIState>((set, get) => {
   /** 编辑动作:本地立即生效 + 库模式落库(失败提示) */
@@ -175,60 +190,74 @@ export const useUI = create<UIState>((set, get) => {
   return {
     libraries: [],
     setLibraries: (libraries) => set({ libraries }),
-    createLibraryFlow: () => {
-      void window.windowApi.pickFolder().then(async (folder) => {
-        if (!folder) return
-        const libs = get().libraries
-        const bound = libs.find((l) => l.path.toLowerCase() === folder.toLowerCase())
-        if (bound) {
-          get().openLibrary(bound.id, bound.name)
-          return
-        }
-        const r = await window.windowApi.library.create(folder)
-        if ('error' in r) {
-          alert(r.error)
-          return
-        }
-        get().setLibraries([...libs, r])
-        get().openLibrary(r.id, r.name)
-      })
+    createLibraryFlow: async (name, folderPath) => {
+      const folder = folderPath ?? await window.windowApi.pickFolder()
+      if (!folder) return false
+      const libs = get().libraries
+      const bound = libs.find((l) => l.path.toLowerCase() === folder.toLowerCase())
+      if (bound) {
+        get().openLibrary(bound.id, bound.name)
+        return true
+      }
+      const r = await window.windowApi.library.create(folder, name)
+      if ('error' in r) {
+        alert(r.error)
+        return false
+      }
+      get().setLibraries([...libs, r])
+      if (r.warning) alert(r.warning)
+      get().openLibrary(r.id, r.name)
+      return true
     },
-    indexFlow: () => {
+    importEagleFlow: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       const libraryId = t?.libraryId
       if (libraryId == null) {
-        alert('请先新建或打开一个素材库,再索引目录')
+        alert('请先打开一个资源库')
         return
       }
-      void window.windowApi.pickFolder().then(async (folder) => {
-        if (!folder) return
-        const r = await window.windowApi.index.add(libraryId, folder)
-        if ('error' in r) {
-          alert(r.error)
-          return
+      get().setOpenMenu(null)
+      void (async () => {
+        try {
+          const folder = await window.windowApi.pickFolder()
+          if (!folder) return
+          set({ scanProgress: '正在导入 Eagle 素材' })
+          const result = await window.windowApi.library.importEagle(libraryId, folder)
+          if ('error' in result) {
+            set({ scanProgress: null })
+            alert(result.error)
+            return
+          }
+          get().reloadActiveLibrary()
+        } catch (error) {
+          set({ scanProgress: null })
+          alert(`导入 Eagle 素材失败: ${error instanceof Error ? error.message : '未知错误'}`)
         }
-        get().reloadActiveLibrary()
-      })
+      })()
     },
     openLibrary: (libraryId, name) => {
       set({ scanProgress: null })
       const open = get().tabs.find((t) => t.libraryId === libraryId)
       if (open) {
         set({ activeTabId: open.id })
+        void window.windowApi.library.open(libraryId)
+        get().reloadActiveLibrary()
       } else {
         get().createLibraryTab(libraryId, name)
       }
-      get().reloadActiveLibrary()
     },
 
-    tabs: initialTabs,
-    activeTabId: initialTabs[0].id,
+    tabs: [],
+    activeTabId: '',
     openTab: (id) => {
       set({ activeTabId: id })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === id)
-      if (t?.libraryId != null) get().reloadActiveLibrary()
-      else if (!t?.libraryId) set({ assets: ASSETS, mode: 'demo' })
+      if (t?.libraryId != null) {
+        void window.windowApi.library.open(t.libraryId)
+        get().reloadActiveLibrary()
+      }
+      else if (!t?.libraryId) set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     closeTab: (id) => {
       const { tabs, activeTabId } = get()
@@ -239,18 +268,18 @@ export const useUI = create<UIState>((set, get) => {
       set({ tabs: rest, activeTabId: nextActive })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === nextActive)
-      if (t?.libraryId != null) get().reloadActiveLibrary()
-      else set({ assets: ASSETS, mode: 'demo' })
-    },
-    addTab: () => {
-      // 「+」菜单路径:打开库入口下拉(新建 + 已绑定库列表)
-      set({ openMenu: 'm-libs' })
+      if (t?.libraryId != null) {
+        void window.windowApi.library.open(t.libraryId)
+        get().reloadActiveLibrary()
+      }
+      else set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     createLibraryTab: (libraryId, name) => {
       tabSeq++
       const tab: LibraryTab = { id: `dblib-${libraryId}-${tabSeq}`, name, libraryId }
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
       get().persistTabs()
+      void window.windowApi.library.open(libraryId)
       get().reloadActiveLibrary()
     },
     persistTabs: () => {
@@ -259,28 +288,142 @@ export const useUI = create<UIState>((set, get) => {
       void window.windowApi.state.set('activeTabLibrary', String(get().tabs.find((t) => t.id === get().activeTabId)?.libraryId ?? ''))
     },
 
-    mode: 'demo',
+    mode: 'empty',
     scanProgress: null,
-    thumbNonce: 0,
     setAssets: (list) => set({ assets: list }),
     reloadActiveLibrary: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) {
-        set({ assets: ASSETS, mode: 'demo' })
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
         return
       }
-      void window.windowApi.assets.list(t.libraryId).then((r) => {
-        const data = r as { library?: unknown; assets?: Record<string, unknown>[]; indexes?: { id: number; name: string; path: string }[] }
-        if (Array.isArray(data?.assets)) {
-          set({
-            assets: data.assets.map(rowToAsset),
-            indexes: (data.indexes as { id: number; name: string; path: string }[]) ?? [],
-            mode: 'library'
+      const libraryId = t.libraryId
+      const request = ++reloadSeq
+      void Promise.all([window.windowApi.assets.list(libraryId), window.windowApi.folders.list(libraryId)]).then(([r, folders]) => {
+        if (request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId) return
+        const data = r as {
+          library?: unknown
+          assets?: Record<string, unknown>[]
+        }
+        const assets = data.assets
+        if (Array.isArray(assets)) {
+          set((s) => {
+            const physicalFolderPaths = 'paths' in folders ? folders.paths : []
+            const folderPaths = physicalFolderPaths
+            const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+            return {
+              assets: assets.map(rowToAsset),
+              folderPaths,
+              physicalFolderPaths,
+              folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
+              nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav,
+              mode: 'library'
+            }
           })
         }
       })
     },
-    bumpThumb: () => set((s) => ({ thumbNonce: s.thumbNonce + 1 })),
+    folderPaths: [],
+    physicalFolderPaths: [],
+    folderEditPath: null,
+    refreshFolders: () => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.list(t.libraryId).then((r) => {
+        if (!('paths' in r)) return
+        set((s) => {
+          const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          return {
+            folderPaths: r.paths,
+            physicalFolderPaths: r.paths,
+            folderEditPath: s.folderEditPath && r.paths.includes(s.folderEditPath) ? s.folderEditPath : null,
+            nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
+          }
+        })
+      })
+    },
+    createFolder: () => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.create(t.libraryId).then((r) => {
+        if ('error' in r) {
+          alert(r.error)
+          return
+        }
+        set({ folderEditPath: r.path, nav: `folder:${r.path}` as NavKey })
+        get().refreshFolders()
+      })
+    },
+    renameFolder: (path, name) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      set({ folderEditPath: null })
+      if (t?.libraryId == null) return
+      void window.windowApi.folders.rename(t.libraryId, path, name).then((r) => {
+        if ('error' in r) {
+          alert(r.error)
+          get().refreshFolders()
+          return
+        }
+        set({ nav: `folder:${r.path}` as NavKey })
+        get().refreshFolders()
+      })
+    },
+    cancelFolderRename: () => set({ folderEditPath: null }),
+    moveFolder: (source, target, placement) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      const optimistic = optimisticFolderMove(get().folderPaths, source, target, placement)
+      set((s) => ({
+        folderPaths: optimistic.paths,
+        physicalFolderPaths: optimistic.paths,
+        nav: rebaseFolderNav(s.nav, source, optimistic.path),
+        folderEditPath: s.folderEditPath ? rebaseFolderPath(s.folderEditPath, source, optimistic.path) : s.folderEditPath,
+        assets: s.assets.map((asset) => {
+          if (asset.libraryId !== t.libraryId || !asset.relPath) return asset
+          const relPath = rebaseFolderPath(asset.relPath, source, optimistic.path)
+          if (relPath === asset.relPath) return asset
+          const mediaUrl = `media://${asset.libraryId}/${encodeURIComponent(relPath)}?v=${encodeURIComponent(String(asset.fingerprint ?? ''))}`
+          return {
+            ...asset,
+            relPath,
+            folders: asset.folders.map((folder) => rebaseFolderPath(folder, source, optimistic.path)),
+            previewUrl: mediaUrl,
+            originalUrl: mediaUrl
+          }
+        })
+      }))
+      void window.windowApi.folders.move(t.libraryId, source, target, placement).then((r) => {
+        if (!('path' in r) || typeof r.path !== 'string') {
+          alert('error' in r ? r.error : '移动文件夹失败,请重试')
+          get().reloadActiveLibrary()
+          return
+        }
+        set((s) => ({ nav: rebaseFolderNav(s.nav, source, r.path) }))
+        get().reloadActiveLibrary()
+      }).catch(() => {
+        alert('移动文件夹失败,请重试')
+        get().reloadActiveLibrary()
+      })
+    },
+    moveAssetsToFolder: (assetIds, folder) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      const requested = new Set(assetIds)
+      const ids = get().assets
+        .filter((a) => requested.has(a.id) && a.dbId != null && a.libraryId === t.libraryId && !a.missing && !a.deletedAt)
+        .map((a) => a.dbId as number)
+      if (ids.length === 0) return
+      if (ids.length < assetIds.length) alert('部分素材不可处理,本次已跳过')
+
+      void window.windowApi.assets.move(t.libraryId, ids, folder).then((r) => {
+        if ('error' in r) {
+          if (r.moved) get().reloadActiveLibrary()
+          alert(r.error)
+          return
+        }
+        get().reloadActiveLibrary()
+      })
+    },
 
     nav: 'all',
     setNav: (nav) => set({ nav }),
@@ -307,9 +450,7 @@ export const useUI = create<UIState>((set, get) => {
     inspHidden: false,
     toggleInspector: () => set((s) => ({ inspHidden: !s.inspHidden })),
 
-    assets: ASSETS,
-    indexes: [],
-    setIndexes: (indexes) => set({ indexes }),
+    assets: [],
     setRating: (id, v) =>
       edit(id, { rating: Math.min(5, Math.max(0, v)) }, (a) => ({
         ...a,
@@ -360,17 +501,45 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     selectedIds: [],
+    selectionAnchorId: null,
     activeId: null,
     focusedCardId: null,
-    clickCard: (id) =>
-      set((s) => ({
-        selectedIds: s.selectedIds.includes(id) ? s.selectedIds.filter((x) => x !== id) : [...s.selectedIds, id],
-        activeId: id,
-        focusedCardId: id
-      })),
-    setSelectedIds: (ids) => set({ selectedIds: ids }),
+    clickCard: (id, options) =>
+      set((s) => {
+        const selected = new Set(s.selectedIds)
+        const order = options?.order ?? s.assets.map((a) => a.id)
+        const anchor = options?.shift ? s.selectionAnchorId : id
+        if (options?.shift && anchor) {
+          const start = order.indexOf(anchor)
+          const end = order.indexOf(id)
+          if (start >= 0 && end >= 0) {
+            const [from, to] = start < end ? [start, end] : [end, start]
+            for (const rangeId of order.slice(from, to + 1)) selected.add(rangeId)
+          } else {
+            selected.add(id)
+          }
+        } else {
+          if (selected.has(id)) selected.delete(id)
+          else selected.add(id)
+        }
+        return { selectedIds: [...selected], selectionAnchorId: anchor, activeId: id, focusedCardId: id }
+      }),
+    selectAllVisible: () =>
+      set((s) => {
+        const visible = queryAssets(s.assets, {
+          nav: s.nav,
+          search: s.search,
+          filters: s.filters,
+          swatches: s.swatches,
+          stripColor: s.stripColor
+        })
+        const selectedIds = visible.map((a) => a.id)
+        const lastId = selectedIds[selectedIds.length - 1] ?? null
+        return { selectedIds, selectionAnchorId: lastId, activeId: lastId, focusedCardId: lastId }
+      }),
+    setSelectedIds: (ids) => set({ selectedIds: ids, selectionAnchorId: ids[ids.length - 1] ?? null }),
     setFocusedCard: (focusedCardId) => set({ focusedCardId }),
-    clearSelection: () => set({ selectedIds: [] }),
+    clearSelection: () => set({ selectedIds: [], selectionAnchorId: null }),
 
     renaming: false,
     setRenaming: (renaming) => set({ renaming }),

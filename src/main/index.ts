@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
+import { openSqlite } from './services/sqlite'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries } from './services/store'
@@ -12,7 +13,7 @@ function checkpointAllLibraries(): void {
   try {
     for (const l of listLibraries(getDb())) {
       try {
-        const d = new (require('better-sqlite3') as typeof import('better-sqlite3'))(libDbPath(l.path))
+        const d = openSqlite(libDbPath(l.path))
         d.pragma('wal_checkpoint(TRUNCATE)')
         d.close()
       } catch { /* 单库失败不影响其余 */ }
@@ -22,8 +23,7 @@ function checkpointAllLibraries(): void {
 
 // media:// 需要在 app ready 前声明特权(视频流/Range)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } },
-  { scheme: 'thumb', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } }
+  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } }
 ])
 
 function createWindow(): void {
@@ -69,30 +69,12 @@ if (!app.requestSingleInstanceLock()) {
     w.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const userData = app.getPath('userData')
     initServices(userData)
-    registerMediaProtocol(getDb())
+    registerMediaProtocol()
     registerIpc(userData)
-    attachWatchersFor(listLibraries(getDb()))
-
-  // 缩略图协议:thumb://<fingerprint>.webp,跨库指纹查找,缺失时排队生成
-  protocol.handle('thumb', async (request) => {
-    const fp = new URL(request.url).hostname.replace(/\.webp$/, '')
-    const { findByFingerprint } = await import('./services/libResolve')
-    const { hasThumbIn, thumbPathIn, ensureThumbByFingerprint } = await import('./services/thumbsLookup')
-    const hit = findByFingerprint(fp)
-    if (!hit) return new Response('not found', { status: 404 })
-    if (!(await hasThumbIn(hit.thumbsDir, fp))) {
-      if (!ensureThumbByFingerprint(fp)) return new Response('not found', { status: 404 })
-    }
-    try {
-      const buf = await import('node:fs/promises').then((f) => f.readFile(thumbPathIn(hit.thumbsDir, fp)))
-      return new Response(buf, { headers: { 'content-type': 'image/webp' } })
-    } catch {
-      return new Response('not found', { status: 404 })
-    }
-  })
+    await attachWatchersFor(listLibraries(getDb()))
 
   ipcMain.on('window:minimize', (e) => {
     BrowserWindow.fromWebContents(e.sender)?.minimize()
@@ -112,7 +94,7 @@ if (!app.requestSingleInstanceLock()) {
 
   // dev 下开放本地 HTTP 桥:GET /<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用
   if (!app.isPackaged) {
-    createServer((req, res) => {
+    const debugBridge = createServer((req, res) => {
       const expr = decodeURIComponent((req.url ?? '/').slice(1))
       const w = BrowserWindow.getAllWindows()[0]
       if (!w || !expr) {
@@ -123,7 +105,12 @@ if (!app.requestSingleInstanceLock()) {
         (v) => res.end(JSON.stringify({ ok: true, value: v ?? null })),
         (e) => res.end(JSON.stringify({ ok: false, error: String(e) }))
       )
-    }).listen(9223, '127.0.0.1')
+    })
+    // 端口只是开发调试工具，不能让被占用的端口变成主进程崩溃。
+    debugBridge.on('error', (error) => {
+      console.warn('[MediaHub] debug bridge unavailable:', error.message)
+    })
+    debugBridge.listen(9223, '127.0.0.1')
   }
 
   createWindow()

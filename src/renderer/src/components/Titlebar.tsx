@@ -1,6 +1,7 @@
 import { useUI } from '../store/ui'
 import { Dropdown } from './Dropdown'
 import { Icon } from './Icons'
+import { SettingsMenu } from './SettingsMenu'
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useUI((s) => s.tabs)
@@ -8,7 +9,6 @@ export function Titlebar(): React.JSX.Element {
   const openTab = useUI((s) => s.openTab)
   const closeTab = useUI((s) => s.closeTab)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
-  const indexFlow = useUI((s) => s.indexFlow)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
 
@@ -22,28 +22,34 @@ export function Titlebar(): React.JSX.Element {
       style={dragStyle}
       onPointerDown={() => setOpenMenu(null)}
     >
-      <div className="logo">
-        <span className="logo-mark"><Icon name="layers" /></span>
+      <div className="brand-section">
+        <div className="logo">
+          <span className="logo-mark"><Icon name="layers" /></span>
+        </div>
+        <button
+          className={`settings-btn${openMenu === 'settings' ? ' on' : ''}`}
+          data-menu="settings"
+          title="软件设置"
+          aria-label="软件设置"
+          aria-expanded={openMenu === 'settings'}
+          onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}
+        >
+          <Icon name="gear" />
+        </button>
       </div>
+      <SettingsMenu />
       <nav
         className="lib-tabs"
         style={dragStyle}
         aria-label="素材库切换"
       >
         {tabs.map((t) => {
-          const menuId = `tab-${t.id}`
-
           return (
             <button
               key={t.id}
               className={`lib-tab${t.id === activeTabId ? ' on' : ''}`}
               title={`${t.name} · 本地库`}
-              data-menu={menuId}
               onClick={() => openTab(t.id)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setOpenMenu(menuId)
-              }}
             >
               <Icon name="drive" />
               {t.name}
@@ -56,18 +62,8 @@ export function Titlebar(): React.JSX.Element {
                   closeTab(t.id)
                 }}
               >
-                <svg className="ic"><use href="#i-x" /></svg>
-              </span>
-              <Dropdown
-                compact
-                id={menuId}
-                items={[{ id: 'index', label: '索引目录到当前库…', icon: 'scan', disabled: t.libraryId == null }]}
-                value=""
-                onPick={() => {
-                  openTab(t.id)
-                  indexFlow()
-                }}
-              />
+                  <svg className="ic"><use href="#i-x" /></svg>
+                </span>
             </button>
           )
         })}

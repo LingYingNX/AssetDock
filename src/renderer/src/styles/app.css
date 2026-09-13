@@ -1,27 +1,24 @@
 /* ============================ 骨架 ============================ */
-.app{display:grid;grid-template-rows:42px 50px 1fr;height:100vh;min-width:1440px}
+.app{display:grid;grid-template-rows:48px 50px 1fr;height:100vh;min-width:1440px}
 
 /* ============================ 标题栏 ============================ */
-.titlebar{display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;border-bottom:1px solid var(--line);
+.titlebar{display:flex;align-items:flex-end;gap:18px;height:48px;padding:0 8px 0 28px;border-bottom:0;
+  background:linear-gradient(180deg,#d9eeff 0%,#cae5fa 100%);box-shadow:0 4px 16px rgba(0,50,100,.08);
   -webkit-app-region:drag}
 .titlebar button{-webkit-app-region:no-drag}
 .titlebar .lib-tabs{-webkit-app-region:drag}
 .titlebar .lib-tabs button{-webkit-app-region:no-drag}
+.brand-section{display:flex;align-items:center;gap:24px;height:48px;flex:none;margin-right:30px}
 .logo{display:flex;align-items:center;gap:9px;padding-right:6px}
-.logo-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(145deg,#5EB1FF,#0A84FF);border:1px solid rgba(255,255,255,.55);display:grid;place-items:center;color:#fff;box-shadow:0 6px 16px rgba(10,132,255,.4),inset 0 1px 0 rgba(255,255,255,.45)}
-.logo-mark .ic{width:13px;height:13px}
-.lib-tabs{display:flex;align-items:flex-end;gap:3px;align-self:stretch;padding:7px 0 0;min-width:0;overflow:hidden}
-.lib-tab{display:flex;align-items:center;gap:7px;height:34px;padding:0 8px 0 11px;border-radius:9px 9px 0 0;font-size:12.5px;font-weight:500;color:var(--t3);white-space:nowrap;border:1px solid transparent;border-bottom:0}
-.lib-tab .ic{width:13px;height:13px;color:var(--t3);flex:none}
+.logo-mark{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#3894ff,#1672ec);border:0;display:grid;place-items:center;color:#fff;box-shadow:0 2px 6px rgba(22,114,236,.35)}
+.logo-mark .ic{width:14px;height:14px}
+.settings-btn{width:44px;height:42px;margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:#55708a;background:none;cursor:pointer;transition:color .15s ease,background-color .15s ease}
+.settings-btn:hover,.settings-btn.on{background:var(--bg3);color:#1a4b75}
+.settings-btn .ic{width:17px;height:17px}
+.lib-tabs{display:flex;align-items:center;gap:0;align-self:flex-end;height:42px;padding:0;min-width:0;overflow:hidden}
+.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 32px;border-radius:0;font-size:15px;font-weight:500;color:#1e293b;letter-spacing:.3px;white-space:nowrap;background:#f6fafe;border:1px solid rgba(255,255,255,.9);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02)}
 .lib-tab:hover{background:var(--bg2);color:var(--t2)}
 .lib-tab.on{background:var(--bg2);border-color:var(--line);color:var(--t1);font-weight:600}
-.lib-tab.on .ic{color:var(--acc2)}
-.lib-tab .x{width:13px;height:13px;opacity:0;cursor:pointer;border-radius:4px}
-.lib-tab:hover .x,.lib-tab.on .x{opacity:.55}
-.lib-tab .x:hover{opacity:1;color:var(--t1)}
-.lib-add{width:26px;height:26px;margin:0 2px 4px;border-radius:7px;display:grid;place-items:center;color:var(--t3);flex:none}
-.lib-add:hover{background:var(--bg3);color:var(--t1)}
-.lib-add .ic{width:14px;height:14px}
 .tb-spacer{flex:1}
 .tb-btn{width:32px;height:28px;border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}

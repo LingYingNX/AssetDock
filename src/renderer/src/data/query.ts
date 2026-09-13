@@ -114,7 +114,7 @@ function matchNav(a: Asset, nav: NavKey): boolean {
     case 'recent':
       return Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000
     case 'untagged':
-      return a.tags.length === 0
+      return a.folders.length === 0
     case 'fav':
       return a.favorite
     default:
@@ -166,7 +166,7 @@ function matchFilters(a: Asset, f: Filters): boolean {
 
 export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
   const kw = opts.search.trim().toLowerCase()
-  return assets.filter((a) => {
+  const matched = assets.filter((a) => {
     if (!matchNav(a, opts.nav)) return false
     if (!matchFilters(a, opts.filters)) return false
     if (opts.swatches.length > 0 && !opts.swatches.some((c) => paletteHasColor(a, c))) return false
@@ -177,6 +177,7 @@ export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
     }
     return true
   })
+  return matched
 }
 
 export interface SidebarCounts {
@@ -190,19 +191,19 @@ export interface SidebarCounts {
 }
 
 export function sidebarCounts(assets: Asset[]): SidebarCounts {
-  const live = assets.filter((a) => !a.deletedAt)
+  const live = assets.filter((a) => !a.deletedAt && !a.missing)
   const c: SidebarCounts = {
     all: live.length,
     recent: 0,
     untagged: 0,
     fav: 0,
-    trash: assets.length - live.length,
+    trash: assets.filter((a) => !!a.deletedAt).length,
     folders: {},
     tags: {}
   }
   for (const a of live) {
     if (Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000) c.recent++
-    if (a.tags.length === 0) c.untagged++
+    if (a.folders.length === 0) c.untagged++
     if (a.favorite) c.fav++
     for (const f of a.folders) c.folders[f] = (c.folders[f] ?? 0) + 1
     for (const t of a.tags) c.tags[t.name] = (c.tags[t.name] ?? 0) + 1
@@ -231,7 +232,7 @@ export function infoRows(a: Asset): [string, string, string?][] {
   if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`, a.fps ? `${a.fps} fps` : undefined])
   rows.push(['大小', formatBytes(a.sizeBytes)])
   rows.push(['导入', formatFullDate(a.importedAt)])
-  rows.push(['来源', a.indexName ? `索引 · ${a.indexName}` : a.sourceUrl ? '外部链接' : '本地导入'])
+  rows.push(['来源', a.sourceUrl ? '外部链接' : '本地素材库'])
   return rows
 }
 

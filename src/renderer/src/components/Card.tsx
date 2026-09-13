@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import type { Asset } from '../data/types'
+import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
+import { Viewer3D } from './Viewer3D'
 
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
@@ -15,15 +17,24 @@ const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   OBJ: '#22D3EE'
 }
 
-export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element {
+function dragPreview(count: number): HTMLDivElement {
+  const preview = document.createElement('div')
+  preview.className = 'asset-drag-preview'
+  preview.innerHTML = `<span class="asset-drag-icon"></span><strong>${count}</strong>`
+  document.body.appendChild(preview)
+  return preview
+}
+
+export function Card({ a, view, selectionOrder }: { a: Asset; view: string; selectionOrder?: string[] }): React.JSX.Element {
   const selected = useUI((s) => s.selectedIds.includes(a.id))
   const clickCard = useUI((s) => s.clickCard)
   const openLightbox = useUI((s) => s.openLightbox)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
-  const nonce = useUI((s) => s.thumbNonce)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [modelFailed, setModelFailed] = useState(false)
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null)
 
   const cls = [
     'card',
@@ -48,15 +59,47 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
   const isVideo = a.type === 'video'
+  const canMove = a.dbId != null && a.libraryId != null && !a.missing && !a.deletedAt
 
   return (
     <figure
       className={cls}
       data-asset-id={a.id}
       tabIndex={0}
+      draggable={canMove}
+      onDragStart={(e) => {
+        if (!canMove) {
+          e.preventDefault()
+          return
+        }
+        const state = useUI.getState()
+        const ids = selected
+          ? state.selectedIds.filter((id) => {
+            const asset = state.assets.find((item) => item.id === id)
+            return asset != null && asset.dbId != null && asset.libraryId === a.libraryId && !asset.missing && !asset.deletedAt
+          })
+          : [a.id]
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData(MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag(ids))
+        e.dataTransfer.setData('text/plain', encodeAssetDrag(ids))
+        const preview = dragPreview(ids.length)
+        dragPreviewRef.current?.remove()
+        dragPreviewRef.current = preview
+        e.dataTransfer.setDragImage(preview, 22, 18)
+        window.setTimeout(() => {
+          if (dragPreviewRef.current !== preview) return
+          preview.remove()
+          dragPreviewRef.current = null
+        }, 1000)
+      }}
+      onDragEnd={() => {
+        dragPreviewRef.current?.remove()
+        dragPreviewRef.current = null
+      }}
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {
-        clickCard(a.id)
+        if ((e.target as HTMLElement).closest('.qa')) return
+        clickCard(a.id, { shift: e.shiftKey, order: selectionOrder })
       }}
       onDoubleClick={(e) => {
         openLightbox(a.id)
@@ -77,13 +120,32 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
           <div className="c3d-wrap">
             <Cube3D cs="58px" />
           </div>
-        ) : a.dbId != null ? (
+        ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
+          <div className="model-card-preview">
+            <Viewer3D
+              url={a.originalUrl}
+              format={a.format as 'GLB' | 'FBX' | 'OBJ'}
+              turntable
+              wireframe={false}
+              view="auto"
+              onError={() => setModelFailed(true)}
+            />
+          </div>
+        ) : a.dbId != null && a.type === 'image' ? (
           <img
-            src={`${a.previewUrl}?v=${nonce}`}
+            src={a.previewUrl}
             alt={a.name}
             className={imgLoaded ? 'loaded' : ''}
             onLoad={() => setImgLoaded(true)}
             draggable={false}
+          />
+        ) : a.dbId != null && isVideo ? (
+          <video
+            src={a.previewUrl}
+            muted
+            preload="auto"
+            className={imgLoaded ? 'loaded' : ''}
+            onLoadedData={() => setImgLoaded(true)}
           />
         ) : a.previewUrl && a.type === 'image' ? (
           <img
@@ -97,12 +159,13 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
           <video
             src={`/@fs/${a.previewUrl}`}
             muted
-            preload="metadata"
+            preload="auto"
             className={imgLoaded ? 'loaded' : ''}
             onLoadedMetadata={() => setImgLoaded(true)}
           />
         ) : null}
 
+        <div className="qa">
           <button
             className={`fav${a.favorite ? ' on' : ''}`}
             title="收藏"
@@ -113,14 +176,12 @@ export function Card({ a, view }: { a: Asset; view: string }): React.JSX.Element
           >
             <Icon name="heart" />
           </button>
+        </div>
         {isVideo && (
           <>
             <span className="play-big"><Icon name="play" /></span>
             <div className="scrub"><i /></div>
           </>
-        )}
-        {a.type === 'model' && (
-          <span className="orb" title="转台预览"><Icon name="rotate-3d" /></span>
         )}
         <span className="type-chip">
           {FORMAT_DOT[a.format] ? (

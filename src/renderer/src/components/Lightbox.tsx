@@ -57,9 +57,20 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
 
 function MediaVideo({ src }: { src: string }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
   if (failed) return <MediaFallback />
-  return <video src={src} controls autoPlay onError={() => setFailed(true)} />
+  return (
+    <video
+      src={src}
+      controls
+      autoPlay
+      onError={() => {
+        setFailed(true)
+      }}
+    />
+  )
 }
 
 /** 视角预设条:5 个 64×38 玻璃小格 */
@@ -147,7 +158,7 @@ export function Lightbox(): React.JSX.Element | null {
   const visible = assets.filter((x) => !x.deletedAt)
   const idx = visible.findIndex((x) => x.id === a.id)
   const isModel = a.type === 'model'
-  const realModel = isModel && a.dbId != null && a.format === 'GLB' && !!a.originalUrl
+  const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
 
   const sub =
     a.type === 'model'
@@ -254,6 +265,7 @@ export function Lightbox(): React.JSX.Element | null {
                 <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
                 <Viewer3D
                   url={a.originalUrl ?? ''}
+                  format={a.format as 'GLB' | 'FBX' | 'OBJ'}
                   turntable={realTurn}
                   wireframe={realWire}
                   view={realView}
@@ -353,7 +365,7 @@ export function Lightbox(): React.JSX.Element | null {
             ) : a.type === 'image' ? (
               <img src={`/@fs/${a.previewUrl}`} alt={a.name} />
             ) : (
-              <video src={`/@fs/${a.previewUrl}`} controls autoPlay />
+              <MediaVideo src={`/@fs/${a.previewUrl}`} />
             )}
           </div>
           {isModel && (
