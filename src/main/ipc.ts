@@ -6,9 +6,10 @@ import {
   assetById, createLibrary, listLibraries, getLibrary, listAssets, updateAsset, addTag, removeTag,
   upsertScanned, getOpenTabs, saveOpenTabs, getAppState, setAppState, setAssetMissing, setAssetFolder, renameAssetFolder,
   listFolderOrders, renameFolderOrders, replaceFolderOrders,
-  type AssetPatch
+  type AssetPatch, type ScanEntry, type ScanUpsertResult
 } from './services/store'
 import { scanLibrary } from './services/scan'
+import { refreshPalettes } from './services/palette'
 import { watchLibrary, type FSWatcher } from './services/watch'
 import { moveEagleLibraryAssets, scanEagleLibrary, type EagleScan } from './services/eagle'
 import { migrateLegacySources } from './services/legacySourceMigration'
@@ -77,8 +78,27 @@ async function scanLibraryContents(libraryId: number): Promise<void> {
   const s = scopeFor(libraryId)
   if (!s) return
   const entries = await scanLibrary(s.libPath, (done) => send('library:scan', { libraryId, done, phase: 'scanning' }))
-  upsertScanned(s.db, libraryId, entries)
+  const results = upsertScanned(s.db, libraryId, entries)
   send('library:scan', { libraryId, done: entries.length, phase: 'done', added: entries.length })
+  queuePaletteRefresh(s, libraryId, entries, results)
+}
+
+/** 扫描入库后,对新增/内容变化的图片排队抽主色(串行,失败静默) */
+function queuePaletteRefresh(
+  s: { db: ReturnType<typeof getDb>; libPath: string },
+  libraryId: number,
+  entries: ScanEntry[],
+  results: ScanUpsertResult[]
+): void {
+  const imageRels = new Set(entries.filter((e) => e.type === 'image').map((e) => e.relPath))
+  const ids = results
+    .filter((r) => (r.action === 'added' || r.action === 'changed') && imageRels.has(r.relPath))
+    .map((r) => r.assetId)
+  if (ids.length === 0) return
+  void refreshPalettes(s.db, libraryId, s.libPath, {
+    assetIds: ids,
+    onProgress: (done) => { if (done % 25 === 0) send('assets:changed', { libraryId }) }
+  }).then((count) => { if (count > 0) send('assets:changed', { libraryId }) })
 }
 
 /* ---------- 监听 ---------- */
@@ -152,6 +172,7 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
     }
     attachRootWatcher(l.id, l.path)
     void enrichMissingMeta(l.id)
+    void enrichMissingPalette(l.id)
   }
 }
 
@@ -165,7 +186,10 @@ async function reconcileRoot(libraryId: number, root: string): Promise<void> {
     const s = scopeFor(libraryId)
     if (!s) return
     const entries = await scanLibrary(root)
-    if (entries.length > 0) upsertScanned(s.db, libraryId, entries)
+    if (entries.length > 0) {
+      const results = upsertScanned(s.db, libraryId, entries)
+      queuePaletteRefresh(s, libraryId, entries, results)
+    }
     const known = s.db.prepare('SELECT id, rel_path FROM assets WHERE library_id = ? AND missing = 0').all(libraryId) as { id: number; rel_path: string }[]
     const onDisk = new Set(entries.map((entry) => entry.relPath))
     for (const k of known) {
@@ -196,8 +220,17 @@ async function enrichMissingMeta(libraryId: number): Promise<void> {
   send('assets:changed', { libraryId })
 }
 
-/* ---------- 注册 ---------- */
+/** 主色补齐:历史图片 palette 为空的行按原文件补抽一次(串行后台,不阻塞启动) */
+async function enrichMissingPalette(libraryId: number): Promise<void> {
+  const s = scopeFor(libraryId)
+  if (!s) return
+  const count = await refreshPalettes(s.db, libraryId, s.libPath, {
+    onProgress: (done) => { if (done % 50 === 0) send('assets:changed', { libraryId }) }
+  })
+  if (count > 0) send('assets:changed', { libraryId })
+}
 
+/* ---------- 注册 ---------- */
 export function registerIpc(userData: string): void {
   ipcMain.handle('dialog:pickFolder', async () => {
     const r = await dialog.showOpenDialog(win()!, { properties: ['openDirectory'] })

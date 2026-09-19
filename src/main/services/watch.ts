@@ -57,6 +57,16 @@ async function upsertOne(db: Database, libraryId: number, root: string, absPath:
     codec: meta.codec,
     fps: meta.fps
   }])
+  // 新增/内容变化的图片:通知渲染层前先按原文件抽好主色,失败静默保持空
+  if (result && kind.type === 'image') {
+    try {
+      const { extractPaletteFromImage } = await import('./palette')
+      const palette = await extractPaletteFromImage(absPath)
+      if (palette.length > 0) {
+        db.prepare('UPDATE assets SET palette = ? WHERE id = ?').run(JSON.stringify(palette), result.assetId)
+      }
+    } catch { /* 主色留空 */ }
+  }
   return result ?? null
 }
 
