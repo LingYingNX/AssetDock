@@ -66,12 +66,15 @@ function buildTree(paths: string[], counts: Map<string, number>, movablePaths: S
     const label = segs[segs.length - 1]
     const node: DirNode = { path, label, count: counts.get(path) ?? 0, children: [], movable: movablePaths.has(path) }
     byPath.set(path, node)
-    if (segs.length === 1) root.push(node)
-    else {
-      const parent = byPath.get(segs.slice(0, -1).join('/'))
-      if (parent) parent.children.push(node)
-      else root.push(node) // 父目录缺数据时兜底挂根
-    }
+  }
+  for (const path of paths) {
+    const node = byPath.get(path)
+    if (!node) continue
+    const separator = path.lastIndexOf('/')
+    const parentPath = separator < 0 ? '' : path.slice(0, separator)
+    const parent = parentPath ? byPath.get(parentPath) : undefined
+    if (parent) parent.children.push(node)
+    else root.push(node) // 父目录缺数据时兜底挂根
   }
   return root
 }

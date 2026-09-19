@@ -39,10 +39,10 @@
 .folder-row.folder-drop-before::after,.folder-row.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;height:3px;border-radius:2px;background:var(--acc);box-shadow:0 0 0 1px rgba(255,255,255,.72);z-index:2;pointer-events:none}
 .folder-row.folder-drop-before::after{top:-1px}
 .folder-row.folder-drop-after::after{bottom:-1px}
-.folder-toggle{position:absolute;left:calc(10px + var(--folder-depth, 0) * 14px);top:3px;display:grid;place-items:center;width:14px;height:22px;border:0;border-radius:2px;background:none;color:var(--t3);cursor:pointer;transition:background-color .14s ease,color .14s ease}
+.folder-toggle{position:absolute;z-index:2;left:calc(10px + var(--folder-depth, 0) * 14px);top:3px;display:grid;place-items:center;width:14px;height:22px;border:0;border-radius:2px;background:none;color:var(--t3);cursor:pointer;transition:background-color .14s ease,color .14s ease}
 .folder-toggle:hover{background:var(--bg3);color:var(--t1)}
-.folder-toggle .ic{width:10px;height:10px;transition:transform .14s ease}
-.folder-toggle.open .ic{transform:rotate(90deg)}
+.folder-toggle .ic{width:10px;height:10px;stroke-width:2.2;transform:scale(2);transform-origin:center;transition:transform .14s ease}
+.folder-toggle.open .ic{transform:rotate(90deg) scale(2)}
 .folder-row.has-children .folder-main{margin-left:14px}
 .folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
 .folder-main:hover{background:none}
