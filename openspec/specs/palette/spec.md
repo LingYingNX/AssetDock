@@ -1,5 +1,7 @@
 ## Purpose
 
+定义素材主色数据的提取与消费:入库时提取每张素材的代表色,并让色带与侧栏颜色圆点筛选基于库内 palette 而非演示数据。
+
 ## Requirements
 
 ### Requirement: 提取算法

@@ -1,5 +1,7 @@
 ## Purpose
 
+定义素材数据的持久化契约:库内 SQLite 的表结构与字段、编辑操作的即时落库语义、渲染层查询 IPC,以及删除/恢复仅改数据不动磁盘文件的边界。
+
 ## Requirements
 
 ### Requirement: 数据库 Schema
