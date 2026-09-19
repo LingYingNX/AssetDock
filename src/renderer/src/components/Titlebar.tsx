@@ -20,7 +20,6 @@ export function Titlebar(): React.JSX.Element {
     <header
       className="titlebar glass-titlebar"
       style={dragStyle}
-      onPointerDown={() => setOpenMenu(null)}
     >
       <div className="brand-section">
         <div className="logo">
@@ -49,7 +48,10 @@ export function Titlebar(): React.JSX.Element {
               key={t.id}
               className={`lib-tab${t.id === activeTabId ? ' on' : ''}`}
               title={`${t.name} · 本地库`}
-              onClick={() => openTab(t.id)}
+              onClick={() => {
+                setOpenMenu(null)
+                openTab(t.id)
+              }}
             >
               <Icon name="drive" />
               {t.name}
@@ -59,6 +61,7 @@ export function Titlebar(): React.JSX.Element {
                 title="关闭"
                 onClick={(e) => {
                   e.stopPropagation()
+                  setOpenMenu(null)
                   closeTab(t.id)
                 }}
               >
