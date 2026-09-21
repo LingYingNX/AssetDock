@@ -26,6 +26,44 @@ function rebaseFolderNav(nav: NavKey, source: string, target: string): NavKey {
   return path.startsWith(`${source}/`) ? `folder:${target}${path.slice(source.length)}` : nav
 }
 
+/* ---------- 界面偏好持久化(视图/列宽/信息面板/色带) ---------- */
+
+const UI_PREFS_KEY = 'uiPrefs'
+
+interface UiPrefs {
+  view: ViewMode
+  colw: number
+  inspHidden: boolean
+  cbarOpen: boolean
+}
+
+/** 把当前界面偏好写入主进程(失败静默:偏好丢失不应影响使用) */
+function persistUiPrefs(): void {
+  try {
+    const s = useUI.getState()
+    const prefs: UiPrefs = { view: s.view, colw: s.colw, inspHidden: s.inspHidden, cbarOpen: s.cbarOpen }
+    void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
+  } catch { /* ignore */ }
+}
+
+/** 读取并应用上次的界面偏好;逐项校验,损坏的字段退回默认值 */
+export async function restoreUiPrefs(): Promise<void> {
+  try {
+    const raw = await window.windowApi.state.get(UI_PREFS_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Partial<UiPrefs>
+    const view: ViewMode =
+      parsed.view === 'grid' || parsed.view === 'list' || parsed.view === 'waterfall' ? parsed.view : 'waterfall'
+    const colw = Number(parsed.colw)
+    useUI.setState({
+      view,
+      colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
+      inspHidden: parsed.inspHidden === true,
+      cbarOpen: parsed.cbarOpen === true
+    })
+  } catch { /* 读取失败保持默认 */ }
+}
+
 /** 主进程资产行 → Asset */
 function rowToAsset(r: Record<string, unknown>): Asset {
   const tags = (r.tags as { name: string; color: string }[]) ?? []
@@ -441,14 +479,26 @@ export const useUI = create<UIState>((set, get) => {
     stripColor: null,
     setStripColor: (stripColor) => set({ stripColor }),
     cbarOpen: false,
-    toggleCbar: () => set((s) => ({ cbarOpen: !s.cbarOpen })),
+    toggleCbar: () => {
+      set((s) => ({ cbarOpen: !s.cbarOpen }))
+      persistUiPrefs()
+    },
 
     view: 'waterfall',
-    setView: (view) => set({ view, openMenu: null }),
+    setView: (view) => {
+      set({ view, openMenu: null })
+      persistUiPrefs()
+    },
     colw: 232,
-    setColw: (colw) => set({ colw }),
+    setColw: (colw) => {
+      set({ colw })
+      persistUiPrefs()
+    },
     inspHidden: false,
-    toggleInspector: () => set((s) => ({ inspHidden: !s.inspHidden })),
+    toggleInspector: () => {
+      set((s) => ({ inspHidden: !s.inspHidden }))
+      persistUiPrefs()
+    },
 
     assets: [],
     setRating: (id, v) =>

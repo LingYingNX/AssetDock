@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, protocol } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, screen } from 'electron'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { getDb } from './services/db'
@@ -6,7 +6,70 @@ import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { openSqlite } from './services/sqlite'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
-import { listLibraries } from './services/store'
+import { listLibraries, getAppState, setAppState } from './services/store'
+
+const DEFAULT_WINDOW = { width: 1600, height: 950 }
+const MIN_WINDOW = { width: 1440, height: 860 }
+const WINDOW_STATE_KEY = 'windowBounds'
+
+interface StoredBounds {
+  x?: number
+  y?: number
+  width: number
+  height: number
+  maximized?: boolean
+}
+
+/**
+ * 读取上次窗口尺寸。位置仅在仍与某块显示器相交时采用,否则丢弃坐标
+ * (显示器拔掉/分辨率变化后,沿用旧坐标会让窗口落在屏幕外不可见)。
+ */
+function readWindowState(): StoredBounds | null {
+  try {
+    const raw = getAppState(getDb(), WINDOW_STATE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredBounds>
+    const width = Number(parsed.width)
+    const height = Number(parsed.height)
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+    const bounds: StoredBounds = {
+      width: Math.max(MIN_WINDOW.width, Math.round(width)),
+      height: Math.max(MIN_WINDOW.height, Math.round(height)),
+      maximized: parsed.maximized === true
+    }
+    const x = Number(parsed.x)
+    const y = Number(parsed.y)
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      const visible = screen.getAllDisplays().some((d) => {
+        const a = d.workArea
+        return x < a.x + a.width && x + bounds.width > a.x && y < a.y + a.height && y + bounds.height > a.y
+      })
+      if (visible) {
+        bounds.x = Math.round(x)
+        bounds.y = Math.round(y)
+      }
+    }
+    return bounds
+  } catch {
+    return null
+  }
+}
+
+/** 退出前落盘窗口尺寸;最大化/最小化时保留上一次的普通尺寸,避免记住最大化态的数字 */
+function persistWindowState(win: BrowserWindow): void {
+  try {
+    if (win.isDestroyed()) return
+    const maximized = win.isMaximized()
+    const bounds = maximized ? win.getNormalBounds() : win.getBounds()
+    setAppState(getDb(), WINDOW_STATE_KEY, JSON.stringify({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      maximized
+    }))
+  } catch { /* 落盘失败不影响退出 */ }
+}
 
 /** 退出前 checkpoint 全部库 db,保证 .mediahub/library.db 自包含(整目录可携带) */
 function checkpointAllLibraries(): void {
@@ -27,11 +90,13 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 function createWindow(): void {
+  const stored = readWindowState()
   const win = new BrowserWindow({
-    width: 1600,
-    height: 950,
-    minWidth: 1440,
-    minHeight: 860,
+    width: stored?.width ?? DEFAULT_WINDOW.width,
+    height: stored?.height ?? DEFAULT_WINDOW.height,
+    ...(stored?.x != null && stored?.y != null ? { x: stored.x, y: stored.y } : {}),
+    minWidth: MIN_WINDOW.width,
+    minHeight: MIN_WINDOW.height,
     useContentSize: true,
     frame: false,
     show: false,
@@ -44,7 +109,28 @@ function createWindow(): void {
     }
   })
 
+  // 先应用最大化态再显示,避免出现「先小窗后跳大」的闪烁
+  if (stored?.maximized) win.maximize()
+
   win.on('ready-to-show', () => win.show())
+
+  // 缩放/移动结束后落盘(拖动过程会高频触发,用防抖收敛写入)
+  let persistTimer: NodeJS.Timeout | null = null
+  const schedulePersist = (): void => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      persistWindowState(win)
+    }, 400)
+  }
+  win.on('resize', schedulePersist)
+  win.on('move', schedulePersist)
+  win.on('maximize', schedulePersist)
+  win.on('unmaximize', schedulePersist)
+  win.on('close', () => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistWindowState(win)
+  })
 
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)

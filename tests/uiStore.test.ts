@@ -210,3 +210,48 @@ describe('UI store', () => {
     expect(useUI.getState().scanProgress).toBeNull()
   })
 })
+
+describe('restoreUiPrefs', () => {
+  const load = async (stored: string | null) => {
+    const set = vi.fn()
+    vi.resetModules()
+    vi.stubGlobal('window', {
+      windowApi: { state: { get: async () => stored, set: async () => ({ ok: true }) } }
+    })
+    const mod = await import('../src/renderer/src/store/ui')
+    // 用真实 store 的状态断言:恢复函数应直接 setState 到 store
+    await mod.restoreUiPrefs()
+    void set
+    return mod.useUI.getState()
+  }
+
+  it('applies every stored preference', async () => {
+    const s = await load(JSON.stringify({ view: 'list', colw: 300, inspHidden: true, cbarOpen: true }))
+    expect(s.view).toBe('list')
+    expect(s.colw).toBe(300)
+    expect(s.inspHidden).toBe(true)
+    expect(s.cbarOpen).toBe(true)
+  })
+
+  it('falls back to defaults when nothing is stored', async () => {
+    const s = await load(null)
+    expect(s.view).toBe('waterfall')
+    expect(s.colw).toBe(232)
+    expect(s.inspHidden).toBe(false)
+    expect(s.cbarOpen).toBe(false)
+  })
+
+  it('ignores malformed JSON instead of throwing', async () => {
+    const s = await load('{not json')
+    expect(s.view).toBe('waterfall')
+    expect(s.colw).toBe(232)
+  })
+
+  it('rejects out-of-range and unknown values field by field', async () => {
+    const s = await load(JSON.stringify({ view: 'diagonal', colw: 9999, inspHidden: 'yes', cbarOpen: 1 }))
+    expect(s.view).toBe('waterfall')
+    expect(s.colw).toBe(320)
+    expect(s.inspHidden).toBe(false)
+    expect(s.cbarOpen).toBe(false)
+  })
+})

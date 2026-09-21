@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useUI } from './store/ui'
+import { useUI, restoreUiPrefs } from './store/ui'
 import { SvgDefs } from './components/Icons'
 
 // dev 下暴露 store 供无头验证脚本断言
@@ -24,6 +24,7 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     const boot = async (): Promise<void> => {
       try {
+        await restoreUiPrefs()
         const libs = await window.windowApi.library.list()
         useUI.getState().setLibraries(libs)
         if (libs.length === 0) return
