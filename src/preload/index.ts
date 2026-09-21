@@ -74,7 +74,7 @@ const api = {
   },
 
   /** 白名单事件订阅 */
-  on: (channel: 'library:scan' | 'assets:changed', cb: (payload: unknown) => void): (() => void) => {
+  on: (channel: 'library:scan' | 'assets:changed' | 'window:maximized', cb: (payload: unknown) => void): (() => void) => {
     const h = (_e: unknown, payload: unknown): void => cb(payload)
     ipcRenderer.on(channel, h)
     return () => {

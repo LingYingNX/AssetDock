@@ -56,6 +56,9 @@ export default function App(): React.JSX.Element {
     }
     void boot()
     const un1 = window.windowApi.on('assets:changed', () => useUI.getState().reloadActiveLibrary())
+    const un3 = window.windowApi.on('window:maximized', (p) => {
+      document.documentElement.dataset.maximized = p === true ? 'true' : 'false'
+    })
     const un2 = window.windowApi.on('library:scan', (p) => {
       const d = p as { phase: string; done: number }
       useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
@@ -64,6 +67,7 @@ export default function App(): React.JSX.Element {
     return () => {
       un1()
       un2()
+      un3()
     }
   }, [])
 

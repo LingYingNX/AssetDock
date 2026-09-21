@@ -110,7 +110,9 @@ function createWindow(): void {
     useContentSize: true,
     frame: false,
     show: false,
-    backgroundColor: '#D8E9FC',
+    // 圆角窗口:窗口本身透明,圆角与底色由渲染层自绘(.app 圆角 + overflow:hidden)
+    transparent: true,
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -137,6 +139,15 @@ function createWindow(): void {
   win.on('move', schedulePersist)
   win.on('maximize', schedulePersist)
   win.on('unmaximize', schedulePersist)
+
+  // 最大化时窗口铺满屏幕,圆角会在四角露出桌面底色,因此通知渲染层去掉圆角
+  const sendMaximized = (): void => {
+    if (win.isDestroyed()) return
+    win.webContents.send('window:maximized', win.isMaximized())
+  }
+  win.on('maximize', sendMaximized)
+  win.on('unmaximize', sendMaximized)
+  win.webContents.on('did-finish-load', sendMaximized)
   // 关闭行为:偏好为「最小化」时拦截关闭改为隐藏(任务栏仍可唤回);真正退出走 app.quit 标记
   let quitting = false
   app.on('before-quit', () => { quitting = true })

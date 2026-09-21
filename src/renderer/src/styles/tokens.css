@@ -8,6 +8,9 @@
   --ok:#1FA871; --warn:#C77F1F;
   --colw:232px;
   --r-s:8px; --r-m:14px; --r-l:18px;
+  /* 菜单与窗口外框使用同一圆角,保持整体一致 */
+  --r-menu:5px;
+  --r-window:5px;
   /* 动效词汇:统一时长与缓动,新动效一律引用这些令牌 */
   --dur-press:160ms;   /* 按压反馈 */
   --dur-fast:180ms;    /* 菜单/浮层 */
@@ -24,6 +27,8 @@
   --hatch:rgba(18,26,22,.08);
   --ink:#101820;
   --shadow-panel:0 18px 48px rgba(20,60,120,.18);
+  /* 菜单实底:不用毛玻璃,浮在素材图上也不受背景干扰 */
+  --menu-solid:#F4F8FE;
   --tb-1:#d9eeff; --tb-2:#cae5fa; --tab-bg:#f6fafe;
   --scroll-thumb:rgba(18,26,22,.22); --scroll-thumb-hover:rgba(18,26,22,.36);
   --font:"Geist","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
@@ -47,12 +52,17 @@
   --hatch:rgba(255,255,255,.09);
   --ink:#E9EEF6;
   --shadow-panel:0 18px 48px rgba(0,0,0,.45);
+  --menu-solid:#1B2430;
   --tb-1:#151C26; --tb-2:#111721; --tab-bg:rgba(255,255,255,.04);
   --scroll-thumb:rgba(255,255,255,.16); --scroll-thumb-hover:rgba(255,255,255,.28);
   color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
+/* 圆角窗口:窗口透明,由 html 层裁出圆角,内容与背景渐变一起被切齐 */
+html{background:transparent;border-radius:var(--r-window);overflow:hidden}
+/* 最大化时铺满屏幕,圆角会在四角露出桌面,故去掉 */
+html[data-maximized="true"]{border-radius:0}
 body{
   background:
     radial-gradient(900px 620px at 82% 6%,rgba(64,156,255,.80),transparent 55%),

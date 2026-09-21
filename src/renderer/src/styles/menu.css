@@ -1,5 +1,5 @@
 /* ============================ 菜单 ============================ */
-.menu{position:fixed;z-index:90;min-width:196px;border-radius:16px;padding:5px;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top left;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.menu{position:fixed;z-index:90;min-width:196px;border-radius:var(--r-menu);padding:5px;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top left;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .menu.open{opacity:1;transform:none;pointer-events:auto}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--t1);text-align:left}
 .menu button:hover{background:var(--acc-soft);color:var(--t1)}
@@ -30,12 +30,12 @@
 .menu-input:focus{border-color:var(--acc-line);background:#fff}
 .menu-input::placeholder{color:var(--t3)}
 .ctx-menu{min-width:210px}
-.menu.compact-menu{min-width:0;width:max-content;max-width:min(220px,calc(100vw - 16px));padding:4px;border-radius:10px;box-shadow:0 10px 28px rgba(20,60,120,.18),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.28)}
+.menu.compact-menu{min-width:0;width:max-content;max-width:min(220px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu);box-shadow:0 10px 28px rgba(20,60,120,.18),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.28)}
 .menu.compact-menu button{gap:6px;padding:5px 8px;border-radius:6px;font-size:12px;white-space:nowrap}
 .menu.compact-menu button .ic{width:11px;height:11px}
 
 /* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
-.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:10px}
+.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu)}
 .menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
 .menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:11px}
@@ -46,7 +46,7 @@
 .menu.pick-menu .sep{margin:4px 2px}
 
 /* 齿轮菜单:沿用当前浅色玻璃主题 */
-.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:8px;padding:6px 0;user-select:none;color:var(--t1)}
+.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:6px 0;user-select:none;color:var(--t1)}
 .settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color .15s ease}
 .settings-menu button.settings-menu-item{border:0;background:transparent;font:inherit;text-align:left}
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
