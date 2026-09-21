@@ -12,6 +12,16 @@ const DEFAULT_WINDOW = { width: 1600, height: 950 }
 const MIN_WINDOW = { width: 1440, height: 860 }
 const WINDOW_STATE_KEY = 'windowBounds'
 
+/** 偏好中的关闭行为:minimize=关闭时最小化到任务栏,quit=直接退出应用 */
+function closeBehavior(): 'minimize' | 'quit' {
+  try {
+    const prefs = JSON.parse(getAppState(getDb(), 'preferences') ?? '{}') as { closeAction?: unknown }
+    return prefs.closeAction === 'quit' ? 'quit' : 'minimize'
+  } catch {
+    return 'minimize'
+  }
+}
+
 interface StoredBounds {
   x?: number
   y?: number
@@ -127,9 +137,16 @@ function createWindow(): void {
   win.on('move', schedulePersist)
   win.on('maximize', schedulePersist)
   win.on('unmaximize', schedulePersist)
-  win.on('close', () => {
+  // 关闭行为:偏好为「最小化」时拦截关闭改为隐藏(任务栏仍可唤回);真正退出走 app.quit 标记
+  let quitting = false
+  app.on('before-quit', () => { quitting = true })
+  win.on('close', (event) => {
     if (persistTimer) clearTimeout(persistTimer)
     persistWindowState(win)
+    if (!quitting && closeBehavior() === 'minimize') {
+      event.preventDefault()
+      win.hide()
+    }
   })
 
   win.webContents.setWindowOpenHandler((details) => {
@@ -176,6 +193,17 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.on('shell:show-in-folder', (_e, p: string) => {
     if (typeof p === 'string' && p) shell.showItemInFolder(p)
+  })
+
+  /** 开机自启:走 Electron 登录项,仅打包后生效(dev 下注册的是 electron.exe 无意义) */
+  ipcMain.handle('app:getAutoLaunch', () => {
+    if (!app.isPackaged) return { enabled: false, supported: false }
+    return { enabled: app.getLoginItemSettings().openAtLogin, supported: true }
+  })
+  ipcMain.handle('app:setAutoLaunch', (_e, enabled: boolean) => {
+    if (!app.isPackaged) return { ok: false, supported: false }
+    app.setLoginItemSettings({ openAtLogin: enabled === true })
+    return { ok: true, supported: true, enabled: app.getLoginItemSettings().openAtLogin }
   })
 
   // dev 下开放本地 HTTP 桥:GET /<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用

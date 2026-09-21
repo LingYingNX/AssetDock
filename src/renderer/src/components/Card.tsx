@@ -6,7 +6,6 @@ import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { Viewer3D } from './Viewer3D'
-
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -35,6 +34,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const [imgLoaded, setImgLoaded] = useState(false)
   const [modelFailed, setModelFailed] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  // 列表/网格悬浮自动播放偏好(设置 → 音视频);默认开启,静音默认开启
+  const hoverVideo = useUI((s) => s.hoverVideo)
+  const hoverSound = useUI((s) => s.hoverSound)
 
   const cls = [
     'card',
@@ -105,6 +108,18 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         openLightbox(a.id)
       }}
       onFocus={() => setFocusedCard(a.id)}
+      onMouseEnter={() => {
+        // 悬浮自动播放:仅在偏好开启且为视频时启动,离开即复位
+        const v = videoRef.current
+        if (!v || !hoverVideo) return
+        v.currentTime = 0
+        void v.play().catch(() => { /* 自动播放被拦截时保持首帧 */ })
+      }}
+      onMouseLeave={() => {
+        const v = videoRef.current
+        if (!v) return
+        v.pause()
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         setCtxMenu({ x: e.clientX, y: e.clientY, assetId: a.id })
@@ -141,8 +156,9 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           />
         ) : a.dbId != null && isVideo ? (
           <video
+            ref={videoRef}
             src={a.previewUrl}
-            muted
+            muted={hoverSound !== true}
             preload="auto"
             className={imgLoaded ? 'loaded' : ''}
             onLoadedData={() => setImgLoaded(true)}
@@ -157,8 +173,9 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           />
         ) : a.previewUrl && isVideo ? (
           <video
+            ref={videoRef}
             src={`/@fs/${a.previewUrl}`}
-            muted
+            muted={hoverSound !== true}
             preload="auto"
             className={imgLoaded ? 'loaded' : ''}
             onLoadedMetadata={() => setImgLoaded(true)}

@@ -82,6 +82,14 @@ export async function restoreUiPrefs(): Promise<void> {
       nav: parseNav(parsed.nav)
     })
   } catch { /* 读取失败保持默认 */ }
+  // 主题与音视频偏好存在 preferences 键(与设置页同一份记录),启动即应用
+  try {
+    const prefs = await window.windowApi.state.get('preferences')
+    const { applyTheme, parseTheme } = await import('../data/theme')
+    applyTheme(parseTheme(prefs))
+    const parsed = JSON.parse(prefs ?? '{}') as { hoverVideo?: unknown; hoverSound?: unknown }
+    useUI.setState({ hoverVideo: parsed.hoverVideo !== false, hoverSound: parsed.hoverSound === true })
+  } catch { /* 偏好读取失败保持默认 */ }
 }
 
 /** 主进程资产行 → Asset */
@@ -153,6 +161,10 @@ interface UIState {
   /* 数据源 */
   mode: 'empty' | 'library'
   scanProgress: string | null
+  /** 列表悬浮自动播放(设置 → 音视频);只读镜像,由 preferences 同步 */
+  hoverVideo: boolean
+  hoverSound: boolean
+  setHoverPlayback: (video: boolean, sound: boolean) => void
   setAssets: (list: Asset[]) => void
   reloadActiveLibrary: () => void
   folderPaths: string[]
@@ -508,6 +520,9 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     view: 'waterfall',
+    hoverVideo: true,
+    hoverSound: false,
+    setHoverPlayback: (video, sound) => set({ hoverVideo: video, hoverSound: sound }),
     setView: (view) => {
       set({ view, openMenu: null })
       persistUiPrefs()

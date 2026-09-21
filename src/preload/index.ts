@@ -67,6 +67,12 @@ const api = {
     set: (key: string, value: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('state:set', key, value)
   },
 
+  app: {
+    getAutoLaunch: (): Promise<{ enabled: boolean; supported: boolean }> => ipcRenderer.invoke('app:getAutoLaunch'),
+    setAutoLaunch: (enabled: boolean): Promise<{ ok: boolean; supported: boolean; enabled?: boolean }> =>
+      ipcRenderer.invoke('app:setAutoLaunch', enabled)
+  },
+
   /** 白名单事件订阅 */
   on: (channel: 'library:scan' | 'assets:changed', cb: (payload: unknown) => void): (() => void) => {
     const h = (_e: unknown, payload: unknown): void => cb(payload)
