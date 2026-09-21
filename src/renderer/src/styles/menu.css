@@ -34,6 +34,17 @@
 .menu.compact-menu button{gap:6px;padding:5px 8px;border-radius:6px;font-size:12px;white-space:nowrap}
 .menu.compact-menu button .ic{width:11px;height:11px}
 
+/* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
+.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:10px}
+.menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.menu.pick-menu button .lbl{flex:1;min-width:0}
+.menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:11px}
+.menu.pick-menu button.on{color:#0A5AC2;font-weight:600;background:var(--acc-soft)}
+.menu.pick-menu button.on::before{content:"";position:absolute;left:1px;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--acc)}
+.menu.pick-menu button.on:hover{background:var(--acc-soft)}
+.menu.pick-menu button.on .ic{color:var(--acc2)}
+.menu.pick-menu .sep{margin:4px 2px}
+
 /* 齿轮菜单:沿用当前浅色玻璃主题 */
 .settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:8px;padding:6px 0;user-select:none;color:var(--t1)}
 .settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color .15s ease}

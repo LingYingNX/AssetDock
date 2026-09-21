@@ -20,12 +20,12 @@
 .glass-cbar{background:linear-gradient(115deg,rgba(255,255,255,.42),rgba(255,255,255,.08) 40%,rgba(255,255,255,.2)),rgba(219,236,255,.24)}
 .glass-inspector{background:linear-gradient(115deg,rgba(255,255,255,.38),rgba(255,255,255,.1) 45%,rgba(255,255,255,.24)),rgba(219,236,255,.24);backdrop-filter:blur(24px) saturate(1.7) brightness(1.05);backdrop-filter:url(#liquid-lens) blur(4px) saturate(1.75) brightness(1.06)}
 
-/* 菜单:略亮的玻璃 */
+/* 菜单:需要浮在素材图之上,基底比面板更实、模糊更深,保证文字可读 */
 .glass-menu{
-  background:linear-gradient(115deg,rgba(255,255,255,.55),rgba(255,255,255,.12) 35%,rgba(255,255,255,.04) 60%,rgba(255,255,255,.28)),rgba(219,236,255,.36);
-  backdrop-filter:blur(24px) saturate(1.75) brightness(1.05);
-  backdrop-filter:url(#liquid-lens) blur(3px) saturate(1.75) brightness(1.06);
-  border:1px solid rgba(255,255,255,.85);
+  background:linear-gradient(115deg,rgba(255,255,255,.62),rgba(255,255,255,.2) 35%,rgba(255,255,255,.12) 60%,rgba(255,255,255,.34)),rgba(232,242,255,.72);
+  backdrop-filter:blur(30px) saturate(1.7) brightness(1.06);
+  backdrop-filter:url(#liquid-lens) blur(14px) saturate(1.7) brightness(1.06);
+  border:1px solid rgba(255,255,255,.9);
   box-shadow:0 22px 55px rgba(20,60,120,.22),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 1px rgba(255,255,255,.35);
 }
 

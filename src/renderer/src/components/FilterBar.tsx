@@ -11,35 +11,35 @@ const VIEW_ICONS: Record<string, string> = {
 
 const FORMAT_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部格式', groupEnd: true },
-  { id: 'photo', label: 'JPG / PNG / WEBP', groupEnd: true },
-  { id: 'psd-ai', label: 'PSD / AI 源文件', groupEnd: true },
-  { id: 'svg-gif', label: 'SVG / GIF', groupEnd: true },
-  { id: 'video', label: 'MP4 / MOV', groupEnd: true },
-  { id: 'glb', label: 'GLB / glTF', groupEnd: true },
-  { id: 'fbx', label: 'FBX', groupEnd: true },
+  { id: 'photo', label: 'JPG / PNG / WEBP' },
+  { id: 'psd-ai', label: 'PSD / AI 源文件' },
+  { id: 'svg-gif', label: 'SVG / GIF' },
+  { id: 'video', label: 'MP4 / MOV' },
+  { id: 'glb', label: 'GLB / glTF' },
+  { id: 'fbx', label: 'FBX' },
   { id: 'obj', label: 'OBJ' }
 ]
 
 const SHAPE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部形状', groupEnd: true },
-  { id: 'landscape', label: '横图', sub: '16:9 · 3:2', groupEnd: true },
-  { id: 'portrait', label: '竖图', sub: '9:16 · 3:4', groupEnd: true },
-  { id: 'square', label: '方形', sub: '1:1', groupEnd: true },
+  { id: 'landscape', label: '横图', sub: '16:9 · 3:2' },
+  { id: 'portrait', label: '竖图', sub: '9:16 · 3:4' },
+  { id: 'square', label: '方形', sub: '1:1' },
   { id: 'pano', label: '全景 / 超宽' }
 ]
 
 const SIZE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部尺寸', groupEnd: true },
-  { id: 'small', label: '小', sub: '≤1080P', groupEnd: true },
-  { id: 'medium', label: '中', sub: '1080P ~ 4K', groupEnd: true },
+  { id: 'small', label: '小', sub: '≤1080P' },
+  { id: 'medium', label: '中', sub: '1080P ~ 4K' },
   { id: 'large', label: '大', sub: '≥4K' }
 ]
 
 const RATE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部评分', groupEnd: true },
-  { id: '5', label: '★★★★★', groupEnd: true },
-  { id: '4up', label: '★★★★ 及以上', groupEnd: true },
-  { id: '3up', label: '★★★ 及以上', groupEnd: true },
+  { id: '5', label: '★★★★★' },
+  { id: '4up', label: '★★★★ 及以上' },
+  { id: '3up', label: '★★★ 及以上' },
   { id: 'none', label: '未评分' }
 ]
 
