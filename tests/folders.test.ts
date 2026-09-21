@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { createLibraryFolder, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from '../src/main/services/folders'
+import { basename, join } from 'node:path'
+import { createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from '../src/main/services/folders'
 import { listFolderOrders, replaceFolderOrders } from '../src/main/services/store'
 import { openMemoryDb } from '../src/main/services/db'
 
@@ -53,5 +53,41 @@ describe('library folders', () => {
 
   it('orders each folder level independently while keeping parents first', () => {
     expect(orderLibraryFolders(['a', 'a/one', 'a/two', 'b'], new Map([['b', 0], ['a/two', 1]]))).toEqual(['b', 'a', 'a/two', 'a/one'])
+  })
+})
+
+describe('exportLibraryAsset', () => {
+  let root = ''
+  let dest = ''
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'mediahub-export-src-'))
+    dest = await mkdtemp(join(tmpdir(), 'mediahub-export-dst-'))
+  })
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+    await rm(dest, { recursive: true, force: true })
+  })
+
+  it('copies the asset out without touching the library copy', async () => {
+    await mkdir(join(root, 'sub'))
+    await writeFile(join(root, 'sub', 'a.jpg'), 'payload')
+    const written = await exportLibraryAsset(root, 'sub/a.jpg', dest)
+    expect(basename(written)).toBe('a.jpg')
+    await expect(readFile(written, 'utf8')).resolves.toBe('payload')
+    await expect(readFile(join(root, 'sub', 'a.jpg'), 'utf8')).resolves.toBe('payload')
+  })
+
+  it('avoids overwriting an existing file in the destination', async () => {
+    await writeFile(join(root, 'a.jpg'), 'new')
+    await writeFile(join(dest, 'a.jpg'), 'existing')
+    const written = await exportLibraryAsset(root, 'a.jpg', dest)
+    expect(basename(written)).toBe('a (2).jpg')
+    await expect(readFile(join(dest, 'a.jpg'), 'utf8')).resolves.toBe('existing')
+    await expect(readFile(written, 'utf8')).resolves.toBe('new')
+  })
+
+  it('rejects a path outside the library root', async () => {
+    await expect(exportLibraryAsset(root, '../escape.jpg', dest)).rejects.toThrow()
   })
 })

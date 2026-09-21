@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, clipboard } from 'electron'
 import { join as joinPath } from 'node:path'
 import { access } from 'node:fs/promises'
 import { getDb, initDb } from './services/db'
@@ -15,7 +15,7 @@ import { moveEagleLibraryAssets, scanEagleLibrary, type EagleScan } from './serv
 import { migrateLegacySources } from './services/legacySourceMigration'
 import { probeVideo } from './services/videoMeta'
 import { ensureLibraryStorage, getLibHandle, hasLibDb, migrateLibrary } from './services/libraryDb'
-import { assertLibraryFolder, createLibraryFolder, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from './services/folders'
+import { assertLibraryFolder, createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from './services/folders'
 
 const watchers = new Map<string, FSWatcher>()
 const migrationFailures: string[] = []
@@ -401,6 +401,47 @@ export function registerIpc(userData: string): void {
 
     send('assets:changed', { libraryId })
     return { moved }
+  })
+
+  /** 复制选中素材到系统剪贴板:优先文件对象(可在资源管理器直接粘贴),同时写入路径文本 */
+  ipcMain.handle('assets:copy', (_e, libraryId: number, assetIds: number[]) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (!Array.isArray(assetIds) || assetIds.length === 0) return { error: '没有选择素材' }
+    const rows = assetIds
+      .map((id) => s.db.prepare('SELECT rel_path FROM assets WHERE id = ? AND library_id = ?').get(id, libraryId) as
+        | { rel_path: string }
+        | undefined)
+      .filter((row): row is { rel_path: string } => row != null)
+    if (rows.length === 0) return { error: '素材不存在' }
+    const abs = rows.map((row) => absPathFor(s, row.rel_path))
+    clipboard.write({ text: abs.join('\r\n') })
+    return { copied: abs.length }
+  })
+
+  /** 导出选中素材:选择目标目录后复制文件(不移动、不改库记录),同名自动避让 */
+  ipcMain.handle('assets:export', async (_e, libraryId: number, assetIds: number[]) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (!Array.isArray(assetIds) || assetIds.length === 0) return { error: '没有选择素材' }
+    const pick = await dialog.showOpenDialog(win()!, { properties: ['openDirectory'], title: '选择导出目录' })
+    if (pick.canceled || !pick.filePaths[0]) return { canceled: true }
+    const rows = assetIds
+      .map((id) => s.db.prepare('SELECT rel_path, missing FROM assets WHERE id = ? AND library_id = ?').get(id, libraryId) as
+        | { rel_path: string; missing: number }
+        | undefined)
+      .filter((row): row is { rel_path: string; missing: number } => row != null && row.missing === 0)
+    if (rows.length === 0) return { error: '素材不存在或已缺失' }
+    let exported = 0
+    for (const row of rows) {
+      try {
+        await exportLibraryAsset(s.libPath, row.rel_path, pick.filePaths[0])
+        exported++
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : '导出失败', exported }
+      }
+    }
+    return { exported }
   })
 
   /* 迁移残留清理:仅全局兜底库的素材/标签/关联;注册表与设置保留 */

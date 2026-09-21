@@ -50,7 +50,11 @@ const api = {
     removeTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:removeTag', libraryId, id, name),
     emptyTrash: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:emptyTrash', libraryId),
-    purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId)
+    purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId),
+    copy: (libraryId: number, ids: number[]): Promise<{ copied: number } | { error: string }> =>
+      ipcRenderer.invoke('assets:copy', libraryId, ids),
+    export: (libraryId: number, ids: number[]): Promise<{ exported: number } | { canceled: true } | { error: string; exported?: number }> =>
+      ipcRenderer.invoke('assets:export', libraryId, ids)
   },
 
   tabs: {

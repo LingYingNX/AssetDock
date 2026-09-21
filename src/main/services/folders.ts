@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, rename } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isIgnoredDir } from './ignore'
 
@@ -154,4 +154,19 @@ export async function moveLibraryAsset(root: string, relPath: string, targetFold
 export async function assertLibraryFolder(root: string, targetFolder: string): Promise<void> {
   const target = targetFolderPath(root, targetFolder)
   if (!(await lstat(target.abs)).isDirectory()) fail('目标文件夹不存在')
+}
+
+/**
+ * 把库内素材复制到库外目标目录(导出)。目标同名文件自动避让为 `名称 (2).ext`;
+ * 只读源文件、不移动、不删源;返回实际写入的路径。
+ */
+export async function exportLibraryAsset(root: string, relPath: string, targetDir: string): Promise<string> {
+  const source = libraryPath(root, relPath)
+  if (!(await lstat(source.abs)).isFile()) fail('素材不存在')
+  const destDir = resolve(targetDir)
+  if (!(await lstat(destDir)).isDirectory()) fail('导出目录不存在')
+  const fileName = source.rel.split('/').pop() ?? ''
+  const target = await uniqueAssetTarget(destDir, fileName)
+  await copyFile(source.abs, target)
+  return target
 }
