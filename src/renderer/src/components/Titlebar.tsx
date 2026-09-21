@@ -12,8 +12,11 @@ export function Titlebar(): React.JSX.Element {
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
 
+  // 只有下拉/齿轮这类浮层需要「点击标题栏其它区域关闭」,因此打开时暂停标题栏拖拽;
+  // 偏好设置是带全屏遮罩的模态对话框,不依赖点击标题栏关闭,保持标题栏可拖拽。
+  const modalOpen = openMenu === 'preferences'
   const dragStyle = {
-    WebkitAppRegion: openMenu ? 'no-drag' : 'drag'
+    WebkitAppRegion: openMenu && !modalOpen ? 'no-drag' : 'drag'
   } as React.CSSProperties
 
   return (
