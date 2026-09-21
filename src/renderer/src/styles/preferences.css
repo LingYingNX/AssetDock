@@ -1,20 +1,21 @@
 /* ============================ 偏好设置 ============================ */
 /* 遮罩从标题栏下方开始:标题栏保持可拖拽,窗口在对话框打开时仍能移动 */
 .pref-backdrop{position:fixed;left:0;right:0;top:48px;bottom:0;z-index:100;display:grid;place-items:center;background:rgba(222,239,255,.38);backdrop-filter:blur(12px) saturate(1.2);-webkit-app-region:no-drag}
-.pref-dialog{width:min(720px,calc(100vw - 48px));height:min(640px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28),0 0 1px rgba(255,255,255,.8)}
+/* 宽度按 16:9 取当前内容高度(≈355px)对应的值;高度仍随内容自适应,内容多时封顶后内部滚动 */
+.pref-dialog{width:min(632px,calc(100vw - 48px));max-height:min(640px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28),0 0 1px rgba(255,255,255,.8)}
 .glass-preferences{background:linear-gradient(135deg,var(--sheen-1),var(--sheen-2)),var(--surface);backdrop-filter:blur(28px) saturate(1.55)}
 .pref-header{height:48px;padding:0 16px 0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
 .pref-title{font-size:14px;font-weight:600;color:var(--t1)}
 .pref-close{width:28px;height:28px;display:grid;place-items:center;border-radius:4px;color:var(--t3)}
 .pref-close:hover{background:rgba(18,26,22,.07);color:var(--t1)}
 .pref-close .ic{width:16px;height:16px}
-.pref-body{display:flex;min-height:0;flex:1}
+.pref-body{display:flex;min-height:0;flex:1 0 auto}
 .pref-nav{width:148px;padding:12px 8px;display:flex;flex-direction:column;gap:2px;background:var(--bg1);border-right:1px solid var(--line);flex:none}
 .pref-nav-item{height:34px;padding:0 12px;display:flex;align-items:center;gap:10px;border-radius:6px;color:var(--t3);font-size:13px;text-align:left;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .pref-nav-item:hover{background:var(--bg3);color:var(--t2)}
 .pref-nav-item .ic{width:16px;height:16px}
 .pref-nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
-.pref-content{min-width:0;flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;background:var(--bg3)}
+.pref-content{min-width:0;flex:1;overflow-y:auto;padding:20px 24px 16px;display:flex;flex-direction:column;background:var(--bg3)}
 .pref-section{margin-bottom:22px}
 .pref-section h2{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--t1)}
 .pref-options{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
