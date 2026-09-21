@@ -255,3 +255,31 @@ describe('restoreUiPrefs', () => {
     expect(s.cbarOpen).toBe(false)
   })
 })
+
+describe('restoreUiPrefs: 导航记忆', () => {
+  const loadNav = async (stored: string | null) => {
+    vi.resetModules()
+    vi.stubGlobal('window', {
+      windowApi: { state: { get: async () => stored, set: async () => ({ ok: true }) } }
+    })
+    const mod = await import('../src/renderer/src/store/ui')
+    await mod.restoreUiPrefs()
+    return mod.useUI.getState().nav
+  }
+
+  it('restores a folder nav key', async () => {
+    await expect(loadNav(JSON.stringify({ nav: 'folder:壁纸图/壁纸' }))).resolves.toBe('folder:壁纸图/壁纸')
+  })
+
+  it('restores simple and tag nav keys', async () => {
+    await expect(loadNav(JSON.stringify({ nav: 'fav' }))).resolves.toBe('fav')
+    await expect(loadNav(JSON.stringify({ nav: 'tag:参考' }))).resolves.toBe('tag:参考')
+  })
+
+  it('falls back to all for unknown or malformed nav values', async () => {
+    await expect(loadNav(JSON.stringify({ nav: 'nonsense' }))).resolves.toBe('all')
+    await expect(loadNav(JSON.stringify({ nav: 'folder:' }))).resolves.toBe('all')
+    await expect(loadNav(JSON.stringify({ nav: 42 }))).resolves.toBe('all')
+    await expect(loadNav(JSON.stringify({}))).resolves.toBe('all')
+  })
+})

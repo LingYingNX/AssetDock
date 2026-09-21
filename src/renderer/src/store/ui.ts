@@ -26,7 +26,7 @@ function rebaseFolderNav(nav: NavKey, source: string, target: string): NavKey {
   return path.startsWith(`${source}/`) ? `folder:${target}${path.slice(source.length)}` : nav
 }
 
-/* ---------- 界面偏好持久化(视图/列宽/信息面板/色带) ---------- */
+/* ---------- 界面偏好持久化(视图/列宽/信息面板/色带/导航) ---------- */
 
 const UI_PREFS_KEY = 'uiPrefs'
 
@@ -35,13 +35,32 @@ interface UiPrefs {
   colw: number
   inspHidden: boolean
   cbarOpen: boolean
+  /** 上次停留的侧栏导航项(全部素材/文件夹/标签等) */
+  nav: NavKey
+}
+
+const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
+
+/** 校验导航键格式;非法值退回 'all'(目标是否存在由 reloadActiveLibrary 另行校验) */
+function parseNav(value: unknown): NavKey {
+  if (typeof value !== 'string') return 'all'
+  if ((NAV_SIMPLE as readonly string[]).includes(value)) return value as NavKey
+  if (value.startsWith('folder:') && value.length > 'folder:'.length) return value as NavKey
+  if (value.startsWith('tag:') && value.length > 'tag:'.length) return value as NavKey
+  return 'all'
 }
 
 /** 把当前界面偏好写入主进程(失败静默:偏好丢失不应影响使用) */
 function persistUiPrefs(): void {
   try {
     const s = useUI.getState()
-    const prefs: UiPrefs = { view: s.view, colw: s.colw, inspHidden: s.inspHidden, cbarOpen: s.cbarOpen }
+    const prefs: UiPrefs = {
+      view: s.view,
+      colw: s.colw,
+      inspHidden: s.inspHidden,
+      cbarOpen: s.cbarOpen,
+      nav: s.nav
+    }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
 }
@@ -59,7 +78,8 @@ export async function restoreUiPrefs(): Promise<void> {
       view,
       colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
       inspHidden: parsed.inspHidden === true,
-      cbarOpen: parsed.cbarOpen === true
+      cbarOpen: parsed.cbarOpen === true,
+      nav: parseNav(parsed.nav)
     })
   } catch { /* 读取失败保持默认 */ }
 }
@@ -464,7 +484,10 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     nav: 'all',
-    setNav: (nav) => set({ nav }),
+    setNav: (nav) => {
+      set({ nav })
+      persistUiPrefs()
+    },
     search: '',
     setSearch: (search) => set({ search }),
 
