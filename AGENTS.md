@@ -1,52 +1,51 @@
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-21 -->
+
 # AGENTS.md
 
-> MediaHub 素材管理器 — Electron + React + TypeScript 桌面应用（electron-vite）。
-> 本文档写给 AI 代理/自动化工具；人类可读文档见 `docs/`。
+MediaHub 素材管理器 — 本地优先的 Electron 桌面应用（Electron 33 · electron-vite 2 · React 18 · TS 5.6 · Vitest 4）。
+写给 AI 代理；架构细节见 `docs/ARCHITECTURE.md`，能力规范见 `openspec/specs/`。
 
-## Project
-
-- **name:** mediahub — v0.1.0
-- **stack:** Electron 33 · electron-vite 2 · React 18 · TypeScript 5.6 · Vite 5 · Vitest 4
-- **key deps:** `better-sqlite3`（本地库）、`sharp`（缩略图）、`ffmpeg-static`（视频元数据）、`three`（3D 预览）、`zustand`（前端状态）、`lucide-static`（图标）、`@tanstack/react-virtual`（虚拟列表）、`chokidar`（文件监听）
+**Precedence:** 离改动文件最近的 `AGENTS.md` 优先（closest AGENTS.md wins）；根文件只放全局约定。
 
 ## Commands
 
-| Command | What it does |
-|---------|--------------|
-| `npm run dev` | 启动 Electron 开发（`electron-vite dev`） |
-| `npm run build` | 构建到 `out/` |
-| `npm run start` | electron-vite preview |
-| `npm run test` | 先跑 `node tools/rebuild-native-dual.mjs --ensure`，再 `vitest run` |
-| `npm run rebuild:native` | 为 better-sqlite3 electron-rebuild |
-| `npm run rebuild:native:dual` | 双架构重建原生模块 |
-| `npm run typecheck` | 先 node 后 web 两侧 `tsc --noEmit` |
-| `npm run typecheck:node` / `typecheck:web` | 分侧类型检查 |
-
-入口启动器：`启动.bat`（切到脚本所在目录后 `npm run dev`）。
+| Task | Command | 说明 |
+|------|---------|------|
+| 开发 | `npm run dev` | electron-vite dev；dev 下 9223 是无头调试桥 |
+| 类型检查 | `npm run typecheck` | node + web 两侧 tsc --noEmit |
+| 测试 | `npm run test` | 先 ensure 原生双 ABI，再 vitest run |
+| 单测 | `npm run test -- tests/xxx.test.ts` | 参数追加给 vitest，只跑一个文件 |
+| 构建 | `npm run build` | 产物在 out/ |
+| 原生重建 | `npm run rebuild:native:dual` | 动原生依赖后必跑 |
+| 双击启动 | `启动.bat` | 先 cd 到脚本目录再跑 dev |
 
 ## Structure
 
 ```
-src/main/     Electron 主进程；services/ 含 db、scan、media、eagle、fingerprint、watch、videoMeta、store、sqlite 等
-src/preload/  预加载脚本 + index.d.ts
-src/renderer/ React UI（components/ data/ store/ styles/）；public/gltf/draco 为 GLTF Draco 解码器
-src/shared/   主/渲染进程共享类型（types.ts）
-tools/        开发工具脚本（mjs/cjs/ps1）
-tests/        测试
-docs/         文档
-openspec/     OpenSpec 变更规范
+src/main/           主进程：index.ts 生命周期/窗口、ipc.ts 全部 handler、events.ts 推送
+src/main/services/  单一职责服务（db/store/scan/watch/media/folders/palette/…）
+src/preload/        contextBridge 暴露 windowApi；src/renderer/src/ 为 React（components/data/store/styles）
+tests/              vitest 用例   tools/ 开发与无头验证脚本   openspec/ 规范
 ```
 
-## Conventions
+## Scoped AGENTS.md (MUST read when working in these directories)
 
-- **进程模型：** 主进程（main）与渲染进程（renderer）经 preload 暴露的 IPC 通信；跨进程共享数据类型定义在 `src/shared/types.ts`。
-- **原生依赖：** `better-sqlite3`、`sharp` 需按平台/架构重建，走 `npm run rebuild:native:dual`；二进制镜像配置在 `.npmrc`。
-- **TypeScript：** src 分 `node`（main/preload）与 `web`（renderer）两个 tsconfig；改动类型边界后跑 `npm run typecheck`。
-- **路径：** 工作区路径含中文与空格，PowerShell 下使用 `-LiteralPath`；文件 I/O 保持 UTF-8。
+- [src/AGENTS.md](./src/AGENTS.md) — 主进程 / 预加载 / 渲染进程约定与模块地图
+- [tests/AGENTS.md](./tests/AGENTS.md) — 测试约定
 
-## Agent Guidelines
+## 非显然的坑（改前必读）
 
-- 改动前先跑 `npm run typecheck`；涉及原生模块再跑 `npm run rebuild:native:dual`。
-- 不要提交 `out/`、`node_modules/`、`artifacts/`、`素材/`（见 `.gitignore`）。
-- 遵循 agent-rules 约定：通过 `generate-agents.sh` 生成时，仅 `<!-- GENERATED -->` 标记内由脚本覆盖，标记外的手工内容保留。
-- 本文件由人工按 agent-rules 规范编写；agent-rules 的 `generate/verify-*.sh` 需 bash，当前环境（Windows PowerShell，无 bash）无法运行 bash 脚本，命令与文件均为手工核对。
+| 症状 | 真相 |
+|------|------|
+| `node -e "require('better-sqlite3')"` 报 ERR_DLOPEN_FAILED | 双 ABI：默认二进制是 Electron ABI。查库用 npx electron 跑 .cjs 脚本，且脚本必须放在项目目录内才能解析依赖 |
+| 新加的 windowApi 方法在渲染层是 undefined | HMR 只重载渲染层；改 preload 必须完整重启 Electron |
+| 窗口拖不动 / 浮层点了没反应 | 标题栏拖拽由 Titlebar.tsx 的 openMenu 决定；任何覆盖顶部 48px 的浮层都会吃掉拖拽区 |
+| 改了主题却玻璃发灰 | 新表面要用 tokens.css 的 --sheen-* / --surface 令牌；用了 backdrop-filter 就得补 :root[data-theme="dark"] 对应规则 |
+
+## Boundaries
+
+- 改动后跑 `npm run typecheck`；测试只写一层（集成测试能说清的不要再写 e2e），一次性验证用临时脚本且不进套件。
+- 新增任何界面状态（开关 / 视图 / 面板可见性）默认走持久化（`uiPrefs` / `preferences` / `app_state`），重启后必须还在。
+- 素材只经 `media://` 协议读（services/media.ts 用 realPathWithinRoot 兜底），不要让渲染层直接读盘。
+- 不要提交 `out/`、`node_modules/`、`artifacts/`、`素材/`；路径含中文与空格，PowerShell 用 `-LiteralPath`。
+- 别再造「索引外部目录」：该概念已删除，`index_sources` / `source_index_id` 仅是旧库迁移的兼容层。
