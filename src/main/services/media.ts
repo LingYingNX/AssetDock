@@ -32,6 +32,14 @@ export function registerMediaProtocol(): void {
       const st = await fsp.stat(realAbs).catch(() => null)
       if (!st || !st.isFile()) return new Response('not found', { status: 404 })
       const type = MIME[extname(realAbs).toLowerCase()] ?? 'application/octet-stream'
+      // 预览 URL 带指纹版本参数(?v=),内容变化即换 URL,可安全长缓存:
+      // 切换文件夹时命中 Chromium 缓存而非重下整张原图。无指纹时用 last-modified 兜底。
+      const versioned = (u.searchParams.get('v') ?? '') !== ''
+      const cacheHeaders: Record<string, string> = {
+        'last-modified': st.mtime.toUTCString(),
+        'cache-control': versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate'
+      }
+      if (versioned) cacheHeaders.etag = `"${u.searchParams.get('v')}"`
       const range = request.headers.get('range')
       if (range) {
         const m = range.match(/bytes=(\d*)-(\d*)/)
@@ -47,14 +55,15 @@ export function registerMediaProtocol(): void {
             'content-type': type,
             'content-length': String(end - start + 1),
             'content-range': `bytes ${start}-${end}/${total}`,
-            'accept-ranges': 'bytes'
+            'accept-ranges': 'bytes',
+            ...cacheHeaders
           }
         })
       }
       const stream = createReadStream(realAbs)
       return new Response(Readable.toWeb(stream) as ReadableStream, {
         status: 200,
-        headers: { 'content-type': type, 'content-length': String(st.size), 'accept-ranges': 'bytes' }
+        headers: { 'content-type': type, 'content-length': String(st.size), 'accept-ranges': 'bytes', ...cacheHeaders }
       })
     } catch (e) {
       return new Response('error: ' + String(e), { status: 500 })

@@ -27,6 +27,20 @@
 - **WHEN** 用户打开含旧缩略图缓存的资源库
 - **THEN** 旧缓存目录被删除，素材仍可直接从原文件预览
 
+### Requirement: 预览缓存与重挂载
+
+`media://` 响应 SHALL 携带缓存头:预览 URL 带指纹版本参数(`?v=`)时返回 `cache-control: public, max-age=31536000, immutable` 与对应 `etag`,使切换文件夹时命中 Chromium 缓存而不重新下载原文件;无指纹时 SHALL 返回 `cache-control: public, max-age=0, must-revalidate` 并以 `last-modified` 兜底。卡片 SHALL 记住已成功解码的预览 URL,重新挂载时直接以可见态渲染,SHALL NOT 再次播放 `opacity: 0` 入场;指纹变化导致 URL 变化时 SHALL 视为未解码并正常淡入。
+
+#### Scenario: 切走再切回同一文件夹
+
+- **WHEN** 用户离开某文件夹后返回
+- **THEN** 该文件夹的缩略图以已解码状态直接显示,不出现整片重新淡入
+
+#### Scenario: 首次浏览新文件夹
+
+- **WHEN** 用户首次进入一个未浏览过的文件夹
+- **THEN** 缩略图仍按 `opacity: 0` → 1 正常淡入
+
 ### Requirement: media 安全协议
 渲染层 SHALL 经自定义 `media://` 协议读取当前资源库内的原始文件(灯箱大图/视频播放);协议 SHALL 仅放行该库目录本身及其真正子路径，拒绝库外任意路径、目录穿越、符号链接或 Junction 导向的越界路径，以及仅共享字符串前缀的相邻目录，并支持视频 Range 请求。
 

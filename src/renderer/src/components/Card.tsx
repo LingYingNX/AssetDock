@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import type { Asset } from '../data/types'
@@ -31,7 +32,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
-  const [imgLoaded, setImgLoaded] = useState(false)
+  // 已解码过的预览直接以可见态挂载:切换文件夹时卡片会重挂载,
+  // 若从 opacity:0 重新淡入,用户看到的就是缩略图重新刷新。
+  const previewKey = a.previewUrl ?? ''
+  const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
   const [modelFailed, setModelFailed] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -151,7 +155,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             src={a.previewUrl}
             alt={a.name}
             className={imgLoaded ? 'loaded' : ''}
-            onLoad={() => setImgLoaded(true)}
+            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
             draggable={false}
           />
         ) : a.dbId != null && isVideo ? (
@@ -161,14 +165,14 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             muted={hoverSound !== true}
             preload="auto"
             className={imgLoaded ? 'loaded' : ''}
-            onLoadedData={() => setImgLoaded(true)}
+            onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
           />
         ) : a.previewUrl && a.type === 'image' ? (
           <img
             src={`/@fs/${a.previewUrl}`}
             alt={a.name}
             className={imgLoaded ? 'loaded' : ''}
-            onLoad={() => setImgLoaded(true)}
+            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
             draggable={false}
           />
         ) : a.previewUrl && isVideo ? (
@@ -178,7 +182,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             muted={hoverSound !== true}
             preload="auto"
             className={imgLoaded ? 'loaded' : ''}
-            onLoadedMetadata={() => setImgLoaded(true)}
+            onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
           />
         ) : null}
 
