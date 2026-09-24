@@ -101,7 +101,10 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     return parts.map((_, i) => parts.slice(0, i + 1).join('/'))
   }
   const folders = folderChain(relPath)
-  const sourceUrl = `media://${r.library_id as number}/${encodeURIComponent(relPath)}?v=${encodeURIComponent(String(r.fingerprint ?? ''))}`
+  const fingerprint = encodeURIComponent(String(r.fingerprint ?? ''))
+  // 网格卡片走 640px 缩略图缓存(?thumb=1);大图查看与播放走原图
+  const originalUrl = `media://${r.library_id as number}/${encodeURIComponent(relPath)}?v=${fingerprint}`
+  const sourceUrl = `${originalUrl}&thumb=1`
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
@@ -132,7 +135,7 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     sourceUrl: (r.source_url as string) ?? undefined,
     palette: JSON.parse((r.palette as string) || '[]') as PaletteColor[],
     previewUrl: sourceUrl,
-    originalUrl: sourceUrl,
+    originalUrl,
     absPath: r.absPath as string,
     deletedAt: (r.deleted_at as string) ?? undefined
   }
@@ -452,13 +455,15 @@ export const useUI = create<UIState>((set, get) => {
           if (asset.libraryId !== t.libraryId || !asset.relPath) return asset
           const relPath = rebaseFolderPath(asset.relPath, source, optimistic.path)
           if (relPath === asset.relPath) return asset
-          const mediaUrl = `media://${asset.libraryId}/${encodeURIComponent(relPath)}?v=${encodeURIComponent(String(asset.fingerprint ?? ''))}`
+          const fingerprint = encodeURIComponent(String(asset.fingerprint ?? ''))
+          const originalUrl = `media://${asset.libraryId}/${encodeURIComponent(relPath)}?v=${fingerprint}`
+          const previewUrl = `${originalUrl}&thumb=1`
           return {
             ...asset,
             relPath,
             folders: asset.folders.map((folder) => rebaseFolderPath(folder, source, optimistic.path)),
-            previewUrl: mediaUrl,
-            originalUrl: mediaUrl
+            previewUrl,
+            originalUrl
           }
         })
       }))

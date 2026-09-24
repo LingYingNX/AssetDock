@@ -22,8 +22,9 @@ describe('UI store', () => {
       palette: '[]'
     })
 
-    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp')
-    expect(asset.originalUrl).toBe(asset.previewUrl)
+    // 原图 URL 不带 thumb;卡片预览 URL 指向缩略图缓存
+    expect(asset.originalUrl).toBe('media://7/same.jpg?v=fp')
+    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp&thumb=1')
   })
 
   it('uses the local path for asset classification', async () => {

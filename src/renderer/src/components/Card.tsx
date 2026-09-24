@@ -161,7 +161,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         ) : a.dbId != null && isVideo ? (
           <video
             ref={videoRef}
-            src={a.previewUrl}
+            /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
+            src={a.originalUrl}
             muted={hoverSound !== true}
             preload="auto"
             className={imgLoaded ? 'loaded' : ''}

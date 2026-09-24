@@ -16,6 +16,7 @@ import { migrateLegacySources } from './services/legacySourceMigration'
 import { probeVideo } from './services/videoMeta'
 import { ensureLibraryStorage, getLibHandle, hasLibDb, migrateLibrary } from './services/libraryDb'
 import { assertLibraryFolder, createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from './services/folders'
+import { collectOrphanThumbs, pruneMissingThumbs, removeThumbs, retargetThumb } from './services/thumbs'
 
 const watchers = new Map<string, FSWatcher>()
 const migrationFailures: string[] = []
@@ -170,6 +171,17 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
         migrationFailures.push(l.name)
       }
     }
+    // 缩略图对账:剔除清单里的失效条目、清理不再被引用的残留文件(含旧尺寸)
+    void (async () => {
+      const s = scopeFor(l.id)
+      if (!s) return
+      await pruneMissingThumbs(s.libPath).catch(() => undefined)
+      const live = new Set(
+        (s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ?').all(l.id) as { fingerprint: string }[])
+          .map((row) => row.fingerprint)
+      )
+      await collectOrphanThumbs(s.libPath, live).catch(() => undefined)
+    })()
     attachRootWatcher(l.id, l.path)
     void enrichMissingMeta(l.id)
     void enrichMissingPalette(l.id)
@@ -343,6 +355,11 @@ export function registerIpc(userData: string): void {
         placement
       )
       replaceFolderOrders(s.db, libraryId, ordered)
+      // 缩略图按指纹命名,文件夹移动后文件继续有效,只需同步清单里的路径记录
+      if (path !== sourcePath) {
+        const moved = s.db.prepare('SELECT fingerprint, rel_path FROM assets WHERE library_id = ? AND rel_path LIKE ?').all(libraryId, sourcePath + '/%') as { fingerprint: string; rel_path: string }[]
+        for (const row of moved) await retargetThumb(s.libPath, row.fingerprint, row.rel_path)
+      }
       send('assets:changed', { libraryId })
       return { path }
     } catch (error) {
@@ -392,6 +409,9 @@ export function registerIpc(userData: string): void {
       try {
         const relPath = await moveLibraryAsset(s.libPath, row.rel_path, targetFolder)
         s.db.prepare('UPDATE assets SET rel_path = ? WHERE id = ? AND library_id = ?').run(relPath, assetId, libraryId)
+        // 缩略图按指纹命名,移动后文件继续有效,只需同步清单里的可读路径
+        const fpRow = s.db.prepare('SELECT fingerprint FROM assets WHERE id = ?').get(assetId) as { fingerprint: string } | undefined
+        if (fpRow) await retargetThumb(s.libPath, fpRow.fingerprint, relPath)
         setAssetFolder(s.db, assetId, null)
         moved++
       } catch (error) {
@@ -479,7 +499,10 @@ export function registerIpc(userData: string): void {
   ipcMain.handle('assets:emptyTrash', async (_e, libraryId: number) => {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
+    const doomed = s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').all(libraryId) as { fingerprint: string }[]
     const purged = s.db.prepare('DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').run(libraryId).changes
+    // 原图记录被清除时同步删除缩略图与清单条目
+    await removeThumbs(s.libPath, doomed.map((r) => r.fingerprint))
     return { ok: true, purged }
   })
 
@@ -491,6 +514,9 @@ export function registerIpc(userData: string): void {
     let purged = 0
     for (const r of rows) {
       const gone = await access(absPathFor(s, r.rel_path)).then(() => false, () => true)
+      // 文件确实已不在磁盘上:同步清理缩略图
+      const fp = s.db.prepare('SELECT fingerprint FROM assets WHERE id = ?').get(r.id) as { fingerprint: string } | undefined
+      if (fp) await removeThumbs(s.libPath, [fp.fingerprint])
       if (gone) {
         s.db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
         purged++

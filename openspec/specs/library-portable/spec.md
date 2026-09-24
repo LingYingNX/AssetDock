@@ -5,11 +5,11 @@
 ## Requirements
 
 ### Requirement: 库内存储
-每个库 SHALL 在其目录下维护 `.mediahub/library.db`(SQLite)与按需元数据目录 `.mediahub/metadata/`;素材、标签、收藏、评分、备注、回收站全部落库于该文件;应用 SHALL NOT 在库目录内产生其他散落文件;`.mediahub/` 永不作为素材入库。应用 SHALL NOT 在库内生成缩略图缓存。
+每个库 SHALL 在其目录下维护 `.mediahub/library.db`(SQLite)、按需元数据目录 `.mediahub/metadata/` 与缩略图缓存目录 `.mediahub/thumbs/`;素材、标签、收藏、评分、备注、回收站全部落库于该文件;`.mediahub/` 永不作为素材入库,库根目录不产生散落文件。`.mediahub/thumbs/` 为可重建的派生缓存,随库目录一并携带,缺失时按需重新生成。
 
 #### Scenario: 库目录可整体携带
 - **WHEN** 复制整个素材库文件夹(含 .mediahub)到另一台机器并以本应用打开副本
-- **THEN** 素材、标签、评分与已创建的元数据原样可用,预览直接读取库内原文件
+- **THEN** 素材、标签、评分、已创建的元数据与缩略图缓存原样可用;缩略图缺失时按需重新生成
 
 ### Requirement: 启动迁移
 应用启动 SHALL 检测全局目录中的既有库数据并迁移到对应库目录的 .mediahub/library.db:复制式迁移(源数据保留不删除);迁移后所有读写走库内库;迁移失败(库目录不可写等)SHALL 回退继续使用全局数据并提示。
