@@ -12,7 +12,7 @@
 .filterbar{display:flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-bottom:1px solid var(--line)}
 .filterbar .btn{height:27px;padding:0 9px;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap}
 .filterbar .btn:hover{border-color:var(--line2);color:var(--t1)}
-.filterbar .btn.on{background:var(--acc-soft);border-color:rgba(10,132,255,.35);color:#0A5AC2}
+.filterbar .btn.on{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
 .filterbar .btn .dot{width:7px;height:7px}
 .filterbar .btn .chev{width:12px;height:12px;color:var(--t3)}
 .cbtn{width:28px;height:27px;border-radius:9px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line)}
@@ -31,22 +31,23 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .fresult b{color:var(--t1);font-weight:600}
 .vr{width:1px;height:18px;background:var(--line2)}
 
-/* ---------- 色带 ---------- */
-.cbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)}
-.ct{font-size:11.5px;color:var(--t3);white-space:nowrap}
-.cstrip{display:flex;gap:7px;flex:1;min-width:0;flex-wrap:wrap}
-.cs{position:relative;width:52px;height:30px;border-radius:9px;border:1px solid rgba(255,255,255,.55);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:transform var(--dur-press) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
-.cs:hover{transform:scale(1.06)}
-.cs:active{transform:scale(.97)}
+/* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
+.color-menu{width:max-content;padding:6px}
+.color-menu-head{padding:2px 6px 7px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t3)}
+.color-grid{display:grid;grid-template-columns:repeat(4,46px);gap:6px}
+.cs{position:relative;width:46px;height:32px;border-radius:6px;border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-fast) var(--ease-out)}
+.cs:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .cs em{font:600 9px/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
-.cs.on{box-shadow:0 0 0 2px var(--bg0),0 0 0 3.5px var(--acc);transform:scale(1.02)}
+.cs.on{box-shadow:0 0 0 2px var(--menu-solid),0 0 0 3.5px var(--acc)}
+.color-menu-clear{margin-top:7px;width:100%;height:26px;border-radius:6px;font-size:12px;color:var(--acc2);background:var(--acc-soft)}
+.color-menu-clear:hover{color:var(--t1)}
 
 /* ---------- 空态 ---------- */
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--t3)}
 .empty svg{animation:empty-in var(--dur-base) var(--ease-out) both}
 .empty .ic{width:34px;height:34px;opacity:.5}
 .empty .btn-clear{height:28px;padding:0 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);font-size:12px;color:var(--t2)}
-.empty .btn-clear:hover{border-color:var(--acc-line);color:#0A5AC2}
+.empty .btn-clear:hover{border-color:var(--acc-line);color:var(--acc2)}
 
 /* 空态入场:插画轻微浮入,避免内容凭空出现 */
 @keyframes empty-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}

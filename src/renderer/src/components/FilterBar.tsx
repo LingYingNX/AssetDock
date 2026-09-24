@@ -95,7 +95,7 @@ export function FilterBar(): React.JSX.Element {
       <button
         className={`cbtn${cbarOpen ? ' on' : ''}`}
         id="colorBtn"
-        title="颜色构造:展示当前文件夹图片主色,点选颜色即筛选"
+        title="颜色构造:展示当前视图图片主色,点选颜色即筛选"
         onClick={toggleCbar}
       >
         <span className="cball" />

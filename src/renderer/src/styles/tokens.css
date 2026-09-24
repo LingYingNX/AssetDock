@@ -88,9 +88,9 @@ body{
     linear-gradient(165deg,#0C1017,#0A0E14 50%,#0B1119);
 }
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-/* 全局按压反馈:高频元素只做极轻的缩放,160ms 内完成 */
-button:active:not([disabled]){transform:scale(.97)}
-button{transition:transform var(--dur-press) var(--ease-out)}
+/* 按压反馈:只降透明度,不做缩放,避免高频点击时整排元素抖动 */
+button:active:not([disabled]){opacity:.82}
+button{transition:opacity var(--dur-press) var(--ease-out)}
 input,textarea{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:3px solid transparent;background-clip:content-box;border-radius:8px}

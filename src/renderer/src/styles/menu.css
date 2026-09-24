@@ -7,7 +7,7 @@
 .menu button:hover .ic{color:var(--acc2)}
 .menu button .k{margin-left:auto;color:var(--t3);font-size:11px}
 .menu button .sub{margin-left:auto;color:var(--t3)}
-.menu .sep{height:1px;background:rgba(18,26,22,.08);margin:5px 4px}
+.menu .sep{height:1px;background:var(--hatch);margin:5px 4px}
 .menu .ck{width:15px;display:grid;place-items:center;color:var(--acc);flex:none}
 .menu .ck .ic{width:13px;height:13px;stroke-width:2.4}
 .menu .noicon{padding-left:34px}
@@ -39,7 +39,7 @@
 .menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
 .menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:11px}
-.menu.pick-menu button.on{color:#0A5AC2;font-weight:600;background:var(--acc-soft)}
+.menu.pick-menu button.on{color:var(--acc2);font-weight:600;background:var(--acc-soft)}
 .menu.pick-menu button.on::before{content:"";position:absolute;left:1px;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--acc)}
 .menu.pick-menu button.on:hover{background:var(--acc-soft)}
 .menu.pick-menu button.on .ic{color:var(--acc2)}
@@ -58,7 +58,7 @@
 .settings-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .settings-menu-shortcut{padding-left:8px;color:var(--t3);font-size:12px;white-space:nowrap}
 .settings-menu-arrow{width:12px!important;height:12px!important;margin-left:8px;color:var(--t3)}
-.settings-menu-divider{height:1px;background:rgba(18,26,22,.08);margin:5px 8px}
+.settings-menu-divider{height:1px;background:var(--hatch);margin:5px 8px}
 
 @keyframes settings-submenu-in{from{opacity:0;transform:translateX(4px) scale(.98)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}

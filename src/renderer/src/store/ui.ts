@@ -515,7 +515,7 @@ export const useUI = create<UIState>((set, get) => {
     setStripColor: (stripColor) => set({ stripColor }),
     cbarOpen: false,
     toggleCbar: () => {
-      set((s) => ({ cbarOpen: !s.cbarOpen }))
+      set((s) => ({ cbarOpen: !s.cbarOpen, openMenu: null }))
       persistUiPrefs()
     },
 
@@ -633,7 +633,7 @@ export const useUI = create<UIState>((set, get) => {
     setRenaming: (renaming) => set({ renaming }),
 
     openMenu: null,
-    setOpenMenu: (openMenu) => set({ openMenu }),
+    setOpenMenu: (openMenu) => set(openMenu ? { openMenu, cbarOpen: false } : { openMenu }),
     ctxMenu: null,
     setCtxMenu: (ctxMenu) => set({ ctxMenu }),
 
