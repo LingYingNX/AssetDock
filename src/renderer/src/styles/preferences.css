@@ -1,8 +1,8 @@
 /* ============================ 偏好设置 ============================ */
 /* 遮罩从标题栏下方开始:标题栏保持可拖拽,窗口在对话框打开时仍能移动 */
 .pref-backdrop{position:fixed;left:0;right:0;top:48px;bottom:0;z-index:100;display:grid;place-items:center;background:rgba(222,239,255,.38);backdrop-filter:blur(12px) saturate(1.2);-webkit-app-region:no-drag}
-/* 宽度按 16:9 取当前内容高度(≈355px)对应的值;高度仍随内容自适应,内容多时封顶后内部滚动 */
-.pref-dialog{width:min(632px,calc(100vw - 48px));max-height:min(640px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28),0 0 1px rgba(255,255,255,.8)}
+/* 尺寸固定,切换分类不再跳变;内容超出时在内容区内滚动 */
+.pref-dialog{width:min(632px,calc(100vw - 48px));height:min(514px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28),0 0 1px rgba(255,255,255,.8)}
 .glass-preferences{background:linear-gradient(135deg,var(--sheen-1),var(--sheen-2)),var(--surface);backdrop-filter:blur(28px) saturate(1.55)}
 .pref-header{height:48px;padding:0 16px 0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
 .pref-title{font-size:14px;font-weight:600;color:var(--t1)}
