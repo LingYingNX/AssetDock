@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-21 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-30 -->
 
 # AGENTS.md — src
 
@@ -12,7 +12,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 |----|------|------|
 | main | `src/main/index.ts` | 单实例锁、窗口创建、`media://` 协议注册、退出前 checkpoint 各库 |
 | main | `src/main/ipc.ts` | 全部 `ipcMain` handler；库作用域解析 `scopeFor()` 在此 |
-| main | `src/main/events.ts` | 向渲染层推送（`library:scan` / `assets:changed` / `window:maximized`） |
+| main | `src/main/events.ts` | 向渲染层推送；通道白名单同步在 `preload/index.ts` 的 `on:` 联合类型里，**加事件要两处都改**（当前：`library:scan` / `assets:changed` / `window:maximized` / `thumbs:progress`） |
 | preload | `src/preload/index.ts` | `contextBridge.exposeInMainWorld('windowApi', api)`；`index.d.ts` 声明 Window 类型 |
 | renderer | `src/renderer/src/App.tsx` | 启动引导、全局快捷键、Ctrl+滚轮列宽 |
 
@@ -30,13 +30,21 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `watch.ts` | chokidar 增量监听（`awaitWriteFinish` + 300ms 防抖，`usePolling:false`） |
 | `ignore.ts` | 扩展名白名单与忽略规则（扫描/监听共用，勿另写一份） |
 | `fingerprint.ts` | 缓存指纹 sha1(前 64KB + size + mtime) 截 20 位 |
+| `cacheFiles.ts` | 原子写（临时文件 + rename）与 `isWithinRoot`；**所有落盘都走它，别自己 writeFile** |
 | `folders.ts` | 库内文件夹增删改移、素材移动/导出，含 `..` 逃逸与保留名校验 |
-| `media.ts` | `media://<libraryId>/<relPath>` 协议，支持 Range |
+| `media.ts` | `media://<libraryId>/<relPath>` 协议，支持 Range；`mimeForExtension` 是导出的纯函数 |
+| `thumbs.ts` | 缩略图缓存 `<库>/.mediahub/thumbs/`：指纹命名 + `index.json` 清单；`ensureThumb` 串行队列，CSS 走离屏截图分支 |
 | `palette.ts` | k-means 主色提取（worker_threads） |
 | `videoMeta.ts` | ffmpeg 抽视频元数据；解析函数与进程调用分离，便于测试 |
+| `textAssets.ts` | 文本素材（CSS）读写：原子替换回写 + 同步 size/fingerprint/mtime |
+| `clipboardFiles.ts` | 把文件写进系统剪贴板（CF_HDROP）；**绕开 Electron clipboard，走 PowerShell Set-Clipboard** |
+| `cssPreview.ts` | CSS 预览骨架的主进程侧：定位同目录同名 `.html`（纯拼接逻辑在 `src/shared/`） |
+| `cssThumb.ts` | CSS 缩略图：离屏 `BrowserWindow` 渲染真实效果后截图 |
 | `eagle.ts` / `legacySourceMigration.ts` | Eagle 库导入；旧库一次性迁移（**只读兼容层，勿扩展**） |
 
-渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs`）、`data/`（`dataset.ts` 演示快照 / `query.ts` 过滤与格式化 / `theme.ts` 主题）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。
+`src/shared/` 是跨进程共享的纯逻辑层（无 fs / 无 electron）：`types.ts` 共享类型、`cssPreview.ts` 纯字符串拼接（主进程截图与渲染层预览共用，保证两条路径视觉一致）。约定：**新文件若要被两侧同时引用，放 `src/shared/`，并确认它在两个 tsconfig 的 include 里**（当前两侧都已含 `src/shared/**/*.ts`）。
+
+渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs` / `showToast`）、`data/`（`dataset.ts` 演示快照 / `query.ts` 过滤与格式化 / `theme.ts` 主题 / `preview-cache.ts` 已解码预览 URL 集合，避免重挂载时二次淡入 / `folder-drag.ts` 拖拽规则 / `asset-drag.ts` 拖拽数据编解码）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。
 
 ## Setup & environment
 
@@ -71,8 +79,42 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 - **加一个 IPC 能力**：`ipc.ts` 加 handler（含 `libraryId` 作用域解析）→ `preload/index.ts` 的 `api` 暴露 → `windowApi` 类型自动跟随 → 改完**重启 Electron**（HMR 不重载 preload）。
 - **加一个库内文件操作**：写进 `folders.ts`，复用 `libraryPath()` 做路径校验，不要在各 handler 里自己拼路径。
+- **加一个素材类型**（如已有 `.css`）：五处联动，缺一处就出现「能扫到但用不了」——
+  1. `ignore.ts` 的 `EXT_WHITELIST` 加扩展名，并扩 `AssetKind` 联合类型；
+  2. `store.ts` 的 `AssetRow.type`、`renderer/src/data/types.ts` 的 `AssetType`/`AssetFormat` 跟随；
+  3. `media.ts` 的 `MIME` 表加映射（漏了会被当 `application/octet-stream`，Chromium 只当下载）；
+  4. 无位图的类型要绕开 sharp：`thumbs.ts` 的 `ensureThumb` 按 `format` 分支，并经 `thumbJobRows` 纳入预热；
+  5. 渲染侧 `query.ts` 的 `matchFilters`/`infoRows`、`Card.tsx`、`FilterBar.tsx` 的格式项。
 - **加一个可测的解析逻辑**：像 `videoMeta.ts` 那样把纯函数与进程调用分开导出，测试只测纯函数。
 - 参照现有模块写法，别引入新范式；新增依赖前先看 `package.json` 是否已有等价能力。
+
+## 复用清单（需要什么 → 用哪个，别重写）
+
+| 需要 | 用这个 | 位置 | 陷阱 |
+|------|--------|------|------|
+| 校验路径在库根内（需解析符号链接） | `realPathWithinRoot` | `libResolve.ts` | 返回真实路径或 `null`；**文件操作一律用它**，`join` + `startsWith` 挡不住 Junction 逃逸 |
+| 校验路径在根下（纯字符串，不碰盘） | `isPathWithinRoot` | `libResolve.ts` | 与 `cacheFiles.ts` 的 `isWithinRoot` 是**两个近似但不同用途**的函数：这个用于库作用域早期拒绝，那个用于缓存目录内部；改一处别以为改了全部 |
+| 落盘写入 | `writeFileAtomically` | `cacheFiles.ts` | 自己 `writeFile` 会在中断时留半截文件 |
+| 判断文件存在 | `fileExists` | `cacheFiles.ts` | 别用 `try { await stat() } catch`，各处写法要统一 |
+| 删除文件并清理空目录 | `removeFileAndPrune` | `cacheFiles.ts` | 场景是缩略图缓存清理，别用于素材文件 |
+| 扩展名 → 类型/格式 | `detectKind` / `isIgnored` | `ignore.ts` | 返回 `{ type, format }` 或 `null`（不在白名单）。扫描与监听共用，**别在别处再写一份白名单** |
+| 扩展名 → MIME | `mimeForExtension` | `media.ts` | 未知扩展名兜底 `application/octet-stream`；别在协议 handler 里内联判断 |
+| 内容指纹 | `fingerprint(absPath, size, mtimeMs)` | `fingerprint.ts` | 只读前 64KB + size + mtime；改算法等于全库缓存失效 |
+| IPC 层库作用域解析 | `scopeFor` | `ipc.ts` | 模块私有；每个 handler 第一步就该调它取作用域 |
+| 素材行 upsert | `upsertScanned(d, libraryId, entries)` | `store.ts` | 返回逐条结果数组；保留 id/标签/评分/文件夹，只更新变化字段 |
+| 预览 HTML 拼接 | `buildPreviewHtml` / `stripScripts` / `shellFromCss` | `src/shared/cssPreview.ts` | 主进程截图与渲染层预览**必须共用这一份**，否则两条路径视觉漂移 |
+| 界面偏好持久化 | `persistUiPrefs` / `parseNav` | `renderer/src/store/ui.ts` | 模块私有函数；读取时逐字段校验、坏值回退默认 |
+
+## 缩略图缓存约定
+
+`<库>/.mediahub/thumbs/` 是**缓存**，权威来源始终是库内数据库的 `assets` 表。
+
+| 规则 | 原因 |
+|------|------|
+| 文件名 = `${指纹}-${THUMB_SIZE}.jpg`（内容 + 尺寸寻址） | 原图移动/改名后缓存继续有效；改尺寸自然生成新文件，旧尺寸变孤儿由对账清理 |
+| 删除前先查 `fingerprintInUse` | 同内容素材共用一张图，直接删会误伤仍在引用的素材 |
+| `index.json` 记 `version` + `size`，不匹配即整体作废 | 换渲染算法或尺寸时不致新旧混淆、网格出现模糊图 |
+| 写入走 `cacheFiles.ts` 的原子路径 | 中断不会留下半截 JPEG |
 
 ## Examples
 

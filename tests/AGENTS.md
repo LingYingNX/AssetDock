@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-21 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-30 -->
 
 # AGENTS.md — tests
 
@@ -6,9 +6,11 @@
 
 ## Overview
 
-vitest 用例，直接 import `src/` 下的真实模块（无 mock 框架、无 fixtures 目录）。没有 `vitest.config.ts`，走默认配置，因此**测试文件放 `tests/` 顶层**，import 路径用 `../src/...`。
+vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）。没有 `vitest.config.ts`，走默认配置，因此**测试文件放 `tests/` 顶层**，import 路径用 `../src/...`。
 
 覆盖对象是**主进程的纯逻辑与文件/库行为**，外加渲染层的纯函数（`query.ts`、`folder-drag.ts`、`ui.ts` 的 `rowToAsset`）。React 组件与真实 Electron 窗口不在测试范围内。
+
+`vi.mock` 是例外而非常规：只有被测分支会牵动真实 Electron（`BrowserWindow` 离屏截图）时才用，目前仅 `cssThumb.test.ts` 一处。其余一律注入或断言纯函数——**不要在别处照抄这个 mock 写法**。
 
 ## Key Files
 
@@ -21,6 +23,12 @@ vitest 用例，直接 import `src/` 下的真实模块（无 mock 框架、无 
 | `store` 相关（`eagle` / `legacySourceMigration`） | Eagle 导入与旧库一次性迁移 |
 | `palette.test.ts` / `meta.test.ts` | k-means 主色、ffmpeg 文本解析（纯函数） |
 | `query.test.ts` / `folderDrag.test.ts` / `uiStore.test.ts` | 渲染层纯函数与 `rowToAsset` 的 URL 拼装 |
+| `cssPreview.test.ts` | 预览 HTML 拼接：脚本剥离、CSP 注入、`</style>` 转义、由选择器反推骨架、同名 HTML 优先、内置骨架兜底 |
+| `cssThumb.test.ts` | CSS 缩略图分支：用 `vi.mock` 替掉离屏渲染器，断言「CSS 走渲染器而非 sharp」与失败回退占位图 |
+| `textAssets.test.ts` | 文本素材读写：越界路径拒绝、原子回写后 size/fingerprint 同步 |
+| `mime.test.ts` | `mimeForExtension` 的扩展名映射（含 CSS/HTML/TXT 与未知扩展名兜底） |
+| `clipboardFiles.test.ts` | 剪贴板路径的 PowerShell 数组转义（单引号双写，路径含单引号时不致整条命令失败） |
+| `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
 
 ## Setup & environment
 
