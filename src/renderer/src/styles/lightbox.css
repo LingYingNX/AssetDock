@@ -34,3 +34,39 @@
 .pv-strip .fr.cur{opacity:1;border-color:var(--acc)}
 .pv-strip .fr .cube3d{--cs:20px;animation:none}
 .pv-side{background:var(--bg1);backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--line);border-radius:var(--r-l);padding:14px;overflow-y:auto}
+
+/* CSS 编辑器:左代码右预览;与该模式无关的右侧信息栏让位给编辑区 */
+.pv-body.style-body{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);grid-template-rows:minmax(0,1fr)}
+.pv-body.style-body>.pv-side{display:none}
+.css-edit{grid-column:1/-1;display:grid;grid-template-columns:subgrid;gap:14px;min-height:0;position:relative}
+.css-pane{display:flex;flex-direction:column;min-width:0;min-height:0;border:1px solid var(--line);border-radius:var(--r-l);overflow:hidden;background:var(--bg1);backdrop-filter:blur(20px) saturate(1.3)}
+.css-pane-h{display:flex;align-items:center;gap:9px;height:38px;padding:0 10px 0 12px;border-bottom:1px solid var(--line);flex:none}
+.css-pane-t{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--t1)}
+.css-pane-t .ic{width:13px;height:13px;color:var(--acc2)}
+.css-pane-h .v3-chip{margin-left:auto;height:24px}
+.css-pane-note{font-size:11px;color:var(--t3);margin-left:auto}
+.css-state{font-size:11px;color:var(--t3)}
+.css-state.dirty{color:var(--acc2);font-weight:600}
+.css-tabs{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:7px;background:var(--surface);border:1px solid var(--line)}
+.css-tab{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border:0;border-radius:5px;background:none;color:var(--t3);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.css-tab .ic{width:12px;height:12px}
+.css-tab:hover{color:var(--t1)}
+.css-tab.on{background:var(--sheen-1);color:var(--t1)}
+.css-tab.on .ic{color:var(--acc2)}
+.css-dot{width:5px;height:5px;border-radius:50%;background:var(--acc2);margin-left:1px}
+.css-hint{display:flex;align-items:center;gap:7px;flex:none;padding:7px 12px;border-top:1px solid var(--line);color:var(--t3);font-size:11.5px;background:var(--surface)}
+.css-hint .ic{width:13px;height:13px;flex:none;color:var(--acc2)}
+.css-pane-h .css-state{margin-left:auto}
+.css-pane-h .css-state+.v3-chip{margin-left:8px}
+.css-code{flex:1;min-height:0;resize:none;border:0;outline:none;padding:12px 14px;background:transparent;color:var(--t1);font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.6;tab-size:2;white-space:pre;overflow:auto}
+.css-code::placeholder{color:var(--t3)}
+.css-preview{flex:1;min-height:0;width:100%;border:0;background:#fff}
+.css-error{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--t3);font-size:12.5px}
+.css-error .ic{width:15px;height:15px}
+.css-toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;font-size:12px;background:var(--bg4);border:1px solid var(--line2);box-shadow:0 10px 28px rgba(20,60,120,.18);backdrop-filter:blur(16px) saturate(1.6)}
+.css-toast.err{color:#B4232C}
+:root[data-theme="dark"] .css-toast.err{color:#FF9AA2}
+
+@media (max-width:1180px){
+  .pv-body.style-body{grid-template-columns:minmax(0,1fr)}
+}

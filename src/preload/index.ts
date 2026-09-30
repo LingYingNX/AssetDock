@@ -50,8 +50,14 @@ const api = {
     removeTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:removeTag', libraryId, id, name),
     emptyTrash: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('assets:emptyTrash', libraryId),
+    purge: (libraryId: number, ids: number[]): Promise<{ ok: boolean; purged: number }> => ipcRenderer.invoke('assets:purge', libraryId, ids),
+    readText: (libraryId: number, id: number): Promise<{ text: string; sizeBytes: number } | { error: string }> => ipcRenderer.invoke('assets:readText', libraryId, id),
+    writeText: (libraryId: number, id: number, text: string): Promise<{ ok: true; fingerprint: string; sizeBytes: number } | { error: string }> => ipcRenderer.invoke('assets:writeText', libraryId, id, text),
+    readShell: (libraryId: number, id: number): Promise<{ text: string | null; exists: boolean; sizeBytes?: number } | { error: string }> => ipcRenderer.invoke('assets:readShell', libraryId, id),
+    writeShell: (libraryId: number, id: number, html: string): Promise<{ ok: true } | { error: string }> => ipcRenderer.invoke('assets:writeShell', libraryId, id, html),
+    rename: (libraryId: number, id: number, newName: string): Promise<{ ok: true; relPath: string } | { error: string }> => ipcRenderer.invoke('assets:rename', libraryId, id, newName),
     purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId),
-    copy: (libraryId: number, ids: number[]): Promise<{ copied: number } | { error: string }> =>
+    copy: (libraryId: number, ids: number[]): Promise<{ copied: number; mode: 'files' | 'paths'; skipped: string[]; paths: string[] } | { error: string }> =>
       ipcRenderer.invoke('assets:copy', libraryId, ids),
     export: (libraryId: number, ids: number[]): Promise<{ exported: number } | { canceled: true } | { error: string; exported?: number }> =>
       ipcRenderer.invoke('assets:export', libraryId, ids)
@@ -74,7 +80,7 @@ const api = {
   },
 
   /** 白名单事件订阅 */
-  on: (channel: 'library:scan' | 'assets:changed' | 'window:maximized', cb: (payload: unknown) => void): (() => void) => {
+  on: (channel: 'library:scan' | 'assets:changed' | 'window:maximized' | 'thumbs:progress', cb: (payload: unknown) => void): (() => void) => {
     const h = (_e: unknown, payload: unknown): void => cb(payload)
     ipcRenderer.on(channel, h)
     return () => {

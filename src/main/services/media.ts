@@ -2,14 +2,21 @@ import { protocol } from 'electron'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { Readable } from 'node:stream'
 import { join, extname } from 'node:path'
-import { realPathWithinRoot, registryLib } from './libResolve'
+import { libScopeDb, realPathWithinRoot, registryLib } from './libResolve'
 import { ensureThumb } from './thumbs'
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
   '.gif': 'image/gif', '.svg': 'image/svg+xml', '.psd': 'image/vnd.adobe.photoshop',
   '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.glb': 'model/gltf-binary',
-  '.fbx': 'application/octet-stream', '.obj': 'text/plain'
+  '.fbx': 'application/octet-stream', '.obj': 'text/plain',
+  // CSS 素材及其同名预览骨架经协议读取:必须是文本类型,否则 Chromium 会当二进制处理
+  '.css': 'text/css', '.html': 'text/html', '.htm': 'text/html', '.txt': 'text/plain'
+}
+
+/** 扩展名 → MIME;未知扩展名按二进制流处理(纯函数,便于测试) */
+export function mimeForExtension(ext: string): string {
+  return MIME[ext.toLowerCase()] ?? 'application/octet-stream'
 }
 
 /** 只有位图能生成缩略图;PSD/SVG 交给占位图路径,视频仍走原文件首帧 */
@@ -56,17 +63,30 @@ export function registerMediaProtocol(): void {
       const fingerprint = u.searchParams.get('v') ?? ''
 
       if (u.searchParams.get('thumb') === '1' && fingerprint) {
-        // 位图直接缩放;PSD/SVG 等无法解码的格式由 ensureThumb 生成占位图。
-        // 视频与三维不传 thumb=1(播放/渲染必须用原文件),因此不会走到这里。
-        const meta = { relPath: rel, mtimeMs: st.mtimeMs, sizeBytes: st.size }
-        const result = await ensureThumb(lib.path, realPath, fingerprint, ext.slice(1).toUpperCase(), meta)
-        const cached = await fsp.stat(result.path).catch(() => null)
-        if (cached?.isFile()) {
-          return serveFile(result.path, 'image/jpeg', true, cached.size)
+        // 回收站素材的缩略图已随删除清理;此处不再懒生成,直接回原图,避免把刚删掉的缓存写回来
+        const scope = libScopeDb(libId)
+        const trashed = scope
+          ? !!scope.db.prepare('SELECT 1 FROM assets WHERE library_id = ? AND rel_path = ? AND deleted_at IS NOT NULL LIMIT 1').get(libId, rel)
+          : false
+        if (!trashed) {
+          // 位图直接缩放;PSD/SVG 等无法解码的格式由 ensureThumb 生成占位图。
+          // 视频与三维不传 thumb=1(播放/渲染必须用原文件),因此不会走到这里。
+          const meta = { relPath: rel, mtimeMs: st.mtimeMs, sizeBytes: st.size }
+          const format = ext.slice(1).toUpperCase()
+          // CSS 封面由配套 HTML 决定外观,把 HTML 摘要一并作为缓存依据
+          // 动态导入:cssThumb 顶层依赖 electron,不能在模块加载期把它拉进依赖图
+          const look = format === 'CSS'
+            ? await import('./cssThumb').then((m) => m.resolveShellSignature(lib.path, realPath))
+            : ''
+          const result = await ensureThumb(lib.path, realPath, fingerprint, format, meta, look)
+          const cached = await fsp.stat(result.path).catch(() => null)
+          if (cached?.isFile()) {
+            return serveFile(result.path, 'image/jpeg', true, cached.size)
+          }
+          // 生成失败(极端情况)时静默回退原图,不阻塞网格
         }
-        // 生成失败(极端情况)时静默回退原图,不阻塞网格
       }
-      const type = MIME[ext] ?? 'application/octet-stream'
+      const type = mimeForExtension(ext)
       // 预览 URL 带指纹版本参数(?v=),内容变化即换 URL,可安全长缓存:
       // 切换文件夹时命中 Chromium 缓存而非重下整张原图。无指纹时用 last-modified 兜底。
       const versioned = fingerprint !== ''

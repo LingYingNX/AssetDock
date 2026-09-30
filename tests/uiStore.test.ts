@@ -26,6 +26,31 @@ describe('UI store', () => {
     expect(asset.originalUrl).toBe('media://7/same.jpg?v=fp')
     expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp&thumb=1')
   })
+  it('does not request thumbnails for assets already in the trash', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { rowToAsset } = await import('../src/renderer/src/store/ui')
+    const asset = rowToAsset({
+      id: 5,
+      library_id: 7,
+      rel_path: 'trashed.jpg',
+      fingerprint: 'fp',
+      type: 'image',
+      format: 'JPG',
+      name: 'trashed',
+      size_bytes: 1,
+      imported_at: '2026-09-05T00:00',
+      rating: 0,
+      favorite: 0,
+      review_flag: 0,
+      tags: [],
+      palette: '[]',
+      deleted_at: '2026-09-27T00:00:00.000Z'
+    })
+
+    // 回收站素材的缩略图已清理,预览必须回退原图,否则 media:// 会把缓存写回来
+    expect(asset.originalUrl).toBe('media://7/trashed.jpg?v=fp')
+    expect(asset.previewUrl).toBe('media://7/trashed.jpg?v=fp')
+  })
 
   it('uses the local path for asset classification', async () => {
     vi.stubGlobal('window', { windowApi: {} })

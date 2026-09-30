@@ -51,11 +51,17 @@ export function Inspector(): React.JSX.Element {
           <div className="fname">
             {renaming && activeId === a.id ? (
               <input
-                autoFocus
                 defaultValue={a.name}
+                ref={(el) => {
+                  // 像 Windows 那样进入即全选,直接输入就能替换整个名字
+                  if (!el) return
+                  el.focus()
+                  el.select()
+                }}
                 onBlur={(e) => renameAsset(a.id, e.target.value.trim() || a.name)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') renameAsset(a.id, (e.target as HTMLInputElement).value.trim() || a.name)
+                  if (e.key === 'Escape') setRenaming(false)
                 }}
               />
             ) : (

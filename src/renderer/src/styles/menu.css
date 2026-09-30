@@ -1,6 +1,9 @@
 /* ============================ 菜单 ============================ */
-.menu{position:fixed;z-index:90;min-width:196px;border-radius:var(--r-menu);padding:5px;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top left;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
-.menu.open{opacity:1;transform:none;pointer-events:auto}
+/* 菜单只在打开时挂载,挂载首帧就已带 .open。普通声明不产生「起始帧」,
+   过渡会被浏览器直接跳过——起始态必须写进 @starting-style 才会真正播放。 */
+.menu{position:fixed;z-index:90;min-width:196px;border-radius:var(--r-menu);padding:5px;transform-origin:top left;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.menu.open{opacity:1;transform:none;pointer-events:auto;
+  @starting-style{opacity:0;transform:translateY(-4px) scale(.98)}}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--t1);text-align:left}
 .menu button:hover{background:var(--acc-soft);color:var(--t1)}
 .menu button .ic{width:15px;height:15px;color:var(--t2)}
@@ -19,10 +22,20 @@
 .menu .danger button .ic{color:var(--danger)}
 .menu .danger button:hover{background:var(--danger-soft)}
 
-/* 子菜单:相对父项定位,向右展开 */
+/* 子菜单:相对父项定位,向右展开;垂直位置由 ContextMenu 量测后内联覆盖(top 默认值仅作兜底) */
 .menu .menu-row{position:relative}
 .menu button .sub.ic{width:11px;height:11px;margin-left:auto;color:var(--t3)}
 .menu .submenu{position:absolute;left:calc(100% + 3px);top:-5px;min-width:172px;max-height:min(320px,60vh);overflow-y:auto}
+/* 主菜单靠右时向右展开会推出窗口,翻到左侧 */
+.menu .submenu.flip-x{left:auto;right:calc(100% + 3px)}
+/* 列表被 max-height 截断时末项会切一半,需要「下面还有」的线索。
+   用伪元素做渐隐,而不是 background-image:菜单背景由 .glass-menu 的 background 简写
+   设置(深色主题那条特异性 0,3,0),长写的 background-image 会被它重置成 none。
+   渐隐层只在滚动容器可滚时才有意义,因此默认隐藏,由 JS 打上 has-more 类后显示。 */
+.menu .submenu.has-more::after{
+  content:"";position:sticky;left:0;bottom:0;display:block;height:22px;margin-top:-22px;
+  pointer-events:none;background:linear-gradient(rgba(0,0,0,0),var(--menu-solid));
+}
 .menu .submenu button .sub{margin-left:auto;padding-left:10px;color:var(--t3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu .submenu .dot{width:8px;height:8px}
 .menu-empty{padding:7px 9px;font-size:12px;color:var(--t3)}
@@ -44,15 +57,19 @@
 .menu.pick-menu button.on:hover{background:var(--acc-soft)}
 .menu.pick-menu button.on .ic{color:var(--acc2)}
 .menu.pick-menu .sep{margin:4px 2px}
+/* 右对齐定位的菜单(筛选/视图下拉)从触发按钮的右下方生长,与左对齐菜单区分原点 */
+.menu.pick-menu.menu-anchor-right{transform-origin:top right}
 
 /* 齿轮菜单:沿用当前浅色玻璃主题 */
-.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:6px 0;user-select:none;color:var(--t1)}
+.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:6px 0;user-select:none;color:var(--t1);
+  transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out);
+  @starting-style{opacity:0;transform:translateY(-4px) scale(.98)}}
 .settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color .15s ease}
 .settings-menu button.settings-menu-item{border:0;background:transparent;font:inherit;text-align:left}
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
 .settings-menu-parent{position:relative;display:flex;align-self:stretch}
 .settings-menu-parent>.settings-menu-item{flex:1}
-.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-7px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in .16s ease-out both}
+.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-7px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in var(--dur-fast) var(--ease-out) both}
 .settings-menu-icon{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:10px;color:var(--t2)}
 .settings-menu-icon .ic{width:16px;height:16px}
 .settings-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

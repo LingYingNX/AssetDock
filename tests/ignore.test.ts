@@ -27,4 +27,11 @@ describe('ignore rules', () => {
     expect(detectKind('a.obj')).toEqual({ type: 'model', format: 'OBJ' })
     expect(detectKind('a.txt')).toBeNull()
   })
+  it('css is a whitelisted style asset', () => {
+    expect(isIgnored('a.css')).toBe(false)
+    expect(isIgnored('styles/loader.CSS')).toBe(false)
+    expect(detectKind('a/b.css')).toEqual({ type: 'style', format: 'CSS' })
+    // 白名单只认扩展名,内容不是 CSS 也照样入库(与其它格式一致)
+    expect(isIgnored('.hidden/a.css')).toBe(true)
+  })
 })

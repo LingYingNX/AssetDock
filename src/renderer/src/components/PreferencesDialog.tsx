@@ -42,6 +42,48 @@ const SECTIONS: { key: SectionKey; icon: string; label: string }[] = [
   { key: 'notify', icon: 'info', label: '通知' }
 ]
 
+/**
+ * 快捷键清单。只列 App.tsx / CssEditor.tsx 里真实绑定的键,不写"计划中"的条目——
+ * 文档与实现漂移比没有文档更坏。
+ */
+const SHORTCUT_GROUPS: { group: string; items: { keys: string; label: string }[] }[] = [
+  {
+    group: '全局',
+    items: [
+      { keys: 'Ctrl F', label: '聚焦搜索框' },
+      { keys: 'Ctrl ,', label: '打开偏好设置' },
+      { keys: 'Ctrl A', label: '全选当前视图' },
+      { keys: 'Ctrl 滚轮', label: '调整缩略图大小' },
+      { keys: 'Esc', label: '关闭浮层 / 取消重命名' }
+    ]
+  },
+  {
+    group: '素材浏览',
+    items: [
+      { keys: 'Enter', label: '打开选中素材' },
+      { keys: 'Space', label: '选中 / 取消选中' },
+      { keys: 'F2', label: '重命名' },
+      { keys: 'Del', label: '移入回收站' },
+      { keys: 'Ctrl I', label: '查看文件信息' }
+    ]
+  },
+  {
+    group: '灯箱',
+    items: [
+      { keys: '← →', label: '上一个 / 下一个' },
+      { keys: 'Enter', label: '收藏 / 取消收藏' },
+      { keys: 'Esc', label: '关闭' }
+    ]
+  },
+  {
+    group: 'CSS 编辑器',
+    items: [
+      { keys: 'Ctrl S', label: '保存到原文件' },
+      { keys: 'Tab', label: '插入两个空格' }
+    ]
+  }
+]
+
 function readPreferences(raw: string | null): PreferenceState {
   if (!raw) return DEFAULT_PREFERENCES
   try {
@@ -266,13 +308,34 @@ export function PreferencesDialog(): React.JSX.Element | null {
     </section>
   )
 
+  /* 快捷键为只读速查表:无草稿可改,故不参与「保存/取消」那套提交语义 */
+  const shortcutsPane = (
+    <>
+      {SHORTCUT_GROUPS.map((g) => (
+        <section className="pref-section" key={g.group}>
+          <h2>{g.group}</h2>
+          <div className="pref-keys">
+            {g.items.map((it) => (
+              <div className="pref-key-row" key={`${g.group}-${it.label}`}>
+                <span className="pref-key-label">{it.label}</span>
+                <span className="pref-key-combo">
+                  {it.keys.split(' ').map((k) => <kbd key={k}>{k}</kbd>)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </>
+  )
+
   const panes: Record<SectionKey, React.JSX.Element> = {
     general: generalPane,
     library: libraryPane,
     media: mediaPane,
     interface: emptyPane('界面'),
     operation: emptyPane('操作'),
-    shortcuts: emptyPane('快捷键'),
+    shortcuts: shortcutsPane,
     notify: emptyPane('通知')
   }
 
@@ -300,10 +363,13 @@ export function PreferencesDialog(): React.JSX.Element | null {
           </nav>
           <main className="pref-content">
             {panes[section]}
-            <footer className="pref-footer">
-              <button className="pref-cancel" onClick={close}>取消</button>
-              <button className="pref-save" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>
-            </footer>
+            {/* 快捷键是只读速查表,没有草稿可提交,给出「保存」只会让人以为需要点 */}
+            {section === 'shortcuts' ? null : (
+              <footer className="pref-footer">
+                <button className="pref-cancel" onClick={close}>取消</button>
+                <button className="pref-save" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>
+              </footer>
+            )}
           </main>
         </div>
       </section>

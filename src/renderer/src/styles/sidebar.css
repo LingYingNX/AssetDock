@@ -9,18 +9,26 @@
 .side-sec{margin-bottom:14px}
 .side-title{display:flex;align-items:center;gap:6px;padding:0 10px 6px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--t3)}
 .side-title-label{display:flex;align-items:center;gap:6px}
-.folder-section-title{font-size:14px;font-weight:700;letter-spacing:0;color:var(--t1)}
+/* 四个分组标题同级:素材管理曾单独抬到 14px/700,把平行导航组切成了两个视觉等级,
+   而文件夹树并不比其它三组更重要。它额外需要的只是右侧「新建文件夹」按钮的对齐。 */
+.folder-section-title{flex:1;min-width:0}
 .side-title .ic{width:12px;height:12px}
 .side-title-add{display:grid;place-items:center;width:22px;height:22px;margin-left:auto;border-radius:5px;color:var(--t3)}
 .side-title-add:hover{color:var(--t1);background:var(--bg3)}
 .side-title-add .ic{width:14px;height:14px}
-.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:29px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:12.5px;text-align:left;position:relative;transition:background .2s ease,color .2s ease}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:29px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:12.5px;text-align:left;position:relative;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out)}
 .nav-item:hover{background:var(--bg3);color:var(--t1)}
+/* 左缘指示条:两态都常驻、只切换 scaleX,才能与背景同步过渡;
+   若仅在 .on 上创建伪元素,切换时是凭空出现而非展开,过渡不会播放 */
+.nav-item::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--acc);transform:scaleX(0);transform-origin:left center;transition:transform var(--dur-press) var(--ease-out)}
 .nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
-.nav-item.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--acc)}
+.nav-item.on::before{transform:scaleX(1)}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:15px;height:15px;color:var(--t3)}
-.nav-item .cnt{margin-left:auto;font-size:11px;color:var(--t3)}
+.nav-item .cnt{margin-left:auto;font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums}
+/* 计数是浏览文件夹时的决策信息(哪个目录有货),纯 --t3 太弱扫不到;
+   但零值不该抢注意力——空目录的 0 保持最弱,有内容的才提到 --t2 */
+.nav-item .cnt.has-items{color:var(--t2);font-weight:500}
 .nav-item .chev{width:11px;height:11px;color:var(--t3);flex:none;transition:transform .15s}
 .nav-item.exp .chev{transform:rotate(90deg)}
 .nav-tree{margin-left:14px;padding-left:9px;border-left:1px solid var(--line)}
@@ -39,11 +47,15 @@
 .folder-row.folder-drop-before::after,.folder-row.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;height:3px;border-radius:2px;background:var(--acc);box-shadow:0 0 0 1px rgba(255,255,255,.72);z-index:2;pointer-events:none}
 .folder-row.folder-drop-before::after{top:-1px}
 .folder-row.folder-drop-after::after{bottom:-1px}
-.folder-toggle{position:absolute;z-index:2;left:calc(10px + var(--folder-depth, 0) * 14px);top:3px;display:grid;place-items:center;width:14px;height:22px;border:0;border-radius:2px;background:none;color:var(--t3);cursor:pointer;transition:background-color .14s ease,color .14s ease}
+/* 展开箭头:占满整行高度并给足宽度,高频点按目标不能要求精确瞄准。
+   层级步进必须 ≥ 箭头宽度,否则深层箭头会压住浅层箭头与该层文字。 */
+.folder-toggle{position:absolute;z-index:2;left:calc(var(--folder-indent, 10px) + var(--folder-depth, 0) * var(--folder-step, 22px));top:0;display:grid;place-items:center;width:24px;height:29px;border:0;border-radius:4px;background:none;color:var(--t3);cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out)}
 .folder-toggle:hover{background:var(--bg3);color:var(--t1)}
-.folder-toggle .ic{width:10px;height:10px;stroke-width:2.2;transform:scale(2);transform-origin:center;transition:transform .14s ease}
-.folder-toggle.open .ic{transform:rotate(90deg) scale(2)}
-.folder-row.has-children .folder-main{margin-left:14px}
+/* 直接给足尺寸,不用 scale 放大——缩放会把描边一起放大,与同行其它图标重量不一致 */
+.folder-toggle .ic{width:16px;height:16px;transform:rotate(0deg);transition:transform var(--dur-press) var(--ease-out)}
+.folder-toggle.open .ic{transform:rotate(90deg)}
+/* 文字起点统一让开箭头宽度:缩进只表达层级,不表达有无子节点 */
+.folder-row .folder-main{margin-left:24px}
 .folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
 .folder-main:hover{background:none}
 .folder-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

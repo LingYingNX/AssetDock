@@ -16,6 +16,8 @@ import { Inspector } from './components/Inspector'
 import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
 import { PreferencesDialog } from './components/PreferencesDialog'
+import { ThumbProgress } from './components/ThumbProgress'
+import { Toast } from './components/Toast'
 
 export default function App(): React.JSX.Element {
   const s = useUI()
@@ -59,6 +61,10 @@ export default function App(): React.JSX.Element {
     const un3 = window.windowApi.on('window:maximized', (p) => {
       document.documentElement.dataset.maximized = p === true ? 'true' : 'false'
     })
+    const un4 = window.windowApi.on('thumbs:progress', (p) => {
+      const d = p as { phase: string; done: number; total: number }
+      useUI.getState().setThumbProgress(d.phase === 'done' || d.total <= 0 ? null : { done: d.done, total: d.total })
+    })
     const un2 = window.windowApi.on('library:scan', (p) => {
       const d = p as { phase: string; done: number }
       useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
@@ -68,6 +74,7 @@ export default function App(): React.JSX.Element {
       un1()
       un2()
       un3()
+      un4()
     }
   }, [])
 
@@ -183,6 +190,8 @@ export default function App(): React.JSX.Element {
       <Lightbox />
       <ContextMenu />
       <PreferencesDialog />
+      <ThumbProgress />
+      <Toast />
     </div>
   )
 }

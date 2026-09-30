@@ -151,6 +151,35 @@ export async function moveLibraryAsset(root: string, relPath: string, targetFold
   return libraryPath(root, relative(resolve(root), target)).rel
 }
 
+/**
+ * 重命名库内素材文件:只换文件名,留在原目录。
+ *
+ * 扩展名沿用原文件的——用户输入的是「名字」,不该因为漏写后缀就把 .png 变成无后缀文件。
+ * 磁盘是权威来源:同一个文件夹里已有同名文件时直接报错,不静默改名。
+ */
+export async function renameLibraryAsset(root: string, relPath: string, newName: string): Promise<string> {
+  const source = libraryPath(root, relPath)
+  if (!(await lstat(source.abs)).isFile()) fail('素材不存在')
+
+  const base = folderName(newName)
+  const dot = source.rel.lastIndexOf('.')
+  const ext = dot > source.rel.lastIndexOf('/') ? source.rel.slice(dot) : ''
+  // 用户自己带上原扩展名时不重复叠加
+  const fileName = base.toLowerCase().endsWith(ext.toLowerCase()) ? base : `${base}${ext}`
+
+  const destination = resolve(dirname(source.abs), fileName)
+  const target = libraryPath(root, relative(resolve(root), destination))
+  if (target.abs.toLowerCase() === source.abs.toLowerCase()) return source.rel
+  try {
+    await lstat(target.abs)
+    fail('同目录下已有同名文件')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  await rename(source.abs, target.abs)
+  return target.rel
+}
+
 export async function assertLibraryFolder(root: string, targetFolder: string): Promise<void> {
   const target = targetFolderPath(root, targetFolder)
   if (!(await lstat(target.abs)).isDirectory()) fail('目标文件夹不存在')

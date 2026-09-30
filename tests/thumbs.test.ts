@@ -7,13 +7,18 @@ import {
   ensureThumb,
   flushManifest,
   pruneMissingThumbs,
+  generateMissingThumbs,
   removeThumb,
+  removeThumbsIfUnused,
   resetThumbCache,
   retargetThumb,
   thumbManifestPath,
   thumbPath,
-  thumbsDir
+  thumbsDir,
+  thumbJobRows
 } from '../src/main/services/thumbs'
+import { openMemoryDb } from '../src/main/services/db'
+import { upsertScanned } from '../src/main/services/store'
 
 /** 生成一张真实可解码的小 PNG 作为原图 */
 async function writeImage(path: string, size = 800, color = { r: 30, g: 120, b: 200 }): Promise<void> {
@@ -44,6 +49,26 @@ describe('thumbnail cache', () => {
 
   const meta = (relPath = 'photo.png') => ({ relPath, mtimeMs: 1, sizeBytes: 100 })
 
+  it('selects css alongside bitmaps for thumbnail warmup, excluding video and 3D', async () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'lib', root)
+    try {
+      const add = (relPath: string, type: string, format: string, fingerprint: string) =>
+        upsertScanned(db, 1, [{ relPath, name: relPath.replace(/\.[^.]+$/, ''), type: type as never, format, sizeBytes: 10, mtimeMs: 1, fingerprint }])
+      add('photo.png', 'image', 'PNG', 'fp-img')
+      add('loader.css', 'style', 'CSS', 'fp-css')
+      add('clip.mp4', 'video', 'MP4', 'fp-vid')
+      add('model.glb', 'model', 'GLB', 'fp-model')
+      // 回收站与缺失素材不该进入预热
+      add('trashed.png', 'image', 'PNG', 'fp-trash')
+      db.prepare("UPDATE assets SET deleted_at = '2026-09-27T00:00:00.000Z' WHERE fingerprint = 'fp-trash'").run()
+
+      const rows = thumbJobRows(db, 1)
+      expect(rows.map((r) => r.rel_path).sort()).toEqual(['loader.css', 'photo.png'])
+    } finally {
+      db.close()
+    }
+  })
   it('generates a 640px jpg and records it in the manifest', async () => {
     const result = await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
     expect(result.placeholder).toBe(false)
@@ -111,6 +136,37 @@ describe('thumbnail cache', () => {
     expect(manifest.entries[fingerprint]).toBeUndefined()
   })
 
+  it('generates only the missing thumbs and reports progress', async () => {
+    await ensureThumb(root, absImage, 'fp-a', 'PNG', { relPath: 'photo.png', mtimeMs: 1, sizeBytes: 100 })
+    await flushManifest(root)
+    const other = join(root, 'other.png')
+    await writeImage(other, 600, { r: 200, g: 60, b: 60 })
+
+    const seen: number[] = []
+    const result = await generateMissingThumbs(
+      root,
+      [
+        { absPath: absImage, fingerprint: 'fp-a', format: 'PNG', meta: { relPath: 'photo.png', mtimeMs: 1, sizeBytes: 100 } },
+        { absPath: other, fingerprint: 'fp-b', format: 'PNG', meta: { relPath: 'other.png', mtimeMs: 2, sizeBytes: 200 } }
+      ],
+      (done) => seen.push(done)
+    )
+
+    expect(result.total).toBe(1)
+    expect(result.generated).toBe(1)
+    expect(seen[seen.length - 1]).toBe(1)
+    expect(await exists(thumbPath(root, 'fp-b'))).toBe(true)
+  })
+
+  it('skips jobs whose fingerprint is already cached', async () => {
+    await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
+    await flushManifest(root)
+    const result = await generateMissingThumbs(root, [
+      { absPath: absImage, fingerprint, format: 'PNG', meta: meta() }
+    ])
+    expect(result.total).toBe(0)
+    expect(result.generated).toBe(0)
+  })
   it('prunes manifest entries whose file disappeared', async () => {
     await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
     await flushManifest(root)
@@ -143,5 +199,65 @@ describe('thumbnail cache', () => {
     await writeFile(thumbPath(root, 'live'), 'x')
     expect(await collectOrphanThumbs(root, new Set(['live']))).toBe(0)
     expect(await exists(thumbPath(root, 'live'))).toBe(true)
+  })
+
+  it('keeps the manifest file itself when collecting orphans', async () => {
+    await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
+    await flushManifest(root)
+    await collectOrphanThumbs(root, new Set([fingerprint]))
+    expect(await exists(thumbManifestPath(root))).toBe(true)
+  })
+
+  it('drops thumbnails and manifest entries that no live asset references', async () => {
+    await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
+    await flushManifest(root)
+    expect(await collectOrphanThumbs(root, new Set())).toBe(1)
+    expect(await exists(thumbPath(root, fingerprint))).toBe(false)
+    const manifest = JSON.parse(await readFile(thumbManifestPath(root), 'utf8'))
+    expect(manifest.entries[fingerprint]).toBeUndefined()
+  })
+})
+describe('shared fingerprint guard', () => {
+  let root = ''
+  const fingerprint = 'fp-shared'
+
+  beforeEach(async () => {
+    resetThumbCache()
+    root = await mkdtemp(join(tmpdir(), 'mediahub-guard-'))
+  })
+  afterEach(async () => {
+    resetThumbCache()
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const entry = (relPath: string) => ({
+    relPath, name: relPath.slice(0, relPath.lastIndexOf('.')), type: 'image' as const, format: 'JPG',
+    sizeBytes: 1, mtimeMs: 1, fingerprint
+  })
+
+  // 两张素材内容一致 => 同一个指纹 => 同一个缩略图文件
+  const seedTwoAssetsOnOneThumb = async () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
+    const [a, b] = upsertScanned(db, 1, [entry('a.jpg'), entry('b.jpg')])
+    await ensureThumb(root, join(root, 'a.jpg'), fingerprint, 'JPG', { relPath: 'a.jpg', mtimeMs: 1, sizeBytes: 1 })
+    await flushManifest(root)
+    return { db, a, b }
+  }
+
+  it('keeps the thumbnail while another live asset shares the fingerprint', async () => {
+    const { db, a } = await seedTwoAssetsOnOneThumb()
+    db.prepare('UPDATE assets SET deleted_at = ? WHERE id = ?').run('2026-01-01', a.assetId)
+    expect(await removeThumbsIfUnused(root, db, 1, [fingerprint])).toBe(0)
+    expect(await exists(thumbPath(root, fingerprint))).toBe(true)
+    db.close()
+  })
+
+  it('removes the thumbnail once no live asset references the fingerprint', async () => {
+    const { db, a, b } = await seedTwoAssetsOnOneThumb()
+    db.prepare('UPDATE assets SET deleted_at = ? WHERE id IN (?, ?)').run('2026-01-01', a.assetId, b.assetId)
+    expect(await removeThumbsIfUnused(root, db, 1, [fingerprint])).toBe(1)
+    expect(await exists(thumbPath(root, fingerprint))).toBe(false)
+    db.close()
   })
 })

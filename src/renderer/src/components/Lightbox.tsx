@@ -4,6 +4,7 @@ import { formatBytes, infoRows } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { Viewer3D, type ViewKey } from './Viewer3D'
+import { CssEditor } from './CssEditor'
 
 /** 舞台媒体加载失败占位 */
 function MediaFallback(): React.JSX.Element {
@@ -158,12 +159,15 @@ export function Lightbox(): React.JSX.Element | null {
   const visible = assets.filter((x) => !x.deletedAt)
   const idx = visible.findIndex((x) => x.id === a.id)
   const isModel = a.type === 'model'
+  const isStyle = a.type === 'style'
   const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
 
   const sub =
     a.type === 'model'
       ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
-      : `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.width}×${a.height} · ${formatBytes(a.sizeBytes)} · ${a.format}`
+      : a.type === 'style'
+        ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatBytes(a.sizeBytes)} · ${a.format}`
+        : `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.width}×${a.height} · ${formatBytes(a.sizeBytes)} · ${a.format}`
 
   /* 控制条动作(按真实/占位分流) */
   const onTurntable = (): void => {
@@ -249,7 +253,11 @@ export function Lightbox(): React.JSX.Element | null {
         </button>
       </div>
 
-      <div className="pv-body">
+      <div className={`pv-body${isStyle ? ' style-body' : ''}`}>
+        {isStyle ? (
+          <CssEditor a={a} />
+        ) : (
+        <>
         <div className="pv-stage">
           <div
             className="pv-frame"
@@ -383,6 +391,8 @@ export function Lightbox(): React.JSX.Element | null {
             </div>
           )}
         </div>
+        </>
+        )}
 
         <aside className="pv-side">
           <div className="insp-sec">

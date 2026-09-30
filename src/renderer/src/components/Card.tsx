@@ -61,7 +61,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         : undefined
 
   const meta =
-    a.type === 'model'
+    a.type === 'model' || a.type === 'style'
       ? [formatBytes(a.sizeBytes)]
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
@@ -133,7 +133,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         className={`thumb${a.thumbClass ? ` ${a.thumbClass}` : ''}`}
         style={ar ? ({ ['--ar' as string]: ar } as React.CSSProperties) : undefined}
         role="img"
-        aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : '图片'}缩略图:${a.name}`}
+        aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : '图片'}缩略图:${a.name}`}
       >
         {a.type === 'model' && a.dbId == null ? (
           <div className="c3d-wrap">
@@ -150,7 +150,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               onError={() => setModelFailed(true)}
             />
           </div>
-        ) : a.dbId != null && a.type === 'image' ? (
+        ) : a.dbId != null && (a.type === 'image' || a.type === 'style') ? (
           <img
             src={a.previewUrl}
             alt={a.name}
@@ -168,7 +168,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             className={imgLoaded ? 'loaded' : ''}
             onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
           />
-        ) : a.previewUrl && a.type === 'image' ? (
+        ) : a.previewUrl && (a.type === 'image' || a.type === 'style') ? (
           <img
             src={`/@fs/${a.previewUrl}`}
             alt={a.name}
@@ -225,7 +225,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           ) : null}
         </div>
         <span className="lc lc-type">{a.format}</span>
-        <span className="lc lc-res">{a.type === 'model' ? '三维' : formatResolution(a)}</span>
+        <span className="lc lc-res">{a.type === 'model' ? '三维' : a.type === 'style' ? '样式' : formatResolution(a)}</span>
         <span className="lc lc-size">{formatBytes(a.sizeBytes)}</span>
         <span className="lc lc-dur">{isVideo ? (a.duration ?? '—') : '—'}</span>
         <span className="lc lc-date">{formatRelativeDate(a.importedAt)}</span>

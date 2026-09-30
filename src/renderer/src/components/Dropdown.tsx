@@ -71,7 +71,7 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
   if (!open) return null
 
   const node = (
-    <div ref={ref} className={`menu glass-menu open pick-menu${compact ? ' compact-menu' : ''}`} role="menu">
+    <div ref={ref} className={`menu glass-menu open pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}`} role="menu">
       {items.map((it) => {
         const on = it.id === value
         return (

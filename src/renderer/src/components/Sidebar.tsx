@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { SWATCHES } from '../data/dataset'
 import { sidebarCounts } from '../data/query'
@@ -175,15 +175,15 @@ function DirTree({
         return (
           <div key={n.path}>
             {editingPath === n.path ? (
-              <div className="nav-item on folder-edit" style={{ paddingLeft: 10 + depth * 14 }}>
+              <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 22px))` }}>
                 <Icon name="folder" />
                 <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
-                <span className="cnt">{n.count}</span>
+                <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{n.count}</span>
               </div>
             ) : (
               <div
                 className={`nav-item folder-row${on ? ' on' : ''}${n.children.length > 0 ? ' has-children' : ''}`}
-                style={{ paddingLeft: 10 + depth * 14, '--folder-depth': depth } as React.CSSProperties}
+                style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 22px))`, '--folder-depth': depth } as React.CSSProperties}
                 draggable={n.movable}
                 onDragStart={(event) => {
                   if (!n.movable) return
@@ -236,7 +236,7 @@ function DirTree({
                 <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
                   <Icon name="folder" />
                   <span className="folder-label">{n.label}</span>
-                  <span className="cnt">{n.count}</span>
+                  <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{n.count}</span>
                 </button>
               </div>
             )}
@@ -286,12 +286,14 @@ export function Sidebar(): React.JSX.Element {
   const cancelFolderRename = useUI((s) => s.cancelFolderRename)
   const moveFolder = useUI((s) => s.moveFolder)
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
+  const collapsedFolders = useUI((s) => s.collapsedFolders)
+  const toggleFolderCollapsed = useUI((s) => s.toggleFolderCollapsed)
   const assetDropTargetRef = useRef<HTMLElement | null>(null)
   const folderDragPreviewRef = useRef<HTMLDivElement | null>(null)
   const folderDropTargetRef = useRef<HTMLDivElement | null>(null)
   const folderDropRef = useRef<FolderDrop | null>(null)
   const folderDragSourceRef = useRef<string | null>(null)
-  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(() => new Set())
+  const collapsedPaths = useMemo(() => new Set(collapsedFolders), [collapsedFolders])
   const c = sidebarCounts(assets)
   const tagStats = assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
     if (a.missing || a.deletedAt) return acc
@@ -320,12 +322,7 @@ export function Sidebar(): React.JSX.Element {
   }
 
   const toggleCollapsed = (path: string): void => {
-    setCollapsedPaths((paths) => {
-      const next = new Set(paths)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
+    toggleFolderCollapsed(path)
   }
 
   const updateFolderDrop = (element: HTMLDivElement | null, drop: FolderDrop | null): void => {
@@ -366,12 +363,14 @@ export function Sidebar(): React.JSX.Element {
     <aside className="sidebar glass-sidebar">
       <div className="side-scroll">
         <section className="side-sec">
-          <div className="side-title"><Icon name="clock" />快捷访问</div>
+          {/* 这一组装的是系统视图筛选(含回收站),不是"快捷入口";clock 图标同时被下面的
+              「最近导入」使用,重复会让人误以为两者相关 */}
+          <div className="side-title"><Icon name="sliders" />浏览</div>
           <button className={`nav-item${nav === 'all' ? ' on' : ''}`} onClick={() => setNav('all')}>
-            <Icon name="layers" />全部素材<span className="cnt">{c.all.toLocaleString('en-US')}</span>
+            <Icon name="layers" />全部素材<span className="cnt has-items">{c.all.toLocaleString('en-US')}</span>
           </button>
           <button className={`nav-item${nav === 'recent' ? ' on' : ''}`} onClick={() => setNav('recent')}>
-            <Icon name="clock" />最近导入<span className="cnt">{c.recent}</span>
+            <Icon name="clock" />最近导入<span className={`cnt${c.recent > 0 ? ' has-items' : ''}`}>{c.recent}</span>
           </button>
           <button
                 className={`nav-item${nav === 'untagged' ? ' on' : ''}`}
@@ -388,19 +387,19 @@ export function Sidebar(): React.JSX.Element {
             }}
             onDrop={(e) => moveDrop('', e)}
           >
-            <Icon name="inbox" />未分类<span className="cnt">{c.untagged}</span>
+            <Icon name="inbox" />未分类<span className={`cnt${c.untagged > 0 ? ' has-items' : ''}`}>{c.untagged}</span>
           </button>
           <button className={`nav-item${nav === 'fav' ? ' on' : ''}`} onClick={() => setNav('fav')}>
-            <Icon name="heart" />收藏<span className="cnt">{c.fav}</span>
+            <Icon name="heart" />收藏<span className={`cnt${c.fav > 0 ? ' has-items' : ''}`}>{c.fav}</span>
           </button>
           <button className={`nav-item${nav === 'trash' ? ' on' : ''}`} onClick={() => setNav('trash')}>
-            <Icon name="trash" />回收站<span className="cnt">{c.trash}</span>
+            <Icon name="trash" />回收站<span className={`cnt${c.trash > 0 ? ' has-items' : ''}`}>{c.trash}</span>
           </button>
         </section>
 
         <section className="side-sec">
           <div className="side-title">
-            <span className="side-title-label folder-section-title">素材管理</span>
+            <span className="side-title-label folder-section-title"><Icon name="folder" />素材管理</span>
             {mode === 'library' && (
               <button className="side-title-add" title="新建文件夹" aria-label="新建文件夹" onClick={createFolder}>
                 <Icon name="plus" />
@@ -454,7 +453,7 @@ export function Sidebar(): React.JSX.Element {
               <button key={name} className={`nav-item${nav === key ? ' on' : ''}`} onClick={() => setNav(key)}>
                 <span className="dot" style={{ background: info.color }} />
                 {name}
-                <span className="cnt">{info.n}</span>
+                <span className={`cnt${info.n > 0 ? ' has-items' : ''}`}>{info.n}</span>
               </button>
             )
           })}

@@ -37,6 +37,8 @@ interface UiPrefs {
   cbarOpen: boolean
   /** 上次停留的侧栏导航项(全部素材/文件夹/标签等) */
   nav: NavKey
+  /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留 */
+  collapsedFolders: string[]
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -50,6 +52,12 @@ function parseNav(value: unknown): NavKey {
   return 'all'
 }
 
+/** 校验折叠文件夹列表:只收非空字符串,坏值整体退回空(全部展开) */
+function parseCollapsedFolders(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((v): v is string => typeof v === 'string' && v !== '')
+}
+
 /** 把当前界面偏好写入主进程(失败静默:偏好丢失不应影响使用) */
 function persistUiPrefs(): void {
   try {
@@ -59,7 +67,8 @@ function persistUiPrefs(): void {
       colw: s.colw,
       inspHidden: s.inspHidden,
       cbarOpen: s.cbarOpen,
-      nav: s.nav
+      nav: s.nav,
+      collapsedFolders: [...s.collapsedFolders]
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -79,7 +88,8 @@ export async function restoreUiPrefs(): Promise<void> {
       colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
       inspHidden: parsed.inspHidden === true,
       cbarOpen: parsed.cbarOpen === true,
-      nav: parseNav(parsed.nav)
+      nav: parseNav(parsed.nav),
+      collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders)
     })
   } catch { /* 读取失败保持默认 */ }
   // 主题与音视频偏好存在 preferences 键(与设置页同一份记录),启动即应用
@@ -102,9 +112,9 @@ function rowToAsset(r: Record<string, unknown>): Asset {
   }
   const folders = folderChain(relPath)
   const fingerprint = encodeURIComponent(String(r.fingerprint ?? ''))
-  // 网格卡片走 640px 缩略图缓存(?thumb=1);大图查看与播放走原图
+  // 网格卡片走 640px 缩略图缓存(?thumb=1);回收站素材入库时已清理缩略图,不再请求它
   const originalUrl = `media://${r.library_id as number}/${encodeURIComponent(relPath)}?v=${fingerprint}`
-  const sourceUrl = `${originalUrl}&thumb=1`
+  const sourceUrl = r.deleted_at ? originalUrl : `${originalUrl}&thumb=1`
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
@@ -164,6 +174,12 @@ interface UIState {
   /* 数据源 */
   mode: 'empty' | 'library'
   scanProgress: string | null
+  /** 缩略图全量生成进度;null 表示没有正在进行的预热 */
+  thumbProgress: { done: number; total: number } | null
+  setThumbProgress: (p: { done: number; total: number } | null) => void
+  /** 一次性操作提示(复制/重命名等);自动消失,null 表示无提示 */
+  toast: { text: string; kind: 'ok' | 'warn' } | null
+  showToast: (text: string, kind?: 'ok' | 'warn') => void
   /** 列表悬浮自动播放(设置 → 音视频);只读镜像,由 preferences 同步 */
   hoverVideo: boolean
   hoverSound: boolean
@@ -173,6 +189,9 @@ interface UIState {
   folderPaths: string[]
   physicalFolderPaths: string[]
   folderEditPath: string | null
+  /** 已折叠的文件夹路径;跨重启保留,深树不必每次重新收起 */
+  collapsedFolders: string[]
+  toggleFolderCollapsed: (path: string) => void
   refreshFolders: () => void
   createFolder: () => void
   renameFolder: (path: string, name: string) => void
@@ -218,6 +237,7 @@ interface UIState {
   trashAsset: (id: string) => void
   restoreAsset: (id: string) => void
   emptyTrash: () => void
+  purgeAsset: (id: string) => void
 
   /* 选中与焦点 */
   selectedIds: string[]
@@ -233,6 +253,8 @@ interface UIState {
   /* 检查器文件名编辑 */
   renaming: boolean
   setRenaming: (v: boolean) => void
+  /** 从右键菜单开始重命名:同时把 activeId 对齐到目标素材 */
+  startRenaming: (id: string) => void
 
   /* 菜单 */
   openMenu: string | null
@@ -242,6 +264,9 @@ interface UIState {
 
   /* 灯箱 */
   lightboxId: string | null
+  /** CSS 编辑器有未保存改动:关闭与切换素材前必须先确认,避免丢改动 */
+  cssDirty: boolean
+  setCssDirty: (v: boolean) => void
   openLightbox: (id: string) => void
   closeLightbox: () => void
   stepLightbox: (dir: 1 | -1) => void
@@ -363,6 +388,17 @@ export const useUI = create<UIState>((set, get) => {
 
     mode: 'empty',
     scanProgress: null,
+    thumbProgress: null,
+    setThumbProgress: (p) => set({ thumbProgress: p }),
+    toast: null,
+    /** 一次性提示:定时清空,并让后一条覆盖前一条 */
+    showToast: (text, kind = 'ok') => {
+      set({ toast: { text, kind } })
+      const current = get().toast
+      window.setTimeout(() => {
+        if (get().toast === current) set({ toast: null })
+      }, 2600)
+    },
     setAssets: (list) => set({ assets: list }),
     reloadActiveLibrary: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
@@ -399,6 +435,15 @@ export const useUI = create<UIState>((set, get) => {
     folderPaths: [],
     physicalFolderPaths: [],
     folderEditPath: null,
+    collapsedFolders: [],
+    toggleFolderCollapsed: (path) => {
+      set((s) => ({
+        collapsedFolders: s.collapsedFolders.includes(path)
+          ? s.collapsedFolders.filter((p) => p !== path)
+          : [...s.collapsedFolders, path]
+      }))
+      persistUiPrefs()
+    },
     refreshFolders: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
@@ -559,9 +604,25 @@ export const useUI = create<UIState>((set, get) => {
         ...a,
         reviewFlag: !a.reviewFlag
       })),
+    /**
+     * 重命名素材:改磁盘文件名,库记录随 `assets:changed` 一起刷新。
+     *
+     * 磁盘是权威来源,所以不在这里先改内存里的 name —— 等主进程改名成功后重新加载,
+     * 避免「界面已改名但磁盘没改」的假象。失败时保持原样,不改动内存。
+     */
     renameAsset: (id, name) => {
-      edit(id, { name }, (a) => ({ ...a, name }))
       set({ renaming: false })
+      const a = get().assets.find((x) => x.id === id)
+      if (!a || a.dbId == null || a.libraryId == null) return
+      void window.windowApi.assets.rename(a.libraryId, a.dbId, name).then((r) => {
+        if ('error' in r) {
+          // 静默失败会让「重命名没反应」无从排查,这里必须报出来
+          get().showToast(r.error, 'warn')
+          return
+        }
+        get().showToast('已重命名')
+        void get().reloadActiveLibrary()
+      })
     },
     addTag: (id, name) => {
       const a = get().assets.find((x) => x.id === id)
@@ -578,7 +639,7 @@ export const useUI = create<UIState>((set, get) => {
     setSourceUrl: (id, url) => edit(id, { source_url: url || null }, (a) => ({ ...a, sourceUrl: url || undefined })),
     trashAsset: (id) => {
       const now = new Date().toISOString()
-      edit(id, { deleted_at: now }, (a) => ({ ...a, deletedAt: now }))
+      edit(id, { deleted_at: now }, (a) => ({ ...a, deletedAt: now, previewUrl: a.originalUrl }))
       set((s) => ({
         selectedIds: s.selectedIds.filter((x) => x !== id),
         activeId: s.activeId === id ? null : s.activeId,
@@ -586,11 +647,16 @@ export const useUI = create<UIState>((set, get) => {
         ctxMenu: null
       }))
     },
-    restoreAsset: (id) => edit(id, { deleted_at: null }, (a) => ({ ...a, deletedAt: undefined })),
+    restoreAsset: (id) => edit(id, { deleted_at: null }, (a) => ({ ...a, deletedAt: undefined, previewUrl: a.originalUrl ? `${a.originalUrl}&thumb=1` : a.previewUrl })),
     emptyTrash: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
       void window.windowApi.assets.emptyTrash(t.libraryId).then(() => get().reloadActiveLibrary())
+    },
+    purgeAsset: (id) => {
+      const a = get().assets.find((x) => x.id === id)
+      if (a?.dbId == null || a.libraryId == null) return
+      void window.windowApi.assets.purge(a.libraryId, [a.dbId]).then(() => get().reloadActiveLibrary())
     },
 
     selectedIds: [],
@@ -636,6 +702,13 @@ export const useUI = create<UIState>((set, get) => {
 
     renaming: false,
     setRenaming: (renaming) => set({ renaming }),
+    /**
+     * 从右键菜单开始重命名。
+     *
+     * 重命名输入框长在检查器里,而检查器渲染的是 activeId 指向的素材;只置 renaming
+     * 会让输入框出现在上一次选中的素材上。这里一并把 activeId/focusedCardId 对齐到目标。
+     */
+    startRenaming: (id) => set({ activeId: id, focusedCardId: id, renaming: true }),
 
     openMenu: null,
     setOpenMenu: (openMenu) => set(openMenu ? { openMenu, cbarOpen: false } : { openMenu }),
@@ -643,16 +716,23 @@ export const useUI = create<UIState>((set, get) => {
     setCtxMenu: (ctxMenu) => set({ ctxMenu }),
 
     lightboxId: null,
-    openLightbox: (id) => set({ lightboxId: id, openMenu: null, ctxMenu: null }),
-    closeLightbox: () => set({ lightboxId: null }),
+    cssDirty: false,
+    setCssDirty: (v) => set({ cssDirty: v }),
+    openLightbox: (id) => set({ lightboxId: id, cssDirty: false, openMenu: null, ctxMenu: null }),
+    closeLightbox: () => {
+      // Esc / 关闭按钮 / 遮罩点击都经此处:未保存的 CSS 改动必须先确认
+      if (get().cssDirty && !window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')) return
+      set({ lightboxId: null, cssDirty: false })
+    },
     stepLightbox: (dir) => {
       const { lightboxId, assets } = get()
+      if (get().cssDirty && !window.confirm('CSS 有未保存的修改,切换素材将丢弃这些改动。')) return
       const visible = assets.filter((a) => !a.deletedAt)
       if (visible.length === 0) return
       const idx = visible.findIndex((a) => a.id === lightboxId)
       if (idx < 0) return
       const next = Math.min(visible.length - 1, Math.max(0, idx + dir))
-      set({ lightboxId: visible[next].id })
+      set({ lightboxId: visible[next].id, cssDirty: false })
     }
   }
 })

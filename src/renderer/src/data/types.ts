@@ -1,9 +1,10 @@
-export type AssetType = 'image' | 'video' | 'model'
+export type AssetType = 'image' | 'video' | 'model' | 'style'
 
 export type AssetFormat =
   | 'JPG' | 'PNG' | 'WEBP' | 'SVG' | 'GIF' | 'PSD'
   | 'MP4' | 'MOV'
   | 'GLB' | 'FBX' | 'OBJ'
+  | 'CSS'
 
 export interface AssetTag {
   name: string

@@ -1,5 +1,7 @@
 /** 扩展名白名单与忽略规则(扫描与监听共用) */
-export const EXT_WHITELIST: Record<string, { type: 'image' | 'video' | 'model'; format: string }> = {
+export type AssetKind = 'image' | 'video' | 'model' | 'style'
+
+export const EXT_WHITELIST: Record<string, { type: AssetKind; format: string }> = {
   jpg: { type: 'image', format: 'JPG' },
   jpeg: { type: 'image', format: 'JPG' },
   png: { type: 'image', format: 'PNG' },
@@ -12,7 +14,9 @@ export const EXT_WHITELIST: Record<string, { type: 'image' | 'video' | 'model'; 
   glb: { type: 'model', format: 'GLB' },
   gltf: { type: 'model', format: 'GLB' },
   fbx: { type: 'model', format: 'FBX' },
-  obj: { type: 'model', format: 'OBJ' }
+  obj: { type: 'model', format: 'OBJ' },
+  // CSS 片段作为「效果素材」入库;没有尺寸与时长,预览靠 HTML 骨架承载
+  css: { type: 'style', format: 'CSS' }
 }
 
 const TEMP_SUFFIX = /\.(tmp|crdownload|part)$/i
@@ -49,7 +53,7 @@ export function isIgnoredWatch(p: string): boolean {
 }
 
 /** 相对路径 → 类型/格式;不在白名单返回 null */
-export function detectKind(relPath: string): { type: 'image' | 'video' | 'model'; format: string } | null {
+export function detectKind(relPath: string): { type: AssetKind; format: string } | null {
   const dot = relPath.lastIndexOf('.')
   if (dot < 0) return null
   const ext = relPath.slice(dot + 1).toLowerCase()

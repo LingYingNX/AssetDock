@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { queryAssets, sidebarCounts, type Filters } from '../src/renderer/src/data/query'
+import { infoRows, queryAssets, sidebarCounts, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
 
 const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tag: 'all' }
@@ -21,6 +21,28 @@ describe('queryAssets', () => {
     expect(queryAssets(assets, { nav: 'all', search: 'river', filters, swatches: [], stripColor: null }).map((item) => item.id)).toEqual(['movie'])
   })
 
+  it('treats css as its own format without shape/size misfires', () => {
+    const css = asset({ id: 'css', type: 'style', format: 'CSS', name: 'loader', width: undefined, height: undefined })
+    const photo = asset({ id: 'photo', width: 1920, height: 1080 })
+    const assets = [css, photo]
+
+    expect(query(assets, 'all', { format: 'css' }).map((x) => x.id)).toEqual(['css'])
+    expect(query(assets, 'all', { format: 'photo' }).map((x) => x.id)).toEqual(['photo'])
+    // CSS 没有尺寸:沿用无尺寸素材的既有语义(ar 按 1:1、像素按 0 参与),
+    // 因此在「方形」与「小图」筛选中被纳入,在「全景」与「大图」筛选中被排除
+    expect(query(assets, 'all', { shape: 'square' }).map((x) => x.id)).toEqual(['css'])
+    expect(query(assets, 'all', { shape: 'landscape' }).map((x) => x.id)).toEqual(['photo'])
+    expect(query(assets, 'all', { shape: 'pano' }).map((x) => x.id)).toEqual([])
+    expect(query(assets, 'all', { size: 'small' }).map((x) => x.id)).toEqual(['css', 'photo'])
+    expect(query(assets, 'all', { size: 'large' }).map((x) => x.id)).toEqual([])
+  })
+
+  it('reports css file info without resolution or duration', () => {
+    const css = asset({ id: 'css', type: 'style', format: 'CSS', name: 'loader', sourceUrl: 'media://1/loader.css' })
+    const rows = infoRows(css)
+    expect(rows.map(([k]) => k)).toEqual(['类型', '大小', '导入', '来源'])
+    expect(rows[0][1]).toContain('CSS')
+  })
   it('counts only live local assets in the sidebar', () => {
     const assets = [asset({ id: 'one', folders: ['图'], favorite: true }), asset({ id: 'two' }), asset({ id: 'trash', deletedAt: '2026-09-10T00:00' })]
     expect(sidebarCounts(assets)).toMatchObject({ all: 2, untagged: 1, fav: 1, trash: 1, folders: { 图: 1 } })

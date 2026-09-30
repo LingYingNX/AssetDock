@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3'
+import type { AssetKind } from './ignore'
 
 /** 标签默认色板(与设计稿标签色一致,超出按序循环) */
 const TAG_COLORS = ['#22D3EE', '#F97316', '#3ECF8E', '#E8A33D', '#FF7A93', '#3B82F6', '#A855F7', '#64748B']
@@ -14,7 +15,7 @@ export interface AssetRow {
   library_id: number
   rel_path: string
   name: string
-  type: 'image' | 'video' | 'model'
+  type: AssetKind
   format: string
   width: number | null
   height: number | null
@@ -184,7 +185,7 @@ export function removeTag(d: Database, assetId: number, name: string): void {
 export interface ScanEntry {
   relPath: string
   name: string
-  type: 'image' | 'video' | 'model'
+  type: AssetKind
   format: string
   sizeBytes: number
   mtimeMs: number

@@ -60,4 +60,29 @@ describe('library watcher', () => {
     }
   })
 
+  it('ingests css files without extracting a palette', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-watch-css-'))
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
+    const watcher = watchLibrary(db, 1, root, {
+      onAdded: () => undefined,
+      onChanged: () => undefined,
+      onMissing: () => undefined
+    })
+
+    try {
+      await once(watcher, 'ready')
+      await writeFile(join(root, 'loader.css'), '.loader{color:seagreen}')
+      await vi.waitFor(() => expect(listAssets(db, 1)).toHaveLength(1), { timeout: 5000 })
+      const asset = listAssets(db, 1)[0]
+      expect(asset.type).toBe('style')
+      expect(asset.format).toBe('CSS')
+      // CSS 没有可解码像素,主色必须保持为空而不是报错或留下脏值
+      expect(JSON.parse(asset.palette || '[]')).toEqual([])
+    } finally {
+      await watcher.close()
+      db.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

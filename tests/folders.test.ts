@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from '../src/main/services/folders'
+import { createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder } from '../src/main/services/folders'
 import { listFolderOrders, replaceFolderOrders } from '../src/main/services/store'
 import { openMemoryDb } from '../src/main/services/db'
 
@@ -89,5 +89,36 @@ describe('exportLibraryAsset', () => {
 
   it('rejects a path outside the library root', async () => {
     await expect(exportLibraryAsset(root, '../escape.jpg', dest)).rejects.toThrow()
+  })
+
+  it('renames an asset in place and keeps its extension', async () => {
+    await mkdir(join(root, 'sub'))
+    await writeFile(join(root, 'sub', 'old.png'), 'payload')
+
+    const rel = await renameLibraryAsset(root, 'sub/old.png', 'new name')
+    expect(rel).toBe('sub/new name.png')
+    await expect(readFile(join(root, 'sub', 'new name.png'), 'utf8')).resolves.toBe('payload')
+    await expect(readFile(join(root, 'sub', 'old.png'), 'utf8')).rejects.toThrow()
+  })
+
+  it('does not double up the extension when the name already carries it', async () => {
+    await writeFile(join(root, 'old.png'), 'payload')
+    await expect(renameLibraryAsset(root, 'old.png', 'fresh.png')).resolves.toBe('fresh.png')
+    await expect(readFile(join(root, 'fresh.png'), 'utf8')).resolves.toBe('payload')
+  })
+
+  it('refuses to clobber an existing sibling file', async () => {
+    await writeFile(join(root, 'a.png'), 'A')
+    await writeFile(join(root, 'b.png'), 'B')
+    await expect(renameLibraryAsset(root, 'a.png', 'b')).rejects.toThrow('同名')
+    await expect(readFile(join(root, 'a.png'), 'utf8')).resolves.toBe('A')
+    await expect(readFile(join(root, 'b.png'), 'utf8')).resolves.toBe('B')
+  })
+
+  it('rejects invalid names and paths outside the library', async () => {
+    await writeFile(join(root, 'a.png'), 'A')
+    await expect(renameLibraryAsset(root, 'a.png', 'bad/name')).rejects.toThrow()
+    await expect(renameLibraryAsset(root, 'a.png', '..')).rejects.toThrow()
+    await expect(renameLibraryAsset(root, '../outside.png', 'x')).rejects.toThrow()
   })
 })

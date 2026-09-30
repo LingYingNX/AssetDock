@@ -140,6 +140,7 @@ function matchFilters(a: Asset, f: Filters): boolean {
     if (f.format === 'glb' && fm !== 'GLB') return false
     if (f.format === 'fbx' && fm !== 'FBX') return false
     if (f.format === 'obj' && fm !== 'OBJ') return false
+    if (f.format === 'css' && fm !== 'CSS') return false
   }
   if (f.shape !== 'all' && a.type !== 'model') {
     const ar = (a.width ?? 1) / (a.height ?? 1)
@@ -223,6 +224,14 @@ export function infoRows(a: Asset): [string, string, string?][] {
       ['类型', `${a.format} 模型`, a.format === 'GLB' ? 'glTF 2.0' : undefined],
       ['大小', formatBytes(a.sizeBytes)],
       ['导入', formatFullDate(a.importedAt)]
+    ]
+  }
+  if (a.type === 'style') {
+    return [
+      ['类型', `${a.format} 样式表`],
+      ['大小', formatBytes(a.sizeBytes)],
+      ['导入', formatFullDate(a.importedAt)],
+      ['来源', a.sourceUrl ? '外部链接' : '本地素材库']
     ]
   }
   const rows: [string, string, string?][] = [

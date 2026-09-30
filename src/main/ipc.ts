@@ -15,8 +15,10 @@ import { moveEagleLibraryAssets, scanEagleLibrary, type EagleScan } from './serv
 import { migrateLegacySources } from './services/legacySourceMigration'
 import { probeVideo } from './services/videoMeta'
 import { ensureLibraryStorage, getLibHandle, hasLibDb, migrateLibrary } from './services/libraryDb'
-import { assertLibraryFolder, createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryFolder } from './services/folders'
-import { collectOrphanThumbs, pruneMissingThumbs, removeThumbs, retargetThumb } from './services/thumbs'
+import { assertLibraryFolder, createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder } from './services/folders'
+import { collectOrphanThumbs, generateMissingThumbs, pruneMissingThumbs, removeThumbsIfUnused, retargetThumb, thumbJobRows, type ThumbJob } from './services/thumbs'
+import { readShellAsset, readTextAsset, renameShellAlongside, writeShellAsset, writeTextAsset } from './services/textAssets'
+import { copyFilesToClipboard } from './services/clipboardFiles'
 
 const watchers = new Map<string, FSWatcher>()
 const migrationFailures: string[] = []
@@ -82,6 +84,7 @@ async function scanLibraryContents(libraryId: number): Promise<void> {
   const results = upsertScanned(s.db, libraryId, entries)
   send('library:scan', { libraryId, done: entries.length, phase: 'done', added: entries.length })
   queuePaletteRefresh(s, libraryId, entries, results)
+  queueThumbWarmup(libraryId)
 }
 
 /** 扫描入库后,对新增/内容变化的图片排队抽主色(串行,失败静默) */
@@ -102,6 +105,60 @@ function queuePaletteRefresh(
   }).then((count) => { if (count > 0) send('assets:changed', { libraryId }) })
 }
 
+/* ---------- 缩略图全量生成队列 ---------- */
+
+/**
+ * 每个库一条串行预热链:同一时刻只跑一批,批间有新增则再跑一轮。
+ * 已生成过的指纹在 generateMissingThumbs 里直接跳过,所以重复触发只补新素材。
+ */
+const thumbQueues = new Map<number, { running: boolean; rerun: boolean }>()
+
+function thumbJobs(libraryId: number): ThumbJob[] {
+  const s = scopeFor(libraryId)
+  if (!s) return []
+  // 需要缩略图的素材集合(位图 + CSS)统一在 thumbs.ts 里定义,避免两处 SQL 漂移
+  return thumbJobRows(s.db, libraryId).map((r) => ({
+    absPath: absPathFor(s, r.rel_path),
+    fingerprint: r.fingerprint,
+    format: r.format,
+    meta: { relPath: r.rel_path, mtimeMs: r.mtime_ms, sizeBytes: r.size_bytes }
+  }))
+}
+
+/** 排队补齐该库所有缺失缩略图;新增素材或导入完成后调用 */
+export function queueThumbWarmup(libraryId: number): void {
+  const state = thumbQueues.get(libraryId) ?? { running: false, rerun: false }
+  thumbQueues.set(libraryId, state)
+  if (state.running) {
+    state.rerun = true
+    return
+  }
+  state.running = true
+  void (async () => {
+    try {
+      do {
+        state.rerun = false
+        const s = scopeFor(libraryId)
+        if (!s) return
+        const jobs = thumbJobs(libraryId)
+        if (jobs.length === 0) continue
+        await generateMissingThumbs(s.libPath, jobs, (done, count) => {
+          if (count > 0) send('thumbs:progress', { libraryId, done, total: count, phase: 'running' })
+        })
+        // 快照后的生成期间素材可能被移入回收站,这里按最新库状态补一次对账,避免缩略图滞留
+        const trashed = (s.db
+          .prepare("SELECT DISTINCT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND fingerprint <> ''")
+          .all(libraryId) as { fingerprint: string }[]).map((r) => r.fingerprint)
+        if (trashed.length > 0) await removeThumbsIfUnused(s.libPath, s.db, libraryId, trashed)
+        send('thumbs:progress', { libraryId, done: 0, total: 0, phase: 'done' })
+      } while (state.rerun)
+    } catch {
+      send('thumbs:progress', { libraryId, done: 0, total: 0, phase: 'done' })
+    } finally {
+      state.running = false
+    }
+  })()
+}
 /* ---------- 监听 ---------- */
 
 function attachRootWatcher(libraryId: number, root: string): void {
@@ -125,6 +182,7 @@ function rootCallbacks(libraryId: number): {
 } {
   return {
     onAdded: (id) => {
+      queueThumbWarmup(libraryId)
       send('assets:changed', { libraryId })
     },
     onChanged: () => send('assets:changed', { libraryId }),
@@ -177,13 +235,14 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
       if (!s) return
       await pruneMissingThumbs(s.libPath).catch(() => undefined)
       const live = new Set(
-        (s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ?').all(l.id) as { fingerprint: string }[])
+        (s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NULL').all(l.id) as { fingerprint: string }[])
           .map((row) => row.fingerprint)
       )
       await collectOrphanThumbs(s.libPath, live).catch(() => undefined)
     })()
     attachRootWatcher(l.id, l.path)
     void enrichMissingMeta(l.id)
+    queueThumbWarmup(l.id)
     void enrichMissingPalette(l.id)
   }
 }
@@ -201,6 +260,7 @@ async function reconcileRoot(libraryId: number, root: string): Promise<void> {
     if (entries.length > 0) {
       const results = upsertScanned(s.db, libraryId, entries)
       queuePaletteRefresh(s, libraryId, entries, results)
+      queueThumbWarmup(libraryId)
     }
     const known = s.db.prepare('SELECT id, rel_path FROM assets WHERE library_id = ? AND missing = 0').all(libraryId) as { id: number; rel_path: string }[]
     const onDisk = new Set(entries.map((entry) => entry.relPath))
@@ -384,8 +444,105 @@ export function registerIpc(userData: string): void {
   ipcMain.handle('assets:update', async (_e, libraryId: number, id: number, patch: AssetPatch) => {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
+    const changesDeletedAt = !!patch && 'deleted_at' in patch
+    const trashing = changesDeletedAt && !!patch.deleted_at
+    const restoring = changesDeletedAt && patch.deleted_at === null
+    const row = changesDeletedAt
+      ? (s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND id = ?').get(libraryId, id) as
+          | { fingerprint: string }
+          | undefined)
+      : undefined
+    // 先落库再处理缓存,否则恢复时预热仍会读到旧的 deleted_at 而跳过该素材
     updateAsset(s.db, id, patch)
+    if (row && trashing) await removeThumbsIfUnused(s.libPath, s.db, libraryId, [row.fingerprint])
+    if (row && restoring) queueThumbWarmup(libraryId)
     return { ok: true }
+  })
+
+  /* CSS 等文本素材的读取:渲染层编辑器加载原始文本 */
+  ipcMain.handle('assets:readText', async (_e, libraryId: number, id: number) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    const row = s.db
+      .prepare('SELECT rel_path FROM assets WHERE library_id = ? AND id = ?')
+      .get(libraryId, id) as { rel_path: string } | undefined
+    if (!row) return { error: '素材不存在' }
+    const result = await readTextAsset(s.libPath, row.rel_path)
+    if (!result) return { error: '无法读取素材文件' }
+    return { text: result.text, sizeBytes: result.sizeBytes }
+  })
+
+  /* 保存文本素材:原子写回原文件并同步大小/指纹,随后重排该素材缩略图 */
+  ipcMain.handle('assets:writeText', async (_e, libraryId: number, id: number, text: string) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (typeof text !== 'string') return { error: '写入内容无效' }
+    const row = s.db
+      .prepare('SELECT rel_path FROM assets WHERE library_id = ? AND id = ?')
+      .get(libraryId, id) as { rel_path: string } | undefined
+    if (!row) return { error: '素材不存在' }
+    const written = await writeTextAsset(s.db, libraryId, s.libPath, row.rel_path, text)
+    if (!written) return { error: '写入失败:文件不可写或路径越界' }
+    queueThumbWarmup(libraryId)
+    send('assets:changed', { libraryId })
+    return { ok: true, fingerprint: written.fingerprint, sizeBytes: written.sizeBytes }
+  })
+
+  /* 读取 CSS 素材的配套 HTML 骨架:外观由它决定,不存在时返回 null 表示用推导骨架 */
+  ipcMain.handle('assets:readShell', async (_e, libraryId: number, id: number) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    const row = s.db
+      .prepare('SELECT rel_path FROM assets WHERE library_id = ? AND id = ?')
+      .get(libraryId, id) as { rel_path: string } | undefined
+    if (!row) return { error: '素材不存在' }
+    const result = await readShellAsset(s.libPath, row.rel_path)
+    if (!result) return { text: null, exists: false }
+    return { text: result.text, exists: true, sizeBytes: result.sizeBytes }
+  })
+
+  /* 写入配套 HTML 骨架并重排封面:外观改了封面要跟着变 */
+  ipcMain.handle('assets:writeShell', async (_e, libraryId: number, id: number, html: string) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (typeof html !== 'string') return { error: '写入内容无效' }
+    const row = s.db
+      .prepare('SELECT rel_path FROM assets WHERE library_id = ? AND id = ?')
+      .get(libraryId, id) as { rel_path: string } | undefined
+    if (!row) return { error: '素材不存在' }
+    const ok = await writeShellAsset(s.libPath, row.rel_path, html)
+    if (!ok) return { error: '写入失败:路径越界' }
+    queueThumbWarmup(libraryId)
+    send('assets:changed', { libraryId })
+    return { ok: true }
+  })
+
+  /**
+   * 重命名素材文件:改磁盘文件名并同步库记录。
+   *
+   * 磁盘是权威来源,所以先改名再更新 rel_path;缩略图按内容指纹命名,改名后仍有效,
+   * 只需把清单里的可读路径一起改掉。CSS 素材的配套 HTML 骨架同名关联,一并跟着改,
+   * 否则改名后外观会退回推导骨架。
+   */
+  ipcMain.handle('assets:rename', async (_e, libraryId: number, id: number, newName: string) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    if (typeof newName !== 'string' || !newName.trim()) return { error: '名称不能为空' }
+    const row = s.db
+      .prepare('SELECT rel_path, fingerprint, missing, format FROM assets WHERE id = ? AND library_id = ?')
+      .get(id, libraryId) as { rel_path: string; fingerprint: string; missing: number; format: string } | undefined
+    if (!row) return { error: '素材不存在' }
+    if (row.missing) return { error: '缺失文件不能重命名' }
+    try {
+      const relPath = await renameLibraryAsset(s.libPath, row.rel_path, newName)
+      s.db.prepare('UPDATE assets SET rel_path = ? WHERE id = ? AND library_id = ?').run(relPath, id, libraryId)
+      if (row.fingerprint) await retargetThumb(s.libPath, row.fingerprint, relPath)
+      if (row.format === 'CSS') await renameShellAlongside(s.libPath, row.rel_path, relPath)
+      send('assets:changed', { libraryId })
+      return { ok: true, relPath }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '重命名失败' }
+    }
   })
 
   ipcMain.handle('assets:move', async (_e, libraryId: number, assetIds: number[], targetFolder: string) => {
@@ -423,8 +580,14 @@ export function registerIpc(userData: string): void {
     return { moved }
   })
 
-  /** 复制选中素材到系统剪贴板:优先文件对象(可在资源管理器直接粘贴),同时写入路径文本 */
-  ipcMain.handle('assets:copy', (_e, libraryId: number, assetIds: number[]) => {
+  /**
+   * 复制选中素材到系统剪贴板。
+   *
+   * 首选写入文件对象,这样在资源管理器里可以直接 Ctrl+V 粘贴出文件;
+   * 写文件对象不可用(非 Windows / PowerShell 失败)时退回路径文本,至少不空手而归。
+   * Electron 自带的 clipboard 写不出 CF_HDROP,实现细节见 services/clipboardFiles.ts。
+   */
+  ipcMain.handle('assets:copy', async (_e, libraryId: number, assetIds: number[]) => {
     const s = scopeFor(libraryId)
     if (!s) return { error: '素材库不存在' }
     if (!Array.isArray(assetIds) || assetIds.length === 0) return { error: '没有选择素材' }
@@ -435,8 +598,14 @@ export function registerIpc(userData: string): void {
       .filter((row): row is { rel_path: string } => row != null)
     if (rows.length === 0) return { error: '素材不存在' }
     const abs = rows.map((row) => absPathFor(s, row.rel_path))
+
+    const fileDrop = await copyFilesToClipboard(abs).catch(() => null)
+    if (fileDrop && fileDrop.copied > 0) {
+      return { copied: fileDrop.copied, mode: 'files' as const, skipped: fileDrop.skipped, paths: abs }
+    }
+
     clipboard.write({ text: abs.join('\r\n') })
-    return { copied: abs.length }
+    return { copied: abs.length, mode: 'paths' as const, skipped: fileDrop?.skipped ?? [], paths: abs }
   })
 
   /** 导出选中素材:选择目标目录后复制文件(不移动、不改库记录),同名自动避让 */
@@ -502,7 +671,25 @@ export function registerIpc(userData: string): void {
     const doomed = s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').all(libraryId) as { fingerprint: string }[]
     const purged = s.db.prepare('DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').run(libraryId).changes
     // 原图记录被清除时同步删除缩略图与清单条目
-    await removeThumbs(s.libPath, doomed.map((r) => r.fingerprint))
+    await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
+    return { ok: true, purged }
+  })
+
+  /* 单条/批量彻底删除回收站记录:数据库行与缩略图一并清除,不动原图文件 */
+  ipcMain.handle('assets:purge', async (_e, libraryId: number, ids: number[]) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { ok: false, purged: 0 }
+    if (!Array.isArray(ids) || ids.length === 0) return { ok: true, purged: 0 }
+    const clean = ids.filter((id) => Number.isInteger(id))
+    if (clean.length === 0) return { ok: true, purged: 0 }
+    const placeholders = clean.map(() => '?').join(',')
+    const doomed = s.db
+      .prepare(`SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND id IN (${placeholders})`)
+      .all(libraryId, ...clean) as { fingerprint: string }[]
+    const purged = s.db
+      .prepare(`DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND id IN (${placeholders})`)
+      .run(libraryId, ...clean).changes
+    await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
     return { ok: true, purged }
   })
 
@@ -510,17 +697,17 @@ export function registerIpc(userData: string): void {
   ipcMain.handle('assets:purgeMissing', async (_e, libraryId: number) => {
     const s = scopeFor(libraryId)
     if (!s) return { purged: 0 }
-    const rows = s.db.prepare('SELECT id, rel_path FROM assets WHERE library_id = ? AND missing = 1').all(libraryId) as { id: number; rel_path: string }[]
+    const rows = s.db
+      .prepare('SELECT id, rel_path, fingerprint FROM assets WHERE library_id = ? AND missing = 1')
+      .all(libraryId) as { id: number; rel_path: string; fingerprint: string }[]
     let purged = 0
     for (const r of rows) {
       const gone = await access(absPathFor(s, r.rel_path)).then(() => false, () => true)
-      // 文件确实已不在磁盘上:同步清理缩略图
-      const fp = s.db.prepare('SELECT fingerprint FROM assets WHERE id = ?').get(r.id) as { fingerprint: string } | undefined
-      if (fp) await removeThumbs(s.libPath, [fp.fingerprint])
-      if (gone) {
-        s.db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
-        purged++
-      }
+      // 文件其实还在盘上(临时不可见/误标):保留记录与缩略图,只报告不动手
+      if (!gone) continue
+      s.db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
+      await removeThumbsIfUnused(s.libPath, s.db, libraryId, [r.fingerprint])
+      purged++
     }
     return { purged }
   })
@@ -548,6 +735,7 @@ export function registerIpc(userData: string): void {
       upsertScanned(s.db, libraryId, imported.entries)
       send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
       send('assets:changed', { libraryId })
+      queueThumbWarmup(libraryId)
       return { imported: imported.imported, multiFolderAssets: imported.multiFolderAssets }
     } catch (error) {
       return { error: error instanceof Error ? error.message : '无法导入 Eagle 素材' }

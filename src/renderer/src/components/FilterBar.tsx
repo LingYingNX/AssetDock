@@ -17,7 +17,8 @@ const FORMAT_ITEMS: MenuItem[] = [
   { id: 'video', label: 'MP4 / MOV' },
   { id: 'glb', label: 'GLB / glTF' },
   { id: 'fbx', label: 'FBX' },
-  { id: 'obj', label: 'OBJ' }
+  { id: 'obj', label: 'OBJ' },
+  { id: 'css', label: 'CSS' }
 ]
 
 const SHAPE_ITEMS: MenuItem[] = [

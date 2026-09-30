@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import type Database from 'better-sqlite3'
 import { fileExists, writeFileAtomically } from './cacheFiles'
 
 /**
@@ -16,12 +17,30 @@ export const THUMB_SIZE = 640
 const THUMB_VERSION = 2
 const FLUSH_DELAY_MS = 1500
 
+/**
+ * CSS 封面的渲染逻辑版本。
+ *
+ * 位图缩略图只由原图内容决定,指纹变了重生成即可;但 CSS 封面还取决于预览骨架的拼接方式
+ * ——骨架改了而素材没改时指纹不变,旧封面会一直留着。把这个版本写进清单条目,
+ * 改渲染逻辑时递增,存量 CSS 封面即按新骨架重建(位图不受影响)。
+ */
+export const SHELL_VERSION = 2
+
 export interface ThumbEntry {
   /** 生成时的原图相对路径,仅用于可读性与排查;原图移动后由调用方更新 */
   relPath: string
   mtimeMs: number
   sizeBytes: number
   generatedAt: string
+  /** 仅 CSS 封面写入:生成时的骨架版本 */
+  shell?: number
+  /**
+   * 仅 CSS 封面写入:生成时的外观签名(配套 HTML 的内容摘要)。
+   *
+   * 配套 HTML 是附属文件,改它不会动 CSS 指纹,单看指纹会误判成「缓存有效」而沿用旧封面。
+   * 把外观签名一并记下来比对,HTML 一改封面即重建。
+   */
+  look?: string
 }
 
 export interface ThumbManifest {
@@ -126,43 +145,69 @@ export async function ensureThumb(
   absPath: string,
   fingerprint: string,
   format: string,
-  meta: { relPath: string; mtimeMs: number; sizeBytes: number }
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number },
+  /**
+   * CSS 专用的外观签名:配套 HTML 的内容摘要。
+   * 传 null 表示当前没有配套 HTML(用推导骨架),与「有 HTML」区分开,不能只用空串混淆。
+   */
+  look?: string | null
 ): Promise<{ path: string; placeholder: boolean }> {
   const manifest = await loadManifest(libPath)
   const target = thumbPath(libPath, fingerprint)
+  // CSS 封面还要外观对齐:骨架版本或配套 HTML 变了,存量封面必须重建(位图只认指纹)
+  const wantLook = format === 'CSS' ? (look ?? '') : ''
+  const matches = (entry: ThumbEntry | undefined): boolean =>
+    !!entry && (format !== 'CSS' || (entry.shell === SHELL_VERSION && (entry.look ?? '') === wantLook))
 
-  // 文件与清单同时命中才认为有效:只有文件而清单缺失时补充清单,不重复解码
-  if (manifest.entries[fingerprint] && await fileExists(target)) {
-    return { path: target, placeholder: manifest.entries[fingerprint].relPath === '' }
+  const cached = manifest.entries[fingerprint]
+  if (matches(cached) && await fileExists(target)) {
+    return { path: target, placeholder: cached.relPath === '' }
   }
 
   return enqueue(async () => {
     const fresh = await loadManifest(libPath)
-    if (fresh.entries[fingerprint] && await fileExists(target)) {
+    const freshEntry = fresh.entries[fingerprint]
+    if (matches(freshEntry) && await fileExists(target)) {
       return { path: target, placeholder: false }
     }
+    if (format === 'CSS' && freshEntry) delete fresh.entries[fingerprint]
     if (await fileExists(target)) {
-      fresh.entries[fingerprint] = { ...meta, generatedAt: new Date().toISOString() }
-      scheduleFlush(libPath)
-      return { path: target, placeholder: false }
+      if (format === 'CSS') {
+        // 外观已变的存量 CSS 封面:文件还在但渲染依据已变,必须重画而不是沿用
+        await rm(target, { force: true }).catch(() => undefined)
+      } else {
+        fresh.entries[fingerprint] = { ...meta, generatedAt: new Date().toISOString() }
+        scheduleFlush(libPath)
+        return { path: target, placeholder: false }
+      }
     }
 
     await mkdir(thumbsDir(libPath), { recursive: true })
     let buf: Buffer
     let placeholder = false
     try {
-      const sharp = (await import('sharp')).default
-      buf = await sharp(absPath)
-        .rotate()
-        .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 84, mozjpeg: true })
-        .toBuffer()
+      if (format === 'CSS') {
+        // CSS 没有可解码像素:走离屏渲染截图,产出与位图同规格的 JPEG
+        const { renderCssThumbFromFile } = await import('./cssThumb')
+        buf = await renderCssThumbFromFile(libPath, absPath, THUMB_SIZE)
+      } else {
+        const sharp = (await import('sharp')).default
+        buf = await sharp(absPath)
+          .rotate()
+          .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 84, mozjpeg: true })
+          .toBuffer()
+      }
     } catch {
       buf = await placeholderJpeg(format)
       placeholder = true
     }
     await writeFileAtomically(target, buf)
-    fresh.entries[fingerprint] = { ...meta, generatedAt: new Date().toISOString() }
+    fresh.entries[fingerprint] = {
+      ...meta,
+      generatedAt: new Date().toISOString(),
+      ...(format === 'CSS' ? { shell: SHELL_VERSION, look: wantLook } : {})
+    }
     scheduleFlush(libPath)
     return { path: target, placeholder }
   })
@@ -192,6 +237,27 @@ export async function removeThumbs(libPath: string, fingerprints: string[]): Pro
   return removed
 }
 
+/**
+ * 指纹由内容决定,同内容素材共用一个缩略图。删除前须确认库里已无存活素材使用它,
+ * 否则会误删其它素材仍在引用的缓存。
+ */
+export function fingerprintInUse(db: Database.Database, libraryId: number, fingerprint: string): boolean {
+  return !!db
+    .prepare('SELECT 1 FROM assets WHERE library_id = ? AND fingerprint = ? AND deleted_at IS NULL LIMIT 1')
+    .get(libraryId, fingerprint)
+}
+
+/** 批量删除缩略图,但跳过仍被存活素材引用的指纹;返回实际删除数量 */
+export async function removeThumbsIfUnused(
+  libPath: string,
+  db: Database.Database,
+  libraryId: number,
+  fingerprints: string[]
+): Promise<number> {
+  const safe = fingerprints.filter((fp) => fp && !fingerprintInUse(db, libraryId, fp))
+  return safe.length > 0 ? removeThumbs(libPath, safe) : 0
+}
+
 /** 原图移动/改名:指纹不变,缩略图文件继续有效,仅同步清单里的可读路径 */
 export async function retargetThumb(libPath: string, fingerprint: string, relPath: string): Promise<void> {
   if (!fingerprint) return
@@ -216,22 +282,31 @@ export async function pruneMissingThumbs(libPath: string): Promise<number> {
 
 /**
  * 清单与实际文件对账:
+ * - 清单自身永不删除;
  * - 非当前命名(旧版本的无尺寸后缀 / 旧尺寸)文件一律清除;
- * - 当前命名但既不在清单、也不在 live 集合中的文件清除。
+ * - 当前命名但既不在清单、也不在 live 集合中的文件清除;
+ * - 清单里但已无存活素材引用的条目(如残留的回收站条目)一并剔除。
  */
 export async function collectOrphanThumbs(libPath: string, liveFingerprints: Set<string>): Promise<number> {
   const manifest = await loadManifest(libPath)
   const expectedSuffix = `-${THUMB_SIZE}.jpg`
   let removed = 0
+  let manifestChanged = false
+  for (const fingerprint of Object.keys(manifest.entries)) {
+    if (liveFingerprints.has(fingerprint)) continue
+    delete manifest.entries[fingerprint]
+    manifestChanged = true
+  }
   const dirents = await readdir(thumbsDir(libPath)).catch(() => [] as string[])
   for (const name of dirents) {
+    if (name === 'index.json') continue
     // 早期版本产出 WebP:不再产生,一律清理
     if (name.endsWith('.webp')) {
       await rm(join(thumbsDir(libPath), name), { force: true }).catch(() => undefined)
       removed++
       continue
     }
-    if (name !== 'index.json' && !name.endsWith('.jpg')) continue
+    if (!name.endsWith('.jpg')) continue
     // 命名不符合当前约定(旧格式/旧尺寸):直接清除
     if (!name.endsWith(expectedSuffix)) {
       await rm(join(thumbsDir(libPath), name), { force: true }).catch(() => undefined)
@@ -243,9 +318,68 @@ export async function collectOrphanThumbs(libPath: string, liveFingerprints: Set
     await rm(join(thumbsDir(libPath), name), { force: true }).catch(() => undefined)
     removed++
   }
+  if (manifestChanged) await flushManifest(libPath)
   return removed
 }
 
+export interface ThumbJob {
+  absPath: string
+  fingerprint: string
+  format: string
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number }
+}
+
+export interface ThumbJobRow {
+  rel_path: string
+  fingerprint: string
+  format: string
+  mtime_ms: number
+  size_bytes: number
+}
+
+/**
+ * Rows that need a thumbnail: bitmaps plus CSS (offscreen render + screenshot).
+ * Video and 3D are excluded - they read the original file directly.
+ * Missing files and trashed assets are excluded too.
+ */
+export function thumbJobRows(db: Database.Database, libraryId: number): ThumbJobRow[] {
+  return db
+    .prepare(
+      `SELECT rel_path, fingerprint, format, mtime_ms, size_bytes FROM assets
+       WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
+         AND type IN ('image', 'style') AND fingerprint <> ''`
+    )
+    .all(libraryId) as ThumbJobRow[]
+}
+
+/**
+ * 全量预热:只处理清单里还没有的指纹,按队列串行生成并回报进度。
+ * 已生成过的直接跳过,因此重复调用只补新素材;进度回调以「本次待生成总数」为分母。
+ */
+export async function generateMissingThumbs(
+  libPath: string,
+  jobs: ThumbJob[],
+  onProgress?: (done: number, total: number) => void
+): Promise<{ total: number; generated: number }> {
+  const manifest = await loadManifest(libPath)
+  const seen = new Set<string>()
+  const todo: ThumbJob[] = []
+  for (const job of jobs) {
+    if (!job.fingerprint || seen.has(job.fingerprint)) continue
+    seen.add(job.fingerprint)
+    if (manifest.entries[job.fingerprint] && await fileExists(thumbPath(libPath, job.fingerprint))) continue
+    todo.push(job)
+  }
+  onProgress?.(0, todo.length)
+  let done = 0
+  for (const job of todo) {
+    await ensureThumb(libPath, job.absPath, job.fingerprint, job.format, job.meta)
+    done++
+    if (done % 5 === 0 || done === todo.length) onProgress?.(done, todo.length)
+  }
+  if (todo.length > 0) await flushManifest(libPath)
+  return { total: todo.length, generated: done }
+}
 /** 测试辅助:丢弃内存态,强制下次从磁盘重读 */
 export function resetThumbCache(): void {
   for (const timer of flushTimers.values()) clearTimeout(timer)

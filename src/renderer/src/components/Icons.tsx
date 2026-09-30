@@ -65,6 +65,9 @@ export function SvgDefs(): React.JSX.Element {
         <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.2" /><circle cx="12" cy="17" r=".5" fill="currentColor" /></symbol>
         <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" /></symbol>
         <symbol id="i-sq" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5" /></symbol>
+        <symbol id="i-code" viewBox="0 0 24 24"><path d="m9 7-5 5 5 5" /><path d="m15 7 5 5-5 5" /></symbol>
+        <symbol id="i-markup" viewBox="0 0 24 24"><path d="m8 6-5 6 5 6" /><path d="m16 6 5 6-5 6" /><path d="M13.5 4 10.5 20" /></symbol>
+        <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z" /><path d="M9 4v5h6V4" /><path d="M9 20v-6h6v6" /></symbol>
         <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 1-4L16.5 4.5a2.12 2.12 0 0 1 3 3L8 19l-4 1Z" /><path d="m14.5 6.5 3 3" /></symbol>
         <symbol id="i-zoom-fit" viewBox="0 0 24 24"><path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3" /><circle cx="12" cy="12" r="2.5" /></symbol>
         <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M9 20h6M12 16v4" /></symbol>
