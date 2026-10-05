@@ -184,10 +184,11 @@ export default function App(): React.JSX.Element {
           <FilterBar />
           <ColorStrip />
           <Grid />
+          {/* 灯箱只覆盖工作区(侧栏与检查器保持可用),全屏时才扩到整窗 */}
+          <Lightbox />
         </main>
         <Inspector />
       </div>
-      <Lightbox />
       <ContextMenu />
       <PreferencesDialog />
       <ThumbProgress />

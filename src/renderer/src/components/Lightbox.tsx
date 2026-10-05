@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useUI } from '../store/ui'
-import { formatBytes, infoRows } from '../data/query'
+import { formatBytes } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { Viewer3D, type ViewKey } from './Viewer3D'
 import { CssEditor } from './CssEditor'
+import { VideoControls, useVideoPlayback } from './VideoControls'
+import { Filmstrip } from './Filmstrip'
 
 /** 舞台媒体加载失败占位 */
 function MediaFallback(): React.JSX.Element {
@@ -56,24 +58,6 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
   )
 }
 
-function MediaVideo({ src }: { src: string }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    setFailed(false)
-  }, [src])
-  if (failed) return <MediaFallback />
-  return (
-    <video
-      src={src}
-      controls
-      autoPlay
-      onError={() => {
-        setFailed(true)
-      }}
-    />
-  )
-}
-
 /** 视角预设条:5 个 64×38 玻璃小格 */
 const PRESETS: { title: string; rot: string; view: ViewKey }[] = [
   { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)', view: 'auto' },
@@ -89,21 +73,14 @@ const VIEW_ROT: Record<string, string> = {
   top: 'rotateX(66deg) rotateY(0deg)'
 }
 
-const VIEW_LABEL: Record<ViewKey, string> = {
-  auto: '透视',
-  front: '前视',
-  side: '侧视',
-  top: '顶视',
-  back: '背视'
-}
-
 export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
   const stepLightbox = useUI((s) => s.stepLightbox)
   const assets = useUI((s) => s.assets)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
-  const setRating = useUI((s) => s.setRating)
+  const fullscreen = useUI((s) => s.lightboxFullscreen)
+  const setFullscreen = useUI((s) => s.setLightboxFullscreen)
   const [shown, setShown] = useState(false)
 
   /* 占位舞台(FBX/OBJ/演示模型)状态 */
@@ -119,6 +96,12 @@ export function Lightbox(): React.JSX.Element | null {
   const [realView, setRealView] = useState<ViewKey>('auto')
   const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
+
+  /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback */
+  const a = assets.find((x) => x.id === lightboxId)
+  const isVideo = a?.type === 'video'
+  const videoSrc = isVideo && a ? (a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`) : ''
+  const playback = useVideoPlayback(videoSrc)
 
   /* 曝光持久化:打开灯箱时读应用状态(组件常驻挂载,不可依赖[]) */
   useEffect(() => {
@@ -152,8 +135,34 @@ export function Lightbox(): React.JSX.Element | null {
     setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [lightboxId])
 
+  /**
+   * 空格播放/暂停、F 全屏。
+   *
+   * 放在组件内而非 App 的全局快捷键表里,因为两者都要摸到当前媒体对象(播放态、video 节点)。
+   * 输入框内不劫持;其余情况 preventDefault 掉原生按钮激活,避免按一次触发两遍。
+   */
+  useEffect(() => {
+    if (!lightboxId) return
+    const onKey = (e: KeyboardEvent): void => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const k = e.key.toLowerCase()
+      if (e.code === 'Space') {
+        if (!isVideo) return
+        e.preventDefault()
+        playback.toggle()
+        return
+      }
+      if (k === 'f') {
+        e.preventDefault()
+        setFullscreen(!useUI.getState().lightboxFullscreen)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxId, isVideo, playback, setFullscreen])
+
   if (!lightboxId) return null
-  const a = assets.find((x) => x.id === lightboxId)
   if (!a) return null
 
   const visible = assets.filter((x) => !x.deletedAt)
@@ -219,9 +228,9 @@ export function Lightbox(): React.JSX.Element | null {
 
   return (
     <div
-      className={`pv${shown ? ' show' : ''}`}
+      className={`pv${shown ? ' show' : ''}${fullscreen ? ' full' : ''}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal={fullscreen}
       aria-label="详情预览"
       onClick={(e) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('pv-stage')) closeLightbox()
@@ -244,7 +253,6 @@ export function Lightbox(): React.JSX.Element | null {
         <button className="tb-btn" title="收藏" onClick={() => toggleFavorite(a.id)}>
           <Icon name="heart" />
         </button>
-        <button className="tb-btn" title="信息面板 (I)"><Icon name="info" /></button>
         <button className="tb-btn" title="导出"><Icon name="download" /></button>
         <button className="tb-btn" title="更多"><Icon name="more-h" /></button>
         <span className="tb-sep" />
@@ -281,23 +289,7 @@ export function Lightbox(): React.JSX.Element | null {
                   onProgress={setLoadPct}
                 />
                 {loadPct != null && loadPct < 100 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      top: '50%',
-                      transform: 'translate(-50%,-50%)',
-                      zIndex: 3,
-                      padding: '6px 14px',
-                      borderRadius: 10,
-                      background: 'rgba(255,255,255,.72)',
-                      border: '1px solid rgba(255,255,255,.95)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: '#0A4E9E',
-                      boxShadow: '0 6px 18px rgba(20,60,120,.18)'
-                    }}
-                  >
+                  <div className="pv-loading">
                     {loadPct === null ? '解析模型…' : `加载中 ${Math.round(loadPct)}%`}
                   </div>
                 )}
@@ -324,17 +316,8 @@ export function Lightbox(): React.JSX.Element | null {
                       step={0.05}
                       value={exposure}
                       aria-label="影棚曝光"
-                      ref={(el) => {
-                        if (el) {
-                          const p = ((Number(el.value) - 0.4) / 1.2) * 100
-                          el.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
-                        }
-                      }}
-                      onChange={(e) => {
-                        changeExposure(Number(e.target.value))
-                        const p = ((Number(e.target.value) - 0.4) / 1.2) * 100
-                        e.target.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
-                      }}
+                      style={{ background: `linear-gradient(90deg,var(--acc) ${((exposure - 0.4) / 1.2) * 100}%,var(--line2) ${((exposure - 0.4) / 1.2) * 100}%)` }}
+                      onChange={(e) => changeExposure(Number(e.target.value))}
                     />
                   </span>
                 </div>
@@ -368,12 +351,12 @@ export function Lightbox(): React.JSX.Element | null {
               a.type === 'image' ? (
                 <MediaImg src={a.originalUrl ?? ''} name={a.name} />
               ) : (
-                <MediaVideo src={a.originalUrl ?? ''} />
+                <video ref={playback.ref} src={a.originalUrl ?? ''} {...playback.handlers} />
               )
             ) : a.type === 'image' ? (
               <img src={`/@fs/${a.previewUrl}`} alt={a.name} />
             ) : (
-              <MediaVideo src={`/@fs/${a.previewUrl}`} />
+              <video ref={playback.ref} src={`/@fs/${a.previewUrl}`} {...playback.handlers} />
             )}
           </div>
           {isModel && (
@@ -393,55 +376,29 @@ export function Lightbox(): React.JSX.Element | null {
         </div>
         </>
         )}
-
-        <aside className="pv-side">
-          <div className="insp-sec">
-            <div className="insp-h"><Icon name="info" />{isModel ? '模型信息' : '文件信息'}</div>
-            <dl className="dl">
-              {infoRows(a).map(([k, v, s]) => (
-                <Row key={k} k={k} v={v} sub={s} />
-              ))}
-            </dl>
-          </div>
-          <div className="insp-sec">
-            <div className="insp-h"><Icon name="star" />评分</div>
-            <span className="rate big">
-              {[1, 2, 3, 4, 5].map((v) => (
-                <span
-                  key={v}
-                  className={`star${a.rating >= v ? ' fill' : ''}`}
-                  onClick={() => setRating(a.id, a.rating === v ? v - 1 : v)}
-                >
-                  <svg><use href="#i-star" /></svg>
-                </span>
-              ))}
-            </span>
-          </div>
-          <div className="insp-sec">
-            <div className="insp-h"><Icon name="tag" />标签</div>
-            <div className="tags">
-              {a.tags.map((t) => (
-                <span key={t.name} className="tag">
-                  <span className="dot" style={{ background: t.color }} />
-                  {t.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </aside>
       </div>
-    </div>
-  )
-}
 
-function Row({ k, v, sub }: { k: string; v: string; sub?: string }): React.JSX.Element {
-  return (
-    <>
-      <dt>{k}</dt>
-      <dd>
-        {v}
-        {sub ? <small>{sub}</small> : null}
-      </dd>
-    </>
+      {/* 控制条:全屏对任何素材都有效;其余按钮只在视频上出现 */}
+      {!isStyle ? (
+        <div className="pv-ctlbar">
+          {isVideo ? (
+            <VideoControls v={playback} fullscreen={fullscreen} onFullscreen={() => setFullscreen(!fullscreen)} />
+          ) : (
+            <div className="pv-ctl">
+              <span className="sp" />
+              <button
+                className="tb-btn"
+                title={fullscreen ? '退出全屏 (F)' : '全屏 (F)'}
+                onClick={() => setFullscreen(!fullscreen)}
+              >
+                <Icon name={fullscreen ? 'contract' : 'expand'} />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <Filmstrip />
+    </div>
   )
 }

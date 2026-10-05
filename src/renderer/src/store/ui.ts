@@ -264,6 +264,12 @@ interface UIState {
 
   /* 灯箱 */
   lightboxId: string | null
+  /**
+   * 灯箱全屏:仅在该窗口内铺满(收起顶部工具栏/信息栏/胶片带),不改系统窗口状态。
+   * 与 lightboxId 一样属瞬时视图态,不持久化——重启后带着全屏打开会让人失去方位感。
+   */
+  lightboxFullscreen: boolean
+  setLightboxFullscreen: (v: boolean) => void
   /** CSS 编辑器有未保存改动:关闭与切换素材前必须先确认,避免丢改动 */
   cssDirty: boolean
   setCssDirty: (v: boolean) => void
@@ -716,13 +722,17 @@ export const useUI = create<UIState>((set, get) => {
     setCtxMenu: (ctxMenu) => set({ ctxMenu }),
 
     lightboxId: null,
+    lightboxFullscreen: false,
+    setLightboxFullscreen: (v) => set({ lightboxFullscreen: v }),
     cssDirty: false,
     setCssDirty: (v) => set({ cssDirty: v }),
-    openLightbox: (id) => set({ lightboxId: id, cssDirty: false, openMenu: null, ctxMenu: null }),
+    openLightbox: (id) =>
+      // 同步 activeId:右侧已有的检查器渲染的就是它,这样灯箱里看的那张与检查器显示的始终一致
+      set({ lightboxId: id, activeId: id, focusedCardId: id, cssDirty: false, lightboxFullscreen: false, openMenu: null, ctxMenu: null }),
     closeLightbox: () => {
       // Esc / 关闭按钮 / 遮罩点击都经此处:未保存的 CSS 改动必须先确认
       if (get().cssDirty && !window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')) return
-      set({ lightboxId: null, cssDirty: false })
+      set({ lightboxId: null, cssDirty: false, lightboxFullscreen: false })
     },
     stepLightbox: (dir) => {
       const { lightboxId, assets } = get()
@@ -732,7 +742,8 @@ export const useUI = create<UIState>((set, get) => {
       const idx = visible.findIndex((a) => a.id === lightboxId)
       if (idx < 0) return
       const next = Math.min(visible.length - 1, Math.max(0, idx + dir))
-      set({ lightboxId: visible[next].id, cssDirty: false })
+      // 跨素材保留全屏态:连续逐张看片时不必每张都重新按一次全屏;activeId 同步跟随检查器
+      set({ lightboxId: visible[next].id, activeId: visible[next].id, focusedCardId: visible[next].id, cssDirty: false })
     }
   }
 })
