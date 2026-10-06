@@ -59,7 +59,8 @@ export function Grid(): React.JSX.Element {
     [assets, nav, search, filters, swatches, stripColor]
   )
 
-  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${swatches.join(',')}|${stripColor}|${view}|${colw}|${list.length}`
+  // colw 不进 resetKey:拖列宽滑块只该重排列,不该把滚动位置打回顶部
+  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${swatches.join(',')}|${stripColor}|${view}|${list.length}`
   useEffect(() => {
     wrapRef.current?.scrollTo({ top: 0 })
   }, [resetKey])
@@ -79,17 +80,26 @@ export function Grid(): React.JSX.Element {
     const target = event.target as HTMLElement
     if (target.closest('.card, button, input, textarea, select, a, [contenteditable]')) return
 
-    event.preventDefault()
-    clearSelection()
     const startX = event.clientX
     const startY = event.clientY
-    setMarquee({ left: startX, top: startY, width: 0, height: 0 })
+    // 清选与建框都推迟到真的拖过阈值:仅一次空白点击不该先闪一个 2px 方块、
+    // 再把已有选区清掉——那让单击空白变成破坏性操作。
+    const THRESHOLD = 4
+    let armed = false
 
     const move = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+      if (!armed) {
+        if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return
+        armed = true
+        event.preventDefault()
+        clearSelection()
+      }
       const left = Math.min(startX, moveEvent.clientX)
       const top = Math.min(startY, moveEvent.clientY)
-      const width = Math.abs(moveEvent.clientX - startX)
-      const height = Math.abs(moveEvent.clientY - startY)
+      const width = Math.abs(dx)
+      const height = Math.abs(dy)
       setMarquee({ left, top, width, height })
       const cards = wrapRef.current?.querySelectorAll<HTMLElement>('.card[data-asset-id]')
       if (!cards) return

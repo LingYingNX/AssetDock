@@ -178,7 +178,10 @@ export default function App(): React.JSX.Element {
       <SvgDefs />
       <Titlebar />
       <Toolbar />
-      <div className={`layout${s.inspHidden ? ' insp-hidden' : ''}`}>
+      {/* 折叠时不要卸载侧栏/检查器:它们一旦从 DOM 消失,列宽的过渡就没有对手可动画,
+          只会看到内容凭空消失、布局瞬间重排。让它们留在 DOM 里,由 .layout 的
+          grid-template-columns 过渡把它们推到 0 宽,再由 overflow:hidden 裁掉。 */}
+      <div className={`layout${s.inspHidden ? ' insp-hidden' : ''}${s.sideHidden ? ' side-hidden' : ''}`}>
         <Sidebar />
         <main className="content">
           <FilterBar />

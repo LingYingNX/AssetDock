@@ -1,8 +1,13 @@
 /* ============================ 偏好设置 ============================ */
 /* 遮罩从标题栏下方开始:标题栏保持可拖拽,窗口在对话框打开时仍能移动 */
-.pref-backdrop{position:fixed;left:0;right:0;top:48px;bottom:0;z-index:100;display:grid;place-items:center;background:rgba(222,239,255,.38);backdrop-filter:blur(12px) saturate(1.2);-webkit-app-region:no-drag}
+/* 遮罩淡入 + 对话框轻微上浮:整窗尺寸的层不该凭空出现。
+   两态用 .show 控制,元素本身由组件在退场结束后才卸载(见 PreferencesDialog 的
+   mounted/shown 两个状态)——纯 CSS 的 @starting-style 只能管入场,管不了卸载。 */
+.pref-backdrop{position:fixed;left:0;right:0;top:48px;bottom:0;z-index:100;display:grid;place-items:center;background:rgba(222,239,255,.38);backdrop-filter:blur(12px) saturate(1.2);-webkit-app-region:no-drag;opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+.pref-backdrop.show{opacity:1}
 /* 尺寸固定,切换分类不再跳变;内容超出时在内容区内滚动 */
-.pref-dialog{width:min(632px,calc(100vw - 48px));height:min(514px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28)}
+.pref-dialog{width:min(632px,calc(100vw - 48px));height:min(514px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:8px;box-shadow:0 16px 36px rgba(20,60,120,.28);opacity:0;transform:translateY(6px) scale(.985);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.pref-dialog.show{opacity:1;transform:none}
 .glass-preferences{background:linear-gradient(135deg,var(--sheen-1),var(--sheen-2)),var(--surface);backdrop-filter:blur(28px) saturate(1.55)}
 .pref-header{height:48px;padding:0 16px 0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
 .pref-title{font-size:14px;font-weight:600;color:var(--t1)}
@@ -13,7 +18,7 @@
    并让 .pref-content 的 overflow-y:auto 永远不触发(内容被裁掉且不可滚动) */
 .pref-body{display:flex;min-height:0;flex:1 1 auto}
 .pref-nav{width:148px;padding:12px 8px;display:flex;flex-direction:column;gap:2px;background:var(--bg1);border-right:1px solid var(--line);flex:none}
-.pref-nav-item{height:34px;padding:0 12px;display:flex;align-items:center;gap:10px;border-radius:6px;color:var(--t3);font-size:13px;text-align:left;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.pref-nav-item{height:34px;padding:0 12px;display:flex;align-items:center;gap:10px;border-radius:6px;color:var(--t3);font-size:13px;text-align:left;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .pref-nav-item:hover{background:var(--bg3);color:var(--t2)}
 .pref-nav-item .ic{width:16px;height:16px}
 .pref-nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}

@@ -7,11 +7,51 @@ export type ThemeMode = 'light' | 'dark'
 
 export const THEME_STORAGE_KEY = 'preferences'
 
-/** 应用主题到根元素(立即生效,无需重渲染) */
+/**
+ * 应用主题到根元素(立即生效,无需重渲染)。
+ *
+ * 主题切换不能靠 CSS transition:实测把 background-image 加进过渡后,
+ * 五层 radial-gradient 在切换后的第一帧(t=10ms)就跳到深色值,全程零中间帧 ——
+ * 渐变不可插值,而全窗口的明暗几乎全部来自 body 的那五层渐变。
+ * transition 也修不了它:能插值的只有 color 这类标量。
+ * 所以改用 View Transition:浏览器在切换前后各抓一张整窗快照,自行交叉淡入
+ * (实测 old 1→0、new 0→1,250ms),这才是主题切换唯一能真正「有过渡」的做法。
+ * Electron 33 实测 document.startViewTransition 为 function,可用。
+ */
 export function applyTheme(mode: ThemeMode): void {
   const root = document.documentElement
-  if (mode === 'dark') root.setAttribute('data-theme', 'dark')
-  else root.removeAttribute('data-theme')
+  // booted 必须在幂等判断之前落定:启动时若保存的是浅色,属性本就缺失,
+  // 下面的 currentTheme()===mode 会直接返回 —— 那之后用户第一次真正切换
+  // 就会被误当成「启动恢复」而不播过渡。
+  const first = !booted
+  booted = true
+  if (currentTheme() === mode) return
+
+  const commit = (): void => {
+    if (mode === 'dark') root.setAttribute('data-theme', 'dark')
+    else root.removeAttribute('data-theme')
+  }
+
+  // 启动时恢复已保存主题不该播过渡:那是首帧内容,不是用户触发的切换
+  if (first) {
+    commit()
+    return
+  }
+
+  // 用户要求减少动效时不抓快照:整窗交叉淡入本身就不算「少动」
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduce || typeof document.startViewTransition !== 'function') {
+    commit()
+    return
+  }
+  document.startViewTransition(commit)
+}
+
+let booted = false
+
+/** 读出当前实际生效的主题(属性缺失即浅色) */
+export function currentTheme(): ThemeMode {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
 }
 
 /** 从偏好 JSON 中解析主题,非法值回退浅色 */

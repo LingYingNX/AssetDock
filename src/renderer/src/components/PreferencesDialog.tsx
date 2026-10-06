@@ -167,7 +167,33 @@ export function PreferencesDialog(): React.JSX.Element | null {
     applyTheme(draft.theme)
   }, [open, draft.theme])
 
-  if (!open) return null
+  /* 遮罩与对话框都是整窗尺寸的层,原来直接 return null 卸载 —— 0ms 硬消失。
+     改成:mounted 决定是否在 DOM 里,shown 决定外观两态,关闭后再等退场走完才卸载。
+     卸载定时器不能省:reduced-motion 下过渡被全局移除,transitionend 永不触发,
+     只靠事件会让关闭后的弹窗永远留在 DOM 里。 */
+  const [mounted, setMounted] = useState(open)
+  const [shown, setShown] = useState(false)
+
+  useEffect(() => {
+    if (open) setMounted(true)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    // 下一帧才置 shown:让「已挂载但未显形」这一帧成为过渡起点
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [open])
+
+  useEffect(() => {
+    if (open) return
+    setShown(false)
+    if (!mounted) return
+    const t = window.setTimeout(() => setMounted(false), 180)
+    return () => window.clearTimeout(t)
+  }, [open, mounted])
+
+  if (!mounted) return null
 
   const close = (): void => {
     void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => applyTheme(parseTheme(raw)))
@@ -340,8 +366,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
   }
 
   return (
-    <div className="pref-backdrop" role="presentation">
-      <section className="pref-dialog glass-preferences" role="dialog" aria-modal="true" aria-label="偏好设置">
+    <div className={`pref-backdrop${shown ? ' show' : ''}`} role="presentation">
+      <section className={`pref-dialog glass-preferences${shown ? ' show' : ''}`} role="dialog" aria-modal="true" aria-label="偏好设置">
         <header className="pref-header">
           <span className="pref-title">偏好设置</span>
           <button className="pref-close" title="关闭" aria-label="关闭" onClick={close}><Icon name="x" /></button>

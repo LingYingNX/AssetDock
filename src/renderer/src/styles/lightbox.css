@@ -1,16 +1,26 @@
 /* ============================ 灯箱 ============================ */
 /* 默认在工作区内展示:绝对定位在 .content 上,左右两侧的侧栏与检查器保持可见。
    只有 .full 才升为整窗覆盖——这是「全屏按钮」的行为,而不是打开即全屏。 */
-.pv{position:absolute;inset:0;z-index:80;background:rgba(226,240,252,.48);backdrop-filter:blur(30px) saturate(1.8) brightness(1.04);display:flex;flex-direction:column;opacity:0;transform:scale(.985);transform-origin:center;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+/* 全屏与工作区两态之间靠 FLIP 补间:.pv.full 只改 position(absolute→fixed),
+   而 position 不可过渡,所以切换瞬间由 JS 量出前后两个矩形、反向平移后再过渡回原位。
+   这里只声明补偿要用到的过渡属性。
+   注意 FLIP 走的是带超调的缓动(进全屏时 t=30 的中间帧宽 1024px 已经超过终值 900px),
+   所以 transform-origin 必须是 top left:补偿值本身就带位移,若绕中心缩放,
+   起止点的位移分量会被再放大一遍,退出全屏时先冲到 x=-270(左边界外)再弹回来。
+   改为左上角锚点后中间帧全程落在 236↔0 之间,不再出界。 */
+.pv{position:absolute;inset:0;z-index:80;background:rgba(226,240,252,.48);backdrop-filter:blur(30px) saturate(1.8) brightness(1.04);display:flex;flex-direction:column;opacity:0;transform:scale(.985);transform-origin:top left;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .pv.show{opacity:1;transform:none}
 .pv.full{position:fixed;z-index:90}
 :root[data-theme="dark"] .pv{background:rgba(10,14,20,.6)}
 /* 全屏时藏掉底部胶片带与控制条之外的一切:让画面占满,只留下必要的操作 */
 .pv.full .pv-ctlbar{padding-bottom:6px}
-.pv-top{display:flex;align-items:center;gap:10px;height:50px;padding:0 12px;color:var(--t2)}
-.pv-top .name-b{font-size:13px;font-weight:600;color:var(--t1)}
-.pv-top .sub{font-size:11.5px;color:var(--t3)}
-.pv-title{display:flex;flex-direction:column;gap:1px;align-items:center;flex:1}
+/* 极简顶栏:左侧一个侧栏开关,右侧一个关闭。其余动作交给胶片带与右侧检查器,
+   顶栏越空,画面越像画布——这是看图软件的基本克己。 */
+.pv-top{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;color:var(--t2)}
+.pv-top .sp{flex:1}
+.pv-top .tb-btn{width:30px;height:30px;border-radius:9px;display:grid;place-items:center}
+.pv-top .tb-btn:hover{background:var(--bg3);color:var(--t1)}
+.pv-top .tb-btn.on{background:var(--acc-soft);color:var(--acc2)}
 /* 工作区只有舞台一列:文件信息/评分/标签由右侧已有的检查器承担,不在这里重复一份 */
 .pv-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:0 16px 10px;min-height:0}
 .pv-stage{display:flex;flex-direction:column;min-width:0;min-height:0}
@@ -43,15 +53,22 @@
 .pv-side{background:var(--bg1);backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--line);border-radius:var(--r-l);padding:14px;overflow-y:auto}
 
 /* ---------- 底部:控制条 + 胶片带 ---------- */
-/* 控制条与胶片带同处底部,统一由 .pv-ctlbar / .pv-stripbar 承担高度,
-   它们不参与 .pv-body 的网格,所以工作区高度自动让位。 */
-.pv-ctlbar{flex:none;display:flex;justify-content:center;padding:0 16px 8px}
-.pv-ctl{display:flex;align-items:center;gap:8px;width:100%;max-width:760px;height:40px;padding:0 10px;
+/* 控制条与胶片带同宽、同左右内边距,面板左右缘成一条线。
+   高度取 52:右侧音量+倍速是竖排,两个 20px 按钮加间隙要占 42,条高若只有 44,
+   竖排就得零余量贴满、下沿压在边框上。留出上下各 4px 呼吸才不挤。 */
+.pv-ctlbar{flex:none;padding:0 16px 8px}
+.pv-ctl{display:flex;align-items:center;gap:8px;width:100%;height:52px;padding:0 10px;
   background:linear-gradient(115deg,var(--sheen-1),var(--sheen-2) 45%,var(--sheen-4)),var(--surface);
   border:1px solid var(--line);border-radius:var(--r-m);backdrop-filter:blur(22px) saturate(1.7)}
 .pv-ctl .sp{flex:1}
 .pv-ctl .tb-btn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--t2)}
 .pv-ctl .tb-btn:hover{background:var(--bg3);color:var(--t1)}
+/* 右侧竖排:音量在上、倍速在下,一起贴住全屏按钮。
+   两个按钮必须等宽——基础 .pv-rate 带 min-width:40,不显式覆盖就会比音量宽一截,
+   列线歪掉(实测 30 对 40)。 */
+.pv-rail{display:flex;flex-direction:column;align-items:center;gap:2px;flex:none}
+.pv-rail .tb-btn{width:32px;height:22px;border-radius:6px}
+.pv-rail .pv-rate{width:32px;min-width:32px;height:22px;padding:0;font-size:10.5px;border-radius:6px}
 .pv-time{font:600 11.5px/1 var(--font-mono);color:var(--t2);min-width:38px;text-align:center}
 .pv-time.dim{color:var(--t3)}
 
@@ -67,9 +84,16 @@
 
 /* 倍速/音量的上弹面板 */
 .pv-popwrap{position:relative;display:flex}
-.pv-pop{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:3;
+/* 面板按「出现即显示」的话就没有入场可言:元素挂载首帧已是终态,过渡无从播放。
+   现在由 .show 驱动两态,并保留关闭后的短暂挂载期播完淡出。
+   注意 transform 里已有 translateX(-50%) 做水平居中,起始态必须把它一起写全,
+   否则会把面板先甩到右边再弹回来。 */
+.pv-pop{position:absolute;bottom:calc(100% + 8px);left:50%;z-index:3;
   display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;background:var(--menu-solid);
-  border:1px solid var(--line2);box-shadow:var(--shadow-panel)}
+  border:1px solid var(--line2);box-shadow:var(--shadow-panel);
+  opacity:0;transform:translateX(-50%) translateY(4px);
+  transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.pv-pop.show{opacity:1;transform:translateX(-50%)}
 .pv-pop button{min-width:38px;height:24px;padding:0 6px;border-radius:6px;font-size:11.5px;color:var(--t2)}
 .pv-pop button:hover{background:var(--bg3);color:var(--t1)}
 .pv-pop button.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
@@ -78,13 +102,17 @@
 .pv-rate:hover{border-color:var(--line2);color:var(--t1)}
 .pv-rate.on{border-color:var(--acc-line);color:var(--acc2)}
 
-/* 胶片传送带 */
-/* 格子间距用 margin 而非 gap:窗口化渲染要靠占位块撑出总宽度,
-   占位块若不吃间距,滚动位置与下标就会逐渐错位。故间距必须算进每格占宽(pitch)。 */
-.pv-stripbar{flex:none;display:flex;align-items:center;gap:10px;padding:0 16px 12px}
-.pv-striptrack{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;padding:4px 2px;min-width:0;
-  scrollbar-width:thin}
-.pv-striptrack::-webkit-scrollbar{height:6px}
+/* 胶片传送带:左端一处文件名与序号,右端一条可横向滚动的缩略图。
+   滚动条一律隐藏——它在这条窄带上只会切掉缩略图下缘,视觉上是噪声。
+   位移仍靠滚轮/触控板与自动居中,不依赖可见滚动条。 */
+.pv-stripbar{flex:none;display:flex;align-items:center;gap:12px;padding:0 16px 12px}
+/* 元信息块与下方轨道同高,文字垂直居中,避免名字浮在缩略图中线以上 */
+.pv-stripmeta{flex:none;display:flex;flex-direction:column;justify-content:center;gap:3px;width:150px;height:56px;min-width:0;text-align:left}
+.pv-stripmeta .name-b{font-size:12.5px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-stripmeta .sub{font:600 10.5px/1 var(--font-mono);color:var(--t3)}
+.pv-striptrack{flex:1;display:flex;align-items:center;overflow-x:auto;overflow-y:hidden;height:56px;padding:2px;min-width:0;
+  scrollbar-width:none}
+.pv-striptrack::-webkit-scrollbar{display:none}
 .pv-strip-pad{flex:none;height:52px}
 .pv-reel{position:relative;flex:none;width:84px;height:52px;margin-right:6px;border-radius:6px;overflow:hidden;
   border:1.5px solid transparent;opacity:.55;background:var(--bg2);padding:0;cursor:pointer;
@@ -94,7 +122,6 @@
 .pv-reel.on{opacity:1;border-color:var(--acc)}
 .pv-reel-blank{display:grid;place-items:center;width:100%;height:100%;font:600 12px/1 var(--font-mono);color:var(--t3)}
 .pv-reel-mark{position:absolute;left:4px;bottom:3px;font-size:9px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-.pv-stripcount{flex:none;font:600 11px/1 var(--font-mono);color:var(--t3);min-width:52px;text-align:right}
 
 /* 3D 加载指示浮层 */
 .pv-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;padding:6px 14px;
@@ -114,7 +141,7 @@
 .css-state{font-size:11px;color:var(--t3)}
 .css-state.dirty{color:var(--acc2);font-weight:600}
 .css-tabs{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:7px;background:var(--surface);border:1px solid var(--line)}
-.css-tab{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border:0;border-radius:5px;background:none;color:var(--t3);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.css-tab{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border:0;border-radius:5px;background:none;color:var(--t3);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .css-tab .ic{width:12px;height:12px}
 .css-tab:hover{color:var(--t1)}
 .css-tab.on{background:var(--sheen-1);color:var(--t1)}

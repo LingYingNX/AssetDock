@@ -4,6 +4,9 @@
 .menu{position:fixed;z-index:90;min-width:196px;border-radius:var(--r-menu);padding:5px;transform-origin:top left;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .menu.open{opacity:1;transform:none;pointer-events:auto;
   @starting-style{opacity:0;transform:translateY(-4px) scale(.98)}}
+/* 退场:摘掉 .open 才能从 opacity:1 过渡回 0。没有这条,右键菜单关闭是 0ms 消失。
+   必须排在 .open 之后——两者特异性相同,靠顺序决定谁生效。 */
+.menu.closing{opacity:0;transform:translateY(-4px) scale(.98);pointer-events:none}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--t1);text-align:left}
 .menu button:hover{background:var(--acc-soft);color:var(--t1)}
 .menu button .ic{width:15px;height:15px;color:var(--t2)}
@@ -49,7 +52,7 @@
 
 /* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
 .menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu)}
-.menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
 .menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:11px}
 .menu.pick-menu button.on{color:var(--acc2);font-weight:600;background:var(--acc-soft)}
@@ -62,9 +65,19 @@
 
 /* 齿轮菜单:沿用当前浅色玻璃主题 */
 .settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:6px 0;user-select:none;color:var(--t1);
-  transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out);
+  transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+/* 齿轮菜单的两态:原来组件一关就卸载,只有 @starting-style 管入场,退场无从发生。
+   起始态必须写进 .show 这一条里,不能留在基础规则 ——
+   @starting-style 按自身选择器的特异性参与层叠,.settings-menu.show{opacity:1}(0,2,0)
+   会盖掉 .settings-menu 里 @starting-style 的 opacity:0(0,1,0),入场就整段丢失。
+   实测:起始态写在基础规则时,菜单挂载后 t=69 直接 o=1,零中间帧。
+   也不给基础规则写死 opacity:0 —— 子菜单 .settings-menu-submenu 靠 animation 的
+   fill:both 定格终态,而 glass.css 的 reduced-motion 会把动画整个移除,
+   基础声明写死 0 会让那类用户的子菜单直接隐形。 */
+.settings-menu.show{opacity:1;transform:none;
   @starting-style{opacity:0;transform:translateY(-4px) scale(.98)}}
-.settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color .15s ease}
+.settings-menu.closing{opacity:0;transform:translateY(-4px) scale(.98);pointer-events:none}
+.settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .settings-menu button.settings-menu-item{border:0;background:transparent;font:inherit;text-align:left}
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
 .settings-menu-parent{position:relative;display:flex;align-self:stretch}
@@ -78,4 +91,6 @@
 .settings-menu-divider{height:1px;background:var(--hatch);margin:5px 8px}
 
 @keyframes settings-submenu-in{from{opacity:0;transform:translateX(4px) scale(.98)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}
+/* 这里原来有一条 `@media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}`,
+   意图是弱化动效,实际是反的:glass.css 已用 `animation:none!important` 全局移除动画,
+   这一条又把动画拖回 80ms —— 用户明确要求减少动效时反而看到了动效。删掉,交给全局策略。 */

@@ -47,6 +47,17 @@
 }
 :root[data-theme="dark"] .glass-card{backdrop-filter:blur(18px) saturate(1.3) brightness(.92)}
 
+/* 主题切换:渐变不可插值(实测 background-image 切换后第一帧即跳到终值,零中间帧),
+   所以 applyTheme 改走 View Transition —— 浏览器前后各抓一张整窗快照做交叉淡入。
+   但快照层是方形的:实测 ::view-transition 的 border-radius 为 0px、clip-path 为 none,
+   而 html 本身是 5px 圆角,不裁就会在四个角顶穿窗口圆角。
+   圆角值直接取 --r-window,与窗口外框、菜单保持同一处定义。 */
+::view-transition-old(root),
+::view-transition-new(root){
+  border-radius:var(--r-window);
+  overflow:hidden;
+}
+
 /* 动效纪律:reduced-motion 全局关动画 */
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important}

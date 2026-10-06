@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
-import { formatBytes } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { Viewer3D, type ViewKey } from './Viewer3D'
@@ -37,7 +36,7 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
       style={{
         transform: `scale(${scale})`,
         transformOrigin: origin,
-        transition: 'transform .12s ease-out',
+        transition: 'transform 120ms cubic-bezier(.23,1,.32,1)',
         cursor: scale > 1 ? 'grab' : 'zoom-in'
       }}
       onWheel={(e) => {
@@ -76,12 +75,30 @@ const VIEW_ROT: Record<string, string> = {
 export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
-  const stepLightbox = useUI((s) => s.stepLightbox)
   const assets = useUI((s) => s.assets)
-  const toggleFavorite = useUI((s) => s.toggleFavorite)
+  const sideHidden = useUI((s) => s.sideHidden)
+  const toggleSidebar = useUI((s) => s.toggleSidebar)
   const fullscreen = useUI((s) => s.lightboxFullscreen)
   const setFullscreen = useUI((s) => s.setLightboxFullscreen)
   const [shown, setShown] = useState(false)
+  /* 关闭时 lightboxId 立刻变 null,但画面还要停留一拍播完淡出,所以:
+     mounted 决定「在不在」,lastId 决定「退场期间画哪一张」。
+     原来 `if (!lightboxId) return null` 是 0ms 硬闪——半透明背景直接消失,
+     用户看到的是「点了关闭,窗口闪一下」。 */
+  const [mounted, setMounted] = useState(lightboxId != null)
+  const [lastId, setLastId] = useState(lightboxId)
+  /* 退场期间要停在离场时的那个形态:.full 是 position:absolute→fixed 的整值跳变,
+     关闭时若让 fullscreen 直接归假,元素会一边淡出一边从整窗缩回工作区,像被拽了一下。
+     留住最后一次的全屏状态,让它原地淡出。 */
+  const [lastFull, setLastFull] = useState(false)
+  /* 全屏切换是 position:absolute→fixed 的整值跳变,position 不可过渡。
+     做法是先留住旧矩形的快照,等切换落地后再做一次反向补偿 —— 这就是 FLIP。 */
+  const rootRef = useRef<HTMLDivElement>(null)
+  const fsFlip = useRef<{ first: DOMRect; animated: boolean } | null>(null)
+  /* reduced-motion 下不做 FLIP 补偿:用户明确要求少动,这里就不该替它补一段 */
+  const reduceMotion = useRef(
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 
   /* 占位舞台(FBX/OBJ/演示模型)状态 */
   const [paused, setPaused] = useState(false)
@@ -97,8 +114,9 @@ export function Lightbox(): React.JSX.Element | null {
   const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
 
-  /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback */
-  const a = assets.find((x) => x.id === lightboxId)
+  /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
+     退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
+  const a = assets.find((x) => x.id === (lightboxId ?? lastId))
   const isVideo = a?.type === 'video'
   const videoSrc = isVideo && a ? (a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`) : ''
   const playback = useVideoPlayback(videoSrc)
@@ -116,14 +134,32 @@ export function Lightbox(): React.JSX.Element | null {
     void window.windowApi.state.set('viewerExposure', String(v))
   }
 
-  /* 淡入过渡 + 素材切换时重置控制状态 */
+  /* 入场与退场。打开:先挂载、下一帧置 shown 播淡入。
+     关闭:先置 shown=false 播淡出,180ms 后再卸载——不能只等 transitionend,
+     reduced-motion 下过渡被全局移除,事件永不触发,灯箱会永远留在屏幕上。
+     换片(lightboxId 从 A 变 B)不该重播退场,所以只在「变 null」时才进入退场分支。 */
   useEffect(() => {
     if (lightboxId) {
-      const id = requestAnimationFrame(() => setShown(true))
-      return () => cancelAnimationFrame(id)
+      setLastId(lightboxId)
+      setMounted(true)
+      return
     }
     setShown(false)
-  }, [lightboxId])
+    if (!mounted) return
+    const t = window.setTimeout(() => setMounted(false), 220)
+    return () => window.clearTimeout(t)
+  }, [lightboxId, mounted])
+
+  useEffect(() => {
+    if (!mounted || !lightboxId) return
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [mounted, lightboxId])
+
+  /* 记录退场时要保持的全屏形态 */
+  useEffect(() => {
+    if (lightboxId) setLastFull(useUI.getState().lightboxFullscreen)
+  }, [lightboxId, fullscreen])
 
   useEffect(() => {
     setPaused(false)
@@ -135,12 +171,47 @@ export function Lightbox(): React.JSX.Element | null {
     setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [lightboxId])
 
+  /* 全屏 FLIP。position 不可过渡,所以整值切换必须靠反向补偿补出连续感:
+     切换前(点击那一刻)先存旧矩形,布局落地后量新矩形,把元素按差值平移缩放回旧位置,
+     下一帧再清掉内联样式,让 CSS 里已有的 transform 过渡把它送回真实位置。
+     useLayoutEffect 在浏览器绘制前执行,读到的 rect 就是新布局,不会先闪一帧。 */
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    const pending = fsFlip.current
+    if (!el || !pending || !pending.animated) return
+    fsFlip.current = null
+    const last = el.getBoundingClientRect()
+    if (last.width <= 0 || last.height <= 0) return
+    const dx = pending.first.left - last.left
+    const dy = pending.first.top - last.top
+    const sx = pending.first.width / last.width
+    const sy = pending.first.height / last.height
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return
+    el.style.transition = 'none'
+    el.style.transformOrigin = 'top left'
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`
+    window.requestAnimationFrame(() => {
+      el.style.transition = ''
+      el.style.transformOrigin = ''
+      el.style.transform = ''
+    })
+  }, [fullscreen])
+
   /**
    * 空格播放/暂停、F 全屏。
    *
    * 放在组件内而非 App 的全局快捷键表里,因为两者都要摸到当前媒体对象(播放态、video 节点)。
    * 输入框内不劫持;其余情况 preventDefault 掉原生按钮激活,避免按一次触发两遍。
    */
+  /* 切换全屏:先量当前矩形存进快照,由上面的 useLayoutEffect 在切换落地后做 FLIP 补偿。
+     所有入口(按钮、快捷键 F、视频控制条)都走这里,否则某一条路径会漏掉动画。 */
+  const toggleFullscreen = useCallback(() => {
+    const el = rootRef.current
+    // reduced-motion 下 mark 为 false,useLayoutEffect 直接跳过补偿
+    if (el) fsFlip.current = { first: el.getBoundingClientRect(), animated: !reduceMotion.current }
+    setFullscreen(!useUI.getState().lightboxFullscreen)
+  }, [setFullscreen])
+
   useEffect(() => {
     if (!lightboxId) return
     const onKey = (e: KeyboardEvent): void => {
@@ -155,28 +226,23 @@ export function Lightbox(): React.JSX.Element | null {
       }
       if (k === 'f') {
         e.preventDefault()
-        setFullscreen(!useUI.getState().lightboxFullscreen)
+        toggleFullscreen()
+        return
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightboxId, isVideo, playback, setFullscreen])
+  }, [lightboxId, isVideo, playback, toggleFullscreen])
 
-  if (!lightboxId) return null
+  /* 退场期间 lightboxId 已为 null,靠 mounted 撑着最后 220ms 的淡出 */
+  if (!mounted) return null
   if (!a) return null
+  /* 真实显示态:退场时锁住离开那一刻的全屏形态 */
+  const fsNow = lightboxId ? fullscreen : lastFull
 
-  const visible = assets.filter((x) => !x.deletedAt)
-  const idx = visible.findIndex((x) => x.id === a.id)
   const isModel = a.type === 'model'
   const isStyle = a.type === 'style'
   const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
-
-  const sub =
-    a.type === 'model'
-      ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatBytes(a.sizeBytes)} · ${a.format} · 转台预览`
-      : a.type === 'style'
-        ? `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${formatBytes(a.sizeBytes)} · ${a.format}`
-        : `${String(idx + 1).padStart(2, '0')} / ${visible.length} · ${a.width}×${a.height} · ${formatBytes(a.sizeBytes)} · ${a.format}`
 
   /* 控制条动作(按真实/占位分流) */
   const onTurntable = (): void => {
@@ -228,34 +294,29 @@ export function Lightbox(): React.JSX.Element | null {
 
   return (
     <div
-      className={`pv${shown ? ' show' : ''}${fullscreen ? ' full' : ''}`}
+      ref={rootRef}
+      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}`}
       role="dialog"
-      aria-modal={fullscreen}
+      aria-modal={fsNow}
       aria-label="详情预览"
       onClick={(e) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('pv-stage')) closeLightbox()
       }}
     >
+      {/* 极简顶栏:只留侧栏开关与关闭。翻片走胶片带,收藏/评分/导出交给右侧检查器与右键菜单 */}
       <div className="pv-top">
-        <button className="tb-btn" title="后退 (Esc)" onClick={closeLightbox}>
-          <Icon name="chev-l" />
+        <button
+          className={`tb-btn${sideHidden ? ' on' : ''}`}
+          title={sideHidden ? '展开侧边栏' : '收起侧边栏'}
+          onClick={() => {
+            // 全屏遮住了侧栏,此时「展开侧栏」的心意是回到带侧栏的布局,故顺带退出全屏
+            if (sideHidden && fullscreen) toggleFullscreen()
+            toggleSidebar()
+          }}
+        >
+          <Icon name="panel-l" />
         </button>
-        <button className="tb-btn" title="上一个 (←)" onClick={() => stepLightbox(-1)}>
-          <Icon name="arr-l" />
-        </button>
-        <button className="tb-btn" title="下一个 (→)" onClick={() => stepLightbox(1)}>
-          <Icon name="arr-r" />
-        </button>
-        <div className="pv-title">
-          <span className="name-b">{a.name}</span>
-          <span className="sub">{sub}</span>
-        </div>
-        <button className="tb-btn" title="收藏" onClick={() => toggleFavorite(a.id)}>
-          <Icon name="heart" />
-        </button>
-        <button className="tb-btn" title="导出"><Icon name="download" /></button>
-        <button className="tb-btn" title="更多"><Icon name="more-h" /></button>
-        <span className="tb-sep" />
+        <span className="sp" />
         <button className="tb-btn" title="关闭 (Esc)" onClick={closeLightbox}>
           <Icon name="x" />
         </button>
@@ -382,16 +443,16 @@ export function Lightbox(): React.JSX.Element | null {
       {!isStyle ? (
         <div className="pv-ctlbar">
           {isVideo ? (
-            <VideoControls v={playback} fullscreen={fullscreen} onFullscreen={() => setFullscreen(!fullscreen)} />
+            <VideoControls v={playback} fullscreen={fsNow} onFullscreen={toggleFullscreen} />
           ) : (
             <div className="pv-ctl">
               <span className="sp" />
               <button
                 className="tb-btn"
-                title={fullscreen ? '退出全屏 (F)' : '全屏 (F)'}
-                onClick={() => setFullscreen(!fullscreen)}
+                title={fsNow ? '退出全屏 (F)' : '全屏 (F)'}
+                onClick={toggleFullscreen}
               >
-                <Icon name={fullscreen ? 'contract' : 'expand'} />
+                <Icon name={fsNow ? 'contract' : 'expand'} />
               </button>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
 
@@ -31,6 +31,27 @@ export function ContextMenu(): React.JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null)
   const subRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  /* 右键菜单的入场本来靠 `.menu.open` 的 @starting-style(挂载首帧带 .open 即可播),
+     但退场完全缺失:关闭时 ctxMenu 置空,组件立刻 return null,菜单 0ms 消失。
+     这里把「在不在」和「画什么」分开:退场期间用 last 继续渲染同一份菜单,
+     并挂上 .closing 播淡出,160ms 后再卸载。
+     不能只等 transitionend——reduced-motion 下过渡被全局移除,事件永不触发。 */
+  const [mounted, setMounted] = useState(ctxMenu != null)
+  const [last, setLast] = useState(ctxMenu)
+
+  useEffect(() => {
+    if (ctxMenu) {
+      setLast(ctxMenu)
+      setMounted(true)
+      return
+    }
+    if (!mounted) return
+    const t = window.setTimeout(() => setMounted(false), 180)
+    return () => window.clearTimeout(t)
+  }, [ctxMenu, mounted])
+
+  /** 渲染用的菜单数据:退场期间回落到最后一次打开的快照 */
+  const m = ctxMenu ?? last
 
   /** 换素材/关菜单时重置,避免上一个菜单量出的位置残留到下一次打开 */
   const ctxKey = ctxMenu ? `${ctxMenu.x},${ctxMenu.y},${ctxMenu.assetId}` : ''
@@ -100,8 +121,9 @@ export function ContextMenu(): React.JSX.Element | null {
     sub.classList.toggle('flip-x', flip)
   }, [openSub, pos])
 
-  if (!ctxMenu) return null
-  const a = assets.find((x) => x.id === ctxMenu.assetId)
+  /* 退场期间 ctxMenu 已为 null,靠 mounted + last 再撑 180ms 播完淡出 */
+  if (!mounted || !m) return null
+  const a = assets.find((x) => x.id === m.assetId)
   const dbIds = targetIds
     .map((id) => assets.find((x) => x.id === id))
     .filter((x): x is NonNullable<typeof x> => x != null && x.dbId != null && x.libraryId != null)
@@ -154,14 +176,14 @@ export function ContextMenu(): React.JSX.Element | null {
       label: '在资源管理器中显示',
       fn: a?.absPath ? () => window.windowApi.showInFolder(a.absPath as string) : undefined
     },
-    { icon: 'edit', label: '重命名', k: 'F2', fn: () => startRenaming(ctxMenu.assetId) },
+    { icon: 'edit', label: '重命名', k: 'F2', fn: () => startRenaming(m.assetId) },
     { icon: 'folder', label: '移动到…', sepBefore: true, children: moveItems },
     ...(a?.deletedAt
-      ? [{ icon: 'sync', label: '从回收站恢复', fn: () => restoreAsset(ctxMenu.assetId) }]
+      ? [{ icon: 'sync', label: '从回收站恢复', fn: () => restoreAsset(m.assetId) }]
       : []),
     { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? copySelection : undefined },
     { icon: 'download', label: '导出…', fn: copyable ? exportSelection : undefined },
-    { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAsset(ctxMenu.assetId) : trashAsset(ctxMenu.assetId)) }
+    { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAsset(m.assetId) : trashAsset(m.assetId)) }
   ]
 
   const row = (it: MenuItem, key: string): React.JSX.Element => {
@@ -210,16 +232,18 @@ export function ContextMenu(): React.JSX.Element | null {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 95 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 95, pointerEvents: ctxMenu ? 'auto' : 'none' }}
       onClick={close}
       onContextMenu={(e) => { e.preventDefault(); close() }}
     >
       <div
         ref={menuRef}
-        className="menu glass-menu open ctx-menu"
+        /* 关闭时摘掉 .open 换上 .closing:.open 把 opacity 定在 1,只有摘掉它才能从 1 过渡到 0。
+           .closing 写在 menu.css 里 .open 之后,同特异性靠顺序取胜。 */
+        className={`menu glass-menu ctx-menu${ctxMenu ? ' open' : ' closing'}`}
         style={{
-          top: pos?.top ?? ctxMenu.y,
-          left: pos?.left ?? ctxMenu.x,
+          top: pos?.top ?? m.y,
+          left: pos?.left ?? m.x,
           visibility: pos ? 'visible' : 'hidden'
         }}
         onClick={(e) => e.stopPropagation()}

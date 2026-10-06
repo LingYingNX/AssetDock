@@ -133,11 +133,36 @@ export function useVideoPlayback(src: string) {
 
 export type VideoPlayback = ReturnType<typeof useVideoPlayback>
 
-/** 控制条上方的弹出小面板:向上弹,避免贴到窗口底边被裁掉 */
+/** 控制条上方的弹出小面板:向上弹,避免贴到窗口底边被裁掉。
+ *
+ * 这里同样是「挂载即显示」:原来 `if (!open) return null` 让面板在关闭瞬间消失,
+ * 元素都没了,过渡无从播放。改成挂载与显形分离,关闭后留 140ms 播完淡出再卸载。
+ * 不能只等 transitionend:reduced-motion 下过渡被全局移除,事件永不触发。
+ */
 function Pop({ open, children }: { open: boolean; children: ReactNode }): React.JSX.Element | null {
-  if (!open) return null
+  const [mounted, setMounted] = useState(open)
+  const [shown, setShown] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      return
+    }
+    setShown(false)
+    if (!mounted) return
+    const t = window.setTimeout(() => setMounted(false), 160)
+    return () => window.clearTimeout(t)
+  }, [open, mounted])
+
+  useEffect(() => {
+    if (!mounted || !open) return
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [mounted, open])
+
+  if (!mounted) return null
   return (
-    <div className="pv-pop" role="group">
+    <div className={`pv-pop${shown ? ' show' : ''}`} role="group">
       {children}
     </div>
   )
@@ -251,45 +276,52 @@ export function VideoControls({
       <Scrubber current={snap.current} duration={snap.duration} buffered={snap.buffered} onSeek={v.seek} />
       <span className="pv-time dim">{formatTime(snap.duration)}</span>
 
-      {/* 音量:悬停展开滑杆,点击图标切换静音——与常见播放器一致,不额外占一个按钮 */}
-      <span className="pv-popwrap" onMouseEnter={() => setPop('vol')} onMouseLeave={() => setPop(null)}>
-        <button className="tb-btn" title={snap.muted ? '取消静音' : '静音'} onClick={v.toggleMute}>
-          <Icon name={snap.muted || snap.volume === 0 ? 'vol-x' : 'vol'} />
-        </button>
-        <Pop open={pop === 'vol'}>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(volPct)}
-            aria-label="音量"
-            style={{ background: `linear-gradient(90deg,var(--acc) ${volPct}%,var(--line2) ${volPct}%)` }}
-            onChange={(e) => v.setVolume(Number(e.target.value) / 100)}
-          />
-        </Pop>
-      </span>
+      {/* 右侧竖排:音量与倍速叠成一列,紧挨全屏。
+          这里不放 flex:1 的占位元素——那会和进度条各吃一半剩余宽度,
+          进度条本该是视频的主控件,不该被一个空 span 分走空间。 */}
+      <div className="pv-rail">
+        {/* 音量:悬停展开滑杆,点击图标切换静音——与常见播放器一致 */}
+        <span className="pv-popwrap" onMouseEnter={() => setPop('vol')} onMouseLeave={() => setPop(null)}>
+          <button className="tb-btn" title={snap.muted ? '取消静音' : '静音'} onClick={v.toggleMute}>
+            <Icon name={snap.muted || snap.volume === 0 ? 'vol-x' : 'vol'} />
+          </button>
+          <Pop open={pop === 'vol'}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(volPct)}
+              aria-label="音量"
+              style={{ background: `linear-gradient(90deg,var(--acc) ${volPct}%,var(--line2) ${volPct}%)` }}
+              onChange={(e) => v.setVolume(Number(e.target.value) / 100)}
+            />
+          </Pop>
+        </span>
+        <span className="pv-popwrap">
+          <button
+            className={`pv-rate${snap.rate !== 1 ? ' on' : ''}`}
+            title="播放倍速"
+            onClick={() => setPop((p) => (p === 'rate' ? null : 'rate'))}
+          >
+            {snap.rate}x
+          </button>
+          <Pop open={pop === 'rate'}>
+            {RATES.map((r) => (
+              <button
+                key={r}
+                className={r === snap.rate ? 'on' : undefined}
+                onClick={() => {
+                  v.setRate(r)
+                  setPop(null)
+                }}
+              >
+                {r}x
+              </button>
+            ))}
+          </Pop>
+        </span>
+      </div>
 
-      <span className="pv-popwrap">
-        <button className={`pv-rate${snap.rate !== 1 ? ' on' : ''}`} title="播放倍速" onClick={() => setPop((p) => (p === 'rate' ? null : 'rate'))}>
-          {snap.rate}x
-        </button>
-        <Pop open={pop === 'rate'}>
-          {RATES.map((r) => (
-            <button
-              key={r}
-              className={r === snap.rate ? 'on' : undefined}
-              onClick={() => {
-                v.setRate(r)
-                setPop(null)
-              }}
-            >
-              {r}x
-            </button>
-          ))}
-        </Pop>
-      </span>
-
-      <span className="sp" />
       <button className="tb-btn" title={fullscreen ? '退出全屏 (F)' : '全屏 (F)'} onClick={onFullscreen}>
         <Icon name={fullscreen ? 'contract' : 'expand'} />
       </button>

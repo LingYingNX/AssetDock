@@ -37,6 +37,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const previewKey = a.previewUrl ?? ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
   const [modelFailed, setModelFailed] = useState(false)
+  /** 视频卡悬浮进度:读实时播放进度,避免所有视频卡都画同一条假进度条 */
+  const [progress, setProgress] = useState(0)
+  /** 悬浮重播时的短溶解,替掉尾帧→首帧的硬切 */
+  const [dip, setDip] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   // 列表/网格悬浮自动播放偏好(设置 → 音视频);默认开启,静音默认开启
@@ -93,6 +97,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         dragPreviewRef.current?.remove()
         dragPreviewRef.current = preview
         e.dataTransfer.setDragImage(preview, 22, 18)
+        // 拖拽预览只为 setDragImage 而存在;拖动结束由 onDragEnd 清理。
+        // 这里只兜底:若 dragend 因外部原因没来(拖出窗口等),1s 后也收掉。
         window.setTimeout(() => {
           if (dragPreviewRef.current !== preview) return
           preview.remove()
@@ -113,16 +119,26 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
       }}
       onFocus={() => setFocusedCard(a.id)}
       onMouseEnter={() => {
-        // 悬浮自动播放:仅在偏好开启且为视频时启动,离开即复位
+        // 悬浮自动播放:仅在偏好开启且为视频时启动。
+        // 进入前先退回首帧并淡化,否则从尾帧硬切到第 0 帧会闪一下。
         const v = videoRef.current
         if (!v || !hoverVideo) return
+        // 先落到底再抬起透明度:从上一轮的尾帧跳到第 0 帧是硬切,
+        // 借 140ms 的透明度回落做一次溶解,替掉那一帧突跳。
+        setDip(true)
         v.currentTime = 0
         void v.play().catch(() => { /* 自动播放被拦截时保持首帧 */ })
+        window.requestAnimationFrame(() =>
+          window.requestAnimationFrame(() => setDip(false))
+        )
       }}
       onMouseLeave={() => {
         const v = videoRef.current
         if (!v) return
+        // 离开即复位:暂停并把播放头退回首帧,下次进入仍从开头播
         v.pause()
+        v.currentTime = 0
+        setProgress(0)
       }}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -165,8 +181,12 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             src={a.originalUrl}
             muted={hoverSound !== true}
             preload="auto"
-            className={imgLoaded ? 'loaded' : ''}
+            className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
             onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+            onTimeUpdate={(e) => {
+              const v = e.currentTarget
+              if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
+            }}
           />
         ) : a.previewUrl && (a.type === 'image' || a.type === 'style') ? (
           <img
@@ -182,8 +202,12 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             src={`/@fs/${a.previewUrl}`}
             muted={hoverSound !== true}
             preload="auto"
-            className={imgLoaded ? 'loaded' : ''}
+            className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
             onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+            onTimeUpdate={(e) => {
+              const v = e.currentTarget
+              if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
+            }}
           />
         ) : null}
 
@@ -202,7 +226,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         {isVideo && (
           <>
             <span className="play-big"><Icon name="play" /></span>
-            <div className="scrub"><i /></div>
+            <div className="scrub"><i style={{ width: `${progress}%` }} /></div>
           </>
         )}
         <span className="type-chip">
@@ -230,7 +254,18 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         <span className="lc lc-dur">{isVideo ? (a.duration ?? '—') : '—'}</span>
         <span className="lc lc-date">{formatRelativeDate(a.importedAt)}</span>
         <span className="lc lc-acts">
-          <button title="更多"><Icon name="more-h" /></button>
+          {/* 原来这个「更多」按钮没有 onClick,点下去什么也不会发生;
+              列表视图已有右键菜单,这里直接打开同一份菜单。 */}
+          <button
+            title="更多操作"
+            onClick={(e) => {
+              e.stopPropagation()
+              const r = e.currentTarget.getBoundingClientRect()
+              setCtxMenu({ x: r.left, y: r.bottom + 4, assetId: a.id })
+            }}
+          >
+            <Icon name="more-h" />
+          </button>
         </span>
       </figcaption>
     </figure>

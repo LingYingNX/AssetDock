@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { aggregatePalette, queryAssets } from '../data/query'
@@ -23,6 +23,34 @@ export function ColorStrip(): React.JSX.Element | null {
     () => (cbarOpen ? aggregatePalette(queryAssets(assets, { nav, search, filters, swatches, stripColor: null })) : []),
     [cbarOpen, assets, nav, search, filters, swatches]
   )
+
+  /* 三态:open 决定外观,shown 决定是否带 .open,mounted 决定是否留在 DOM。
+     原来 `if (!cbarOpen) return null` 一关就卸载,menu.css 里 `.menu` 的 transition
+     与 `.menu.closing` 都无从生效 —— 浮层永远 0ms 硬消失。
+     入场不需要额外状态:`.menu.open` 自带 @starting-style,挂载首帧就已带 .open。
+     卸载定时器不能省:reduced-motion 下 glass.css 全局移除过渡,transitionend 永不触发。 */
+  const [mounted, setMounted] = useState(cbarOpen)
+  const [shown, setShown] = useState(cbarOpen)
+
+  /* 退场期间 cbarOpen 已是 false,strip 会立刻算成空数组,浮层会在淡出时
+     把内容换成「无颜色数据」—— 与 ThumbProgress 退场抽空文案是同一类问题。
+     留住最后一次非空结果,只在退场期间改用它;展开状态下始终用实时结果,
+     否则换到没有调色板的视图再打开会显示上一次的旧颜色。 */
+  const [lastStrip, setLastStrip] = useState(strip)
+  useEffect(() => {
+    if (cbarOpen && strip.length > 0) setLastStrip(strip)
+  }, [cbarOpen, strip])
+
+  useEffect(() => {
+    if (cbarOpen) {
+      setMounted(true)
+      setShown(true)
+      return
+    }
+    setShown(false)
+    const timer = window.setTimeout(() => setMounted(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [cbarOpen])
 
   useLayoutEffect(() => {
     if (!cbarOpen) return
@@ -53,16 +81,24 @@ export function ColorStrip(): React.JSX.Element | null {
     }
   }, [cbarOpen])
 
-  if (!cbarOpen) return null
+  if (!mounted) return null
+
+  const cell = strip.length > 0 ? strip : lastStrip
 
   const node = (
-    <div ref={ref} className="menu glass-menu open pick-menu color-menu" id="cbar" role="menu" aria-label="颜色构造">
+    <div
+      ref={ref}
+      className={`menu glass-menu pick-menu color-menu${shown ? ' open' : ' closing'}`}
+      id="cbar"
+      role="menu"
+      aria-label="颜色构造"
+    >
       <div className="color-menu-head">颜色构造</div>
-      {strip.length === 0 ? (
+      {cell.length === 0 ? (
         <div className="menu-empty">当前视图无颜色数据(素材缺少调色板)</div>
       ) : (
         <div className="color-grid">
-          {strip.map((c) => (
+          {cell.map((c) => (
             <button
               key={c.hex}
               className={`cs${stripColor === c.hex ? ' on' : ''}`}

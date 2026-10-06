@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
@@ -31,6 +31,26 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const ref = useRef<HTMLDivElement>(null)
   const open = openMenu === id
+
+  /* 三态:open 决定外观,shown 决定是否带 .open,mounted 决定是否留在 DOM。
+     原来 `if (!open) return null` 一关就卸载,menu.css 里写的 transition 与
+     `.menu.closing` 都无从生效 —— 菜单永远 0ms 硬消失。
+     入场不需要额外状态:menu.css 的 `.menu.open` 自带 @starting-style,
+     新挂载元素带着 .open 进来时浏览器会自己补起始帧。
+     卸载定时器不能省:reduced-motion 下 glass.css 全局移除过渡,transitionend 永不触发。 */
+  const [mounted, setMounted] = useState(open)
+  const [shown, setShown] = useState(open)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      setShown(true)
+      return
+    }
+    setShown(false)
+    const timer = window.setTimeout(() => setMounted(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -68,10 +88,10 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
     }
   }, [open, id, setOpenMenu])
 
-  if (!open) return null
+  if (!mounted) return null
 
   const node = (
-    <div ref={ref} className={`menu glass-menu open pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}`} role="menu">
+    <div ref={ref} className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}${shown ? ' open' : ' closing'}`} role="menu">
       {items.map((it) => {
         const on = it.id === value
         return (
