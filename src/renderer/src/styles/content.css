@@ -10,16 +10,28 @@
 
 /* ---------- 筛选条 ---------- */
 .filterbar{display:flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-bottom:1px solid var(--line)}
-.filterbar .btn{height:27px;padding:0 9px;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap}
+/* 筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
+   所以 border-color/color/background 的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
+   时长用 --dur-hover(110ms):悬停是一天几十次的高频反馈,必须比按压(160ms)更短。 */
+.filterbar .btn{height:27px;padding:0 9px;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap;
+  transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .btn.on{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
+/* 菜单展开时按钮必须自己给出反馈。原来 .on 只跟随筛选值(不等于 all),菜单开着按钮却毫无变化,
+   用户看不出「这个按钮的菜单正开着」。用独立的 .open,不与筛选值语义混用。 */
+.filterbar .btn.open{background:var(--bg3);border-color:var(--line2);color:var(--t1)}
+/* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
+.filterbar .btn.on.open{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
 .filterbar .btn .dot{width:7px;height:7px}
-.filterbar .btn .chev{width:12px;height:12px;color:var(--t3)}
-.cbtn{width:28px;height:27px;border-radius:9px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line)}
+.filterbar .btn .chev{width:12px;height:12px;color:var(--t3);transition:transform var(--dur-hover) var(--ease-out)}
+.filterbar .btn.open .chev{transform:rotate(180deg)}
+.cbtn{width:28px;height:27px;border-radius:9px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line);
+  transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cbtn:hover{border-color:var(--line2)}
 .cbtn.on{border-color:var(--acc-line);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
 .cball{width:15px;height:15px;border-radius:50%;background:conic-gradient(#F1616D 0 45deg,#F97316 0 90deg,#F2B33D 0 135deg,#3ECF8E 0 180deg,#2FD6A3 0 225deg,#5EE7F9 0 270deg,#E9EDF5 0 315deg,#15171B 0 360deg);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
-.filterbar .tb-btn{width:28px;height:27px;border-radius:9px;background:var(--bg2);border:1px solid var(--line)}
+.filterbar .tb-btn{width:28px;height:27px;border-radius:9px;background:var(--bg2);border:1px solid var(--line);
+  transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .tb-btn.on{border-color:var(--acc-line);color:var(--acc2);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
 .zoomer{display:flex;align-items:center;gap:7px;color:var(--t3)}
@@ -35,7 +47,7 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .color-menu{width:max-content;padding:6px}
 .color-menu-head{padding:2px 6px 7px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t3)}
 .color-grid{display:grid;grid-template-columns:repeat(4,46px);gap:6px}
-.cs{position:relative;width:46px;height:32px;border-radius:6px;border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-fast) var(--ease-out)}
+.cs{position:relative;width:46px;height:32px;border-radius:6px;border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cs:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .cs em{font:600 9px/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
 .cs.on{box-shadow:0 0 0 2px var(--menu-solid),0 0 0 3.5px var(--acc)}

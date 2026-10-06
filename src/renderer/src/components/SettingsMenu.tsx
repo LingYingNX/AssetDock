@@ -58,7 +58,13 @@ export function SettingsMenu(): React.JSX.Element | null {
       setMounted(true)
       return
     }
-    const timer = window.setTimeout(() => setMounted(false), 180)
+    /* 与 Dropdown 同规则:齿轮菜单被别的浮层顶掉时立即卸载,不叠着淡出。
+       真正关回页面(openMenu 为 null)才播退场。 */
+    if (useUI.getState().openMenu !== null) {
+      setMounted(false)
+      return
+    }
+    const timer = window.setTimeout(() => setMounted(false), 160)
     return () => window.clearTimeout(timer)
   }, [open])
 

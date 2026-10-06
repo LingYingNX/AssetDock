@@ -47,8 +47,15 @@ export function ColorStrip(): React.JSX.Element | null {
       setShown(true)
       return
     }
+    /* 同 Dropdown:焦点被下拉菜单抢走时立即卸载,避免两块浮层叠着一起淡出。
+       setOpenMenu 会把 cbarOpen 置 false,所以这种切换读到的 openMenu 非空。 */
+    if (useUI.getState().openMenu !== null) {
+      setShown(false)
+      setMounted(false)
+      return
+    }
     setShown(false)
-    const timer = window.setTimeout(() => setMounted(false), 180)
+    const timer = window.setTimeout(() => setMounted(false), 160)
     return () => window.clearTimeout(timer)
   }, [cbarOpen])
 

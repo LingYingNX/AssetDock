@@ -97,6 +97,8 @@ export function FilterBar(): React.JSX.Element {
         className={`cbtn${cbarOpen ? ' on' : ''}`}
         id="colorBtn"
         title="颜色构造:展示当前视图图片主色,点选颜色即筛选"
+        aria-haspopup="menu"
+        aria-expanded={cbarOpen}
         onClick={toggleCbar}
       >
         <span className="cball" />
@@ -104,9 +106,11 @@ export function FilterBar(): React.JSX.Element {
       {dropdowns.map((d) => (
         <div key={d.key} style={{ display: 'contents' }}>
           <button
-            className={`btn${filters[d.key] !== 'all' ? ' on' : ''}`}
+            className={`btn${filters[d.key] !== 'all' ? ' on' : ''}${openMenu === `m-f-${d.key}` ? ' open' : ''}`}
             data-menu={`m-f-${d.key}`}
             title={`按${d.label}筛选`}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === `m-f-${d.key}`}
             onClick={() => setOpenMenu(openMenu === `m-f-${d.key}` ? null : `m-f-${d.key}`)}
           >
             {d.key === 'tag' && filters.tag !== 'all' ? (
@@ -135,9 +139,11 @@ export function FilterBar(): React.JSX.Element {
         )}
       </span>
       <button
-        className="btn"
+        className={`btn${openMenu === 'm-view' ? ' open' : ''}`}
         data-menu="m-view"
         title="视图模式"
+        aria-haspopup="menu"
+        aria-expanded={openMenu === 'm-view'}
         onClick={() => setOpenMenu(openMenu === 'm-view' ? null : 'm-view')}
       >
         <Icon name={VIEW_ICONS[view]} />

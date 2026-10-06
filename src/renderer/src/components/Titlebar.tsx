@@ -74,9 +74,11 @@ export function Titlebar(): React.JSX.Element {
           )
         })}
         <button
-          className="lib-add"
+          className={`lib-add${openMenu === 'm-libs' ? ' on' : ''}`}
           data-menu="m-libs"
           title="新建素材库"
+          aria-haspopup="menu"
+          aria-expanded={openMenu === 'm-libs'}
           onClick={() => setOpenMenu(openMenu === 'm-libs' ? null : 'm-libs')}
         >
           <Icon name="plus" />

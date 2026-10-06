@@ -46,7 +46,7 @@ export function ContextMenu(): React.JSX.Element | null {
       return
     }
     if (!mounted) return
-    const t = window.setTimeout(() => setMounted(false), 180)
+    const t = window.setTimeout(() => setMounted(false), 160)
     return () => window.clearTimeout(t)
   }, [ctxMenu, mounted])
 

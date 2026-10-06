@@ -14,14 +14,19 @@
 .logo-mark .ic{width:14px;height:14px}
 /* 组件自写的 transition 会整条替换 tokens.css 里的 button{transition:opacity …},
    按压反馈就此失效。凡在 button 上声明过渡的地方,都必须把 opacity 一起列上。 */
-.settings-btn{width:44px;height:42px;margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:var(--t3);background:none;cursor:pointer;transition:color var(--dur-press) var(--ease-out),background-color var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.settings-btn{width:44px;height:42px;margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:var(--t3);background:none;cursor:pointer;transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .settings-btn:hover,.settings-btn.on{background:var(--bg3);color:var(--t1)}
 .settings-btn .ic{width:17px;height:17px}
 .lib-tabs{display:flex;align-items:center;gap:0;align-self:flex-end;height:42px;padding:0;min-width:0;overflow:hidden}
-.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 32px;border-radius:0;font-size:15px;font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:var(--tab-bg);border:1px solid var(--line);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02)}
+.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 32px;border-radius:0;font-size:15px;font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:var(--tab-bg);border:1px solid var(--line);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02);
+  transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .lib-tab:hover{background:var(--bg2);color:var(--t2)}
 .lib-tab.on{background:var(--bg2);border-color:var(--line);color:var(--t1);font-weight:600}
 .tb-spacer{flex:1}
+/* 「新建素材库」触发按钮:此前完全没有规则,颜色跳变也没有过渡。
+   只补过渡与打开态的颜色反馈,不动尺寸/布局,避免影响标签栏既有排布。 */
+.lib-add{transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.lib-add:hover,.lib-add.on{color:var(--acc2)}
 .tb-btn{width:32px;height:28px;border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}
 .win-ctrls{display:flex;margin-left:6px}

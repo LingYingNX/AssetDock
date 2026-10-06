@@ -47,8 +47,17 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
       setShown(true)
       return
     }
+    /* 被别的浮层抢走焦点时直接卸载,不播退场:新菜单会盖在同一片区域上,
+       旧面板再淡出 140ms 只会留下两块半透明叠影(实测切换瞬间 DOM 里同时存在
+       .open 与 .closing 两块面板,旧的在 x=451、新的在 x=372,视觉就是鬼影交叉)。
+       只有真正关回页面(没有任何浮层打开)时,才值得播一次干净的退出。 */
+    if (useUI.getState().openMenu !== null) {
+      setShown(false)
+      setMounted(false)
+      return
+    }
     setShown(false)
-    const timer = window.setTimeout(() => setMounted(false), 180)
+    const timer = window.setTimeout(() => setMounted(false), 160)
     return () => window.clearTimeout(timer)
   }, [open])
 
