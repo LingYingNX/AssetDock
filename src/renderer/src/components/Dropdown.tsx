@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
@@ -52,8 +52,15 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
     return () => window.clearTimeout(timer)
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
+  /* 定位必须等元素真的挂上。三态让 mounted 比 open 晚一帧:open 变 true 的那次渲染
+     mounted 仍是 false,组件 return null,ref.current 为 null;而本 effect 的依赖
+     [open, id] 此刻已经落定,等 mounted 跟上后不会再跑一次 —— 菜单带着 position:fixed
+     却没有任何 top/left,掉进 body 末尾的静态位置(实测 [0,860],正好在视口下方),
+     表现为「点了没反应」。
+     改成 useLayoutEffect 并把 mounted 放进依赖:元素挂上后再量,且在绘制前写完内联定位,
+     不会先闪一帧到错误位置。 */
+  useLayoutEffect(() => {
+    if (!open || !mounted) return
     const el = ref.current
     const btn = document.querySelector(`[data-menu="${id}"]`)
     if (!el || !btn) return
@@ -66,7 +73,7 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
       el.style.left = 'auto'
       el.style.right = `${Math.max(8, window.innerWidth - r.right)}px`
     }
-  }, [open, id])
+  }, [open, mounted, id])
 
   useEffect(() => {
     if (!open) return

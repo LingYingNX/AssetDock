@@ -52,15 +52,20 @@ export function ColorStrip(): React.JSX.Element | null {
     return () => window.clearTimeout(timer)
   }, [cbarOpen])
 
+  /* 定位要等元素真的挂上。三态里 mounted 比 cbarOpen 晚一帧:打开的那次渲染
+     mounted 仍是 false,组件 return null;而依赖 [cbarOpen] 此刻已经落定,
+     等元素出现后不会再跑 —— 浮层带着 position:fixed 却没有 top/left,
+     掉到 body 末尾的静态位置(实测 [0,860],视口正下方),看起来像没反应。
+     把 mounted 放进依赖,并保留 useLayoutEffect,让定位在绘制前写完内联样式。 */
   useLayoutEffect(() => {
-    if (!cbarOpen) return
+    if (!cbarOpen || !mounted) return
     const el = ref.current
     const btn = document.getElementById('colorBtn')
     if (!el || !btn) return
     const r = btn.getBoundingClientRect()
     el.style.top = `${r.bottom + 6}px`
     el.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - el.offsetWidth - 8))}px`
-  }, [cbarOpen])
+  }, [cbarOpen, mounted])
 
   useEffect(() => {
     if (!cbarOpen) return

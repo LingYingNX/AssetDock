@@ -69,16 +69,20 @@ export function ContextMenu(): React.JSX.Element | null {
    * 必须放在下方 `if (!ctxMenu) return null` 之前:hook 一旦在两次渲染间数量不一致,
    * React 会抛错并丢弃整个子树,表现为「状态已更新但菜单不出现」。
    */
+  /* 三态让 mounted 比 ctxMenu 晚一帧:置 ctxMenu 的那次渲染 mounted 仍为 false,
+     组件 return null,menuRef.current 是 null —— 而本 effect 的依赖 [ctxKey] 此时
+     已经落定,等菜单真正挂上后不会再跑,pos 永远停在 null,菜单以 visibility:hidden
+     渲染,右键看起来完全没反应。把 mounted 同时放进守卫与依赖表。 */
   useLayoutEffect(() => {
     const el = menuRef.current
-    if (!el || !ctxMenu) return
+    if (!mounted || !el || !ctxMenu) return
     const { width, height } = el.getBoundingClientRect()
     const MARGIN = 8
     setPos({
       top: Math.max(MARGIN, Math.min(ctxMenu.y, window.innerHeight - height - MARGIN)),
       left: Math.max(MARGIN, Math.min(ctxMenu.x, window.innerWidth - width - MARGIN))
     })
-  }, [ctxKey])
+  }, [ctxKey, mounted])
 
   /**
    * 子菜单高度只受 max-height 约束,top 却固定跟着父项走,于是靠近屏幕底部时整块探出视口。
