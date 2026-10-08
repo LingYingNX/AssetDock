@@ -238,16 +238,17 @@ describe('UI store', () => {
 })
 
 describe('restoreUiPrefs', () => {
+  // 桩按 key 返回:restoreUiPrefs 现在并行读 uiPrefs 与 preferences(主题段见文件末尾)
   const load = async (stored: string | null) => {
-    const set = vi.fn()
     vi.resetModules()
     vi.stubGlobal('window', {
-      windowApi: { state: { get: async () => stored, set: async () => ({ ok: true }) } }
+      windowApi: {
+        state: { get: async (key: string) => (key === 'uiPrefs' ? stored : null), set: async () => ({ ok: true }) }
+      }
     })
     const mod = await import('../src/renderer/src/store/ui')
     // 用真实 store 的状态断言:恢复函数应直接 setState 到 store
     await mod.restoreUiPrefs()
-    void set
     return mod.useUI.getState()
   }
 
@@ -286,7 +287,9 @@ describe('restoreUiPrefs: 导航记忆', () => {
   const loadNav = async (stored: string | null) => {
     vi.resetModules()
     vi.stubGlobal('window', {
-      windowApi: { state: { get: async () => stored, set: async () => ({ ok: true }) } }
+      windowApi: {
+        state: { get: async (key: string) => (key === 'uiPrefs' ? stored : null), set: async () => ({ ok: true }) }
+      }
     })
     const mod = await import('../src/renderer/src/store/ui')
     await mod.restoreUiPrefs()
@@ -307,5 +310,84 @@ describe('restoreUiPrefs: 导航记忆', () => {
     await expect(loadNav(JSON.stringify({ nav: 'folder:' }))).resolves.toBe('all')
     await expect(loadNav(JSON.stringify({ nav: 42 }))).resolves.toBe('all')
     await expect(loadNav(JSON.stringify({}))).resolves.toBe('all')
+  })
+})
+describe('restoreUiPrefs: 主题引导', () => {
+  /** 伪造最小 DOM + localStorage:theme.ts 只用 documentElement 属性、matchMedia 与 localStorage */
+  const loadTheme = async (stored: Record<string, string | null>) => {
+    vi.resetModules()
+    const attrs: Record<string, string> = {}
+    const doc = {
+      documentElement: {
+        setAttribute: (k: string, v: string): void => { attrs[k] = v },
+        removeAttribute: (k: string): void => { delete attrs[k] },
+        getAttribute: (k: string): string | null => attrs[k] ?? null
+      }
+    }
+    const setItem = vi.fn((_k: string, _v: string): void => {})
+    vi.stubGlobal('document', doc)
+    vi.stubGlobal('window', {
+      document: doc,
+      localStorage: {
+        getItem: (key: string): string | null => (stored[key] ?? null),
+        setItem
+      },
+      matchMedia: () => ({ matches: true }),
+      windowApi: {
+        state: { get: async (key: string) => (stored[key] ?? null), set: async () => ({ ok: true }) }
+      }
+    })
+    const mod = await import('../src/renderer/src/store/ui')
+    await mod.restoreUiPrefs()
+    return { attrs, setItem, state: mod.useUI.getState() }
+  }
+
+  it('applies the saved theme even when no uiPrefs are stored', async () => {
+    // 旧实现里 uiPrefs 缺失会整段 return,连主题一起跳过  这里锁住拆分后的行为
+    const { attrs, setItem } = await loadTheme({ preferences: JSON.stringify({ theme: 'dark' }) })
+    expect(attrs['data-theme']).toBe('dark')
+    expect(setItem).toHaveBeenCalledWith('mediahub.theme', 'dark')
+  })
+
+  it('keeps the attribute absent for light and still writes the mirror', async () => {
+    const { attrs, setItem } = await loadTheme({ preferences: JSON.stringify({ theme: 'light' }) })
+    expect(attrs['data-theme']).toBeUndefined()
+    expect(setItem).toHaveBeenCalledWith('mediahub.theme', 'light')
+  })
+
+  it('restores hover playback when uiPrefs are missing', async () => {
+    const { state } = await loadTheme({ preferences: JSON.stringify({ hoverVideo: false, hoverSound: true }) })
+    expect(state.hoverVideo).toBe(false)
+    expect(state.hoverSound).toBe(true)
+  })
+
+  it('does not overwrite the first-paint mirror when the preferences read fails', async () => {
+    vi.resetModules()
+    const attrs: Record<string, string> = { 'data-theme': 'dark' }
+    const setItem = vi.fn()
+    vi.stubGlobal('document', {
+      documentElement: {
+        setAttribute: (key: string, value: string): void => { attrs[key] = value },
+        removeAttribute: (key: string): void => { delete attrs[key] },
+        getAttribute: (key: string): string | null => attrs[key] ?? null
+      }
+    })
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string): string | null => key === 'mediahub.theme' ? 'dark' : null,
+        setItem
+      },
+      matchMedia: () => ({ matches: true }),
+      windowApi: {
+        state: {
+          get: async (): Promise<string> => { throw new Error('IPC unavailable') },
+          set: async () => ({ ok: true })
+        }
+      }
+    })
+    const mod = await import('../src/renderer/src/store/ui')
+    await expect(mod.restoreUiPrefs()).resolves.toBeUndefined()
+    expect(attrs['data-theme']).toBe('dark')
+    expect(setItem).not.toHaveBeenCalled()
   })
 })

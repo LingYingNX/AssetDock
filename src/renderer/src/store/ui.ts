@@ -76,33 +76,70 @@ function persistUiPrefs(): void {
   } catch { /* ignore */ }
 }
 
-/** 读取并应用上次的界面偏好;逐项校验,损坏的字段退回默认值 */
+/** 单键读取:异常或缺失都收敛成 null(等价于"没存过",沿用原有回退语义) */
+type StateRead = { value: string | null; failed: boolean }
+
+/** 读取 IPC 状态键:缺失与读失败分别处理,避免失败时覆盖有效首帧镜像 */
+async function readState(key: string): Promise<StateRead> {
+  try {
+    return { value: await window.windowApi.state.get(key), failed: false }
+  } catch {
+    return { value: null, failed: true }
+  }
+}
+
+/**
+ * 读取并应用上次的界面偏好;逐项校验,损坏的字段退回默认值。
+ *
+ * 界面偏好(uiPrefs)与主题/音视频偏好(preferences)分两段独立解析:任一段缺失或
+ * 损坏都不影响另一段。旧实现里 uiPrefs 为空会整段 return,连主题一起跳过。
+ */
 export async function restoreUiPrefs(): Promise<void> {
-  try {
-    const raw = await window.windowApi.state.get(UI_PREFS_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw) as Partial<UiPrefs>
-    const view: ViewMode =
-      parsed.view === 'grid' || parsed.view === 'list' || parsed.view === 'waterfall' ? parsed.view : 'waterfall'
-    const colw = Number(parsed.colw)
-    useUI.setState({
-      view,
-      colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
-      inspHidden: parsed.inspHidden === true,
-      sideHidden: parsed.sideHidden === true,
-      cbarOpen: parsed.cbarOpen === true,
-      nav: parseNav(parsed.nav),
-      collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders)
-    })
-  } catch { /* 读取失败保持默认 */ }
-  // 主题与音视频偏好存在 preferences 键(与设置页同一份记录),启动即应用
-  try {
-    const prefs = await window.windowApi.state.get('preferences')
-    const { applyTheme, parseTheme } = await import('../data/theme')
-    applyTheme(parseTheme(prefs))
-    const parsed = JSON.parse(prefs ?? '{}') as { hoverVideo?: unknown; hoverSound?: unknown }
-    useUI.setState({ hoverVideo: parsed.hoverVideo !== false, hoverSound: parsed.hoverSound === true })
-  } catch { /* 偏好读取失败保持默认 */ }
+  const [uiRead, prefsRead] = await Promise.all([readState(UI_PREFS_KEY), readState('preferences')])
+  const uiRaw = uiRead.value
+  const prefsRaw = prefsRead.value
+
+  // preferences 是权威记录:无论镜像写了什么,启动都以它校正外观并把镜像修回来。
+  // 老用户(库里存着夜间、镜像还没写过)升级后第一次启动可能先显示浅色,校正后不再闪。
+  if (!prefsRead.failed) {
+    try {
+      const { applyTheme, parseTheme, writeMirroredTheme } = await import('../data/theme')
+      const theme = parseTheme(prefsRaw)
+      applyTheme(theme)
+      writeMirroredTheme(theme)
+    } catch {
+      /* 主题应用失败:保留首帧镜像给出的外观。 */
+    }
+  }
+
+  if (!uiRead.failed && uiRaw) {
+    try {
+      const parsed = JSON.parse(uiRaw) as Partial<UiPrefs>
+      const view: ViewMode =
+        parsed.view === 'grid' || parsed.view === 'list' || parsed.view === 'waterfall' ? parsed.view : 'waterfall'
+      const colw = Number(parsed.colw)
+      useUI.setState({
+        view,
+        colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
+        inspHidden: parsed.inspHidden === true,
+        sideHidden: parsed.sideHidden === true,
+        cbarOpen: parsed.cbarOpen === true,
+        nav: parseNav(parsed.nav),
+        collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders)
+      })
+    } catch {
+      /* 界面偏好损坏:保持默认 */
+    }
+  }
+
+  if (!prefsRead.failed) {
+    try {
+      const parsed = JSON.parse(prefsRaw ?? '{}') as { hoverVideo?: unknown; hoverSound?: unknown }
+      useUI.setState({ hoverVideo: parsed.hoverVideo !== false, hoverSound: parsed.hoverSound === true })
+    } catch {
+      /* 偏好损坏时保持默认。 */
+    }
+  }
 }
 
 /** 主进程资产行 → Asset */

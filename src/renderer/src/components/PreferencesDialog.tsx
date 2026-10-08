@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatBytes } from '../data/query'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
-import { applyTheme, parseTheme, type ThemeMode } from '../data/theme'
+import { applyTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
 
 type CloseAction = 'minimize' | 'quit'
 type PreferenceState = {
@@ -138,6 +138,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [libraryName, setLibraryName] = useState('')
   const [libraryPath, setLibraryPath] = useState('')
   const [autoLaunchSupported, setAutoLaunchSupported] = useState(true)
+  /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
+  const savedTheme = useRef<ThemeMode>('light')
 
   const activeLibrary = useMemo(() => {
     const libraryId = tabs.find((tab) => tab.id === activeTabId)?.libraryId
@@ -153,7 +155,10 @@ export function PreferencesDialog(): React.JSX.Element | null {
     if (!open) return
     let cancelled = false
     void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => {
-      if (!cancelled) setDraft(readPreferences(raw))
+      if (cancelled) return
+      const loaded = readPreferences(raw)
+      savedTheme.current = loaded.theme
+      setDraft(loaded)
     })
     void window.windowApi.app.getAutoLaunch().then((r) => {
       if (!cancelled) setAutoLaunchSupported(r.supported)
@@ -196,7 +201,9 @@ export function PreferencesDialog(): React.JSX.Element | null {
   if (!mounted) return null
 
   const close = (): void => {
-    void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => applyTheme(parseTheme(raw)))
+    // 同步回滚到已保存主题。原来是 state.get() 异步取回后才 applyTheme—面板已经关掉,
+    // 迟到的值会覆盖用户随后的任何切换,于是"勾选夜间、外观白天"。
+    applyTheme(savedTheme.current)
     setOpenMenu(null)
   }
   const closeCreate = (force = false): void => {
@@ -211,6 +218,9 @@ export function PreferencesDialog(): React.JSX.Element | null {
     void window.windowApi.state
       .set(PREFERENCES_KEY, JSON.stringify(draft))
       .then(() => {
+        // 保存成功才算"已保存主题":回滚基线与首帧镜像一起更新
+        savedTheme.current = draft.theme
+        writeMirroredTheme(draft.theme)
         if (autoLaunchSupported) void window.windowApi.app.setAutoLaunch(draft.autoLaunch)
         // 立即同步到运行中的界面,不必重启即可看到音视频偏好生效
         useUI.getState().setHoverPlayback(draft.hoverVideo, draft.hoverSound)
