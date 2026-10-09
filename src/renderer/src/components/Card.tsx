@@ -28,6 +28,7 @@ function dragPreview(count: number): HTMLDivElement {
 export function Card({ a, view, selectionOrder }: { a: Asset; view: string; selectionOrder?: string[] }): React.JSX.Element {
   const selected = useUI((s) => s.selectedIds.includes(a.id))
   const clickCard = useUI((s) => s.clickCard)
+  const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
@@ -112,7 +113,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
       aria-label={`${a.name}.${a.format.toLowerCase()}`}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('.qa')) return
-        clickCard(a.id, { shift: e.shiftKey, order: selectionOrder })
+        // 无修饰键单选，Shift 区间，Ctrl/Cmd 逐张 toggle
+        clickCard(a.id, { shift: e.shiftKey, toggle: e.ctrlKey || e.metaKey, order: selectionOrder })
       }}
       onDoubleClick={(e) => {
         openLightbox(a.id)
@@ -142,6 +144,9 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
       }}
       onContextMenu={(e) => {
         e.preventDefault()
+        // 右键先选中被点的素材：已在选区内则保留整组(菜单仍作用于整组)，
+        // 不在选区内则替换为该张，检查器随之切换。
+        if (!useUI.getState().selectedIds.includes(a.id)) selectOnly(a.id)
         setCtxMenu({ x: e.clientX, y: e.clientY, assetId: a.id })
       }}
     >

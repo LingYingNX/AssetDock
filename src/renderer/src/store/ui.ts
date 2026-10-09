@@ -281,7 +281,9 @@ interface UIState {
   selectionAnchorId: string | null
   activeId: string | null
   focusedCardId: string | null
-  clickCard: (id: string, options?: { shift?: boolean; order?: string[] }) => void
+  clickCard: (id: string, options?: { shift?: boolean; toggle?: boolean; order?: string[] }) => void
+  /** 单选替换：右键与 Space 复用，不参与 Shift 区间的顺序表 */
+  selectOnly: (id: string) => void
   selectAllVisible: () => void
   setSelectedIds: (ids: string[]) => void
   setFocusedCard: (id: string | null) => void
@@ -706,26 +708,36 @@ export const useUI = create<UIState>((set, get) => {
     selectionAnchorId: null,
     activeId: null,
     focusedCardId: null,
+    /**
+     * 单击的选中语义(桌面惯例)：
+     * - 无修饰键：替换为单选，检查器与键盘焦点同步切到该卡
+     * - Shift：从锚点重算区间并替换选区（锚点不动，便于继续 Shift 缩选区）
+     * - Ctrl/Cmd：对单项 toggle，其它卡片保持不变
+     */
     clickCard: (id, options) =>
       set((s) => {
-        const selected = new Set(s.selectedIds)
         const order = options?.order ?? s.assets.map((a) => a.id)
-        const anchor = options?.shift ? s.selectionAnchorId : id
-        if (options?.shift && anchor) {
+        if (options?.shift) {
+          const anchor = s.selectionAnchorId ?? id
           const start = order.indexOf(anchor)
           const end = order.indexOf(id)
-          if (start >= 0 && end >= 0) {
-            const [from, to] = start < end ? [start, end] : [end, start]
-            for (const rangeId of order.slice(from, to + 1)) selected.add(rangeId)
-          } else {
-            selected.add(id)
-          }
-        } else {
-          if (selected.has(id)) selected.delete(id)
-          else selected.add(id)
+          const range =
+            start >= 0 && end >= 0
+              ? order.slice(Math.min(start, end), Math.max(start, end) + 1)
+              : [id]
+          return { selectedIds: range, selectionAnchorId: anchor, activeId: id, focusedCardId: id }
         }
-        return { selectedIds: [...selected], selectionAnchorId: anchor, activeId: id, focusedCardId: id }
+        if (options?.toggle) {
+          const selectedIds = s.selectedIds.includes(id)
+            ? s.selectedIds.filter((x) => x !== id)
+            : [...s.selectedIds, id]
+          return { selectedIds, selectionAnchorId: id, activeId: id, focusedCardId: id }
+        }
+        return { selectedIds: [id], selectionAnchorId: id, activeId: id, focusedCardId: id }
       }),
+    /** 单选替换（右键 / Space）：不建全量顺序表也不参与区间算法 */
+    selectOnly: (id) =>
+      set({ selectedIds: [id], selectionAnchorId: id, activeId: id, focusedCardId: id }),
     selectAllVisible: () =>
       set((s) => {
         const visible = queryAssets(s.assets, {

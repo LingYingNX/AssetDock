@@ -125,7 +125,7 @@ export default function App(): React.JSX.Element {
           break
         case ' ': {
           e.preventDefault()
-          if (st.focusedCardId) st.clickCard(st.focusedCardId)
+          if (st.focusedCardId) st.selectOnly(st.focusedCardId)
           break
         }
         case 'F2': {

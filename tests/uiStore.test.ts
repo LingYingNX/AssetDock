@@ -214,6 +214,50 @@ describe('UI store', () => {
     expect(useUI.getState().selectedIds).toEqual(['foldered'])
   })
 
+  it('replaces the selection on a plain click, extends it with shift and toggles with ctrl', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    const asset = (id: string) => ({ id, type: 'image', format: 'JPG', name: id, sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: [], note: '', palette: [] })
+    const order = ['a', 'b', 'c']
+    useUI.setState({ nav: 'all', assets: [asset('a'), asset('b'), asset('c')] })
+
+    // 无修饰键是单选:上一次的选中被替换,不再是累加
+    useUI.getState().clickCard('a', { order })
+    expect(useUI.getState().selectedIds).toEqual(['a'])
+    useUI.getState().clickCard('b', { order })
+    expect(useUI.getState().selectedIds).toEqual(['b'])
+    expect(useUI.getState().activeId).toBe('b')
+    expect(useUI.getState().focusedCardId).toBe('b')
+
+    // Shift 从锚点重算区间并整体替换;锚点不动,所以再 Shift 能收窄
+    useUI.getState().clickCard('a', { order })
+    useUI.getState().clickCard('c', { order, shift: true })
+    expect(useUI.getState().selectedIds).toEqual(['a', 'b', 'c'])
+    useUI.getState().clickCard('b', { order, shift: true })
+    expect(useUI.getState().selectedIds).toEqual(['a', 'b'])
+
+    // Ctrl/Cmd 逐张切换:只翻转目标卡,其余保持
+    useUI.getState().clickCard('c', { order, toggle: true })
+    expect(useUI.getState().selectedIds).toEqual(['a', 'b', 'c'])
+    useUI.getState().clickCard('c', { order, toggle: true })
+    expect(useUI.getState().selectedIds).toEqual(['a', 'b'])
+  })
+
+  it('single-selects the target without building an order list (right-click and Space)', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    const asset = (id: string) => ({ id, type: 'image', format: 'JPG', name: id, sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: [], note: '', palette: [] })
+    useUI.setState({ nav: 'all', assets: [asset('a'), asset('b'), asset('c')] })
+
+    useUI.getState().setSelectedIds(['a', 'b'])
+    useUI.getState().selectOnly('c')
+
+    expect(useUI.getState().selectedIds).toEqual(['c'])
+    expect(useUI.getState().selectionAnchorId).toBe('c')
+    expect(useUI.getState().activeId).toBe('c')
+    expect(useUI.getState().focusedCardId).toBe('c')
+  })
+
   it('reports an Eagle import failure instead of silently rejecting', async () => {
     const alert = vi.fn()
     vi.stubGlobal('alert', alert)
