@@ -1,24 +1,19 @@
 /* ============================ 三栏布局 ============================ */
-/* 只过渡列轨道:.insp-hidden / .side-hidden 会改列宽,过渡本体就是列宽变化。
-   轨道值走到 0 之后面板被 overflow:hidden 完全裁掉,连 1px 边框都不剩——
-   所以这里不需要再叠 display:none,那个不可过渡的整值切换正是原来硬跳的原因。 */
+/* 只过渡列轨道:.insp-hidden 会改列宽,过渡本体就是列宽变化。
+   轨道值走到 0 之后面板被 overflow:hidden 完全裁掉,连 1px 边框都不剩
+   所以这里不需要再叠 display:none,那个不可过渡的整值切换正是原来硬跳的原因。
+   侧栏不参与折叠:它是常驻导航,没有收起态,也不写进 uiPrefs。 */
 .layout{display:grid;grid-template-columns:236px minmax(0,1fr) 304px;min-height:0;transition:grid-template-columns var(--dur-base) var(--ease-in-out)}
 .layout.insp-hidden{grid-template-columns:236px minmax(0,1fr) 0}
-.layout.side-hidden{grid-template-columns:0 minmax(0,1fr) 304px}
-/* 两条折叠类同时生效时必须一起写全整行:上面两条各自只管自己那一列,
-   同等特异性下后写的会覆盖前写的——只收侧栏会把已经折叠的检查器
-   从 0 拽回 304px,看到「收左边、右边自己冒出来」。多一个类名提高特异性。 */
-.layout.side-hidden.insp-hidden{grid-template-columns:0 minmax(0,1fr) 0}
-/* min-width:0 才能让轨道真的收到 0(否则 min-content 顶住);面板自身 width:100%
+/* min-width:0 才能让检查器轨道真的收到 0(否则 min-content 顶住);面板自身 width:100%
    跟随轨道收缩,内部内容按原宽度被裁切,而不是在收缩过程中被挤变形。 */
 .sidebar,.inspector{overflow:hidden;min-width:0;width:100%}
 /* 轨道归零时面板不可见:它已经没有被点中的可能,但焦点仍可能落进去,
    而浏览器会把获得焦点的元素滚回视野,把折叠好的布局重新顶开。 */
-.layout.side-hidden .sidebar,.layout.insp-hidden .inspector{visibility:hidden}
+.layout.insp-hidden .inspector{visibility:hidden}
 /* 此处原本还有一条 `@media (prefers-reduced-motion:reduce){.layout{transition:none}}`,
    是多余的:glass.css:51 的 `*{transition:none!important}` 已经覆盖所有元素,
    局部再写一遍只会让人以为全局策略不存在。 */
-
 /* ---------- 侧栏 ---------- */
 .sidebar{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;width:100%}
 .side-scroll{flex:1;overflow-y:auto;padding:10px 8px 14px}

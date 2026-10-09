@@ -76,8 +76,6 @@ export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
   const assets = useUI((s) => s.assets)
-  const sideHidden = useUI((s) => s.sideHidden)
-  const toggleSidebar = useUI((s) => s.toggleSidebar)
   const fullscreen = useUI((s) => s.lightboxFullscreen)
   const setFullscreen = useUI((s) => s.setLightboxFullscreen)
   const [shown, setShown] = useState(false)
@@ -303,19 +301,8 @@ export function Lightbox(): React.JSX.Element | null {
         if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('pv-stage')) closeLightbox()
       }}
     >
-      {/* 极简顶栏:只留侧栏开关与关闭。翻片走胶片带,收藏/评分/导出交给右侧检查器与右键菜单 */}
+      {/* 极简顶栏:只留关闭。翻片走胶片带,收藏/评分/导出交给右侧检查器与右键菜单 */}
       <div className="pv-top">
-        <button
-          className={`tb-btn${sideHidden ? ' on' : ''}`}
-          title={sideHidden ? '展开侧边栏' : '收起侧边栏'}
-          onClick={() => {
-            // 全屏遮住了侧栏,此时「展开侧栏」的心意是回到带侧栏的布局,故顺带退出全屏
-            if (sideHidden && fullscreen) toggleFullscreen()
-            toggleSidebar()
-          }}
-        >
-          <Icon name="panel-l" />
-        </button>
         <span className="sp" />
         <button className="tb-btn" title="关闭 (Esc)" onClick={closeLightbox}>
           <Icon name="x" />

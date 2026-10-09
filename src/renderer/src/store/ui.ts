@@ -34,7 +34,6 @@ interface UiPrefs {
   view: ViewMode
   colw: number
   inspHidden: boolean
-  sideHidden: boolean
   cbarOpen: boolean
   /** 上次停留的侧栏导航项(全部素材/文件夹/标签等) */
   nav: NavKey
@@ -67,7 +66,6 @@ function persistUiPrefs(): void {
       view: s.view,
       colw: s.colw,
       inspHidden: s.inspHidden,
-      sideHidden: s.sideHidden,
       cbarOpen: s.cbarOpen,
       nav: s.nav,
       collapsedFolders: [...s.collapsedFolders]
@@ -122,7 +120,6 @@ export async function restoreUiPrefs(): Promise<void> {
         view,
         colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
         inspHidden: parsed.inspHidden === true,
-        sideHidden: parsed.sideHidden === true,
         cbarOpen: parsed.cbarOpen === true,
         nav: parseNav(parsed.nav),
         collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders)
@@ -263,9 +260,6 @@ interface UIState {
   setColw: (n: number) => void
   inspHidden: boolean
   toggleInspector: () => void
-  /** 左侧导航栏折叠:灯箱打开时仍能展开/收起,避免被工作区面板盖住找不到入口 */
-  sideHidden: boolean
-  toggleSidebar: () => void
 
   /* 素材数据(可变字段走 store,编辑经 IPC 落库) */
   assets: Asset[]
@@ -634,11 +628,6 @@ export const useUI = create<UIState>((set, get) => {
     inspHidden: false,
     toggleInspector: () => {
       set((s) => ({ inspHidden: !s.inspHidden }))
-      persistUiPrefs()
-    },
-    sideHidden: false,
-    toggleSidebar: () => {
-      set((s) => ({ sideHidden: !s.sideHidden }))
       persistUiPrefs()
     },
 
