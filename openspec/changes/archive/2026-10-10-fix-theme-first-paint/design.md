@@ -61,6 +61,12 @@ try {
 
 `document.startViewTransition()` 在文档失去可用性或已有过渡在跑时会**同步抛错**;若让它冒泡,`applyTheme` 就不生效,外观停在旧主题而单选已切换正是"勾选夜间、外观白天"的形态。所以捕获它并退回 `commit()`:过渡是增强,不是主题生效的前提。`tests/theme.test.ts` 覆盖了这条路径。
 
+### 8. 面板打开时不得预览未加载的默认值
+
+`PreferencesDialog` 的 `draft` 初值是 `DEFAULT_PREFERENCES`(theme: light),而「即时预览」effect 只依赖 `[open, draft.theme]`。面板一打开,effect 就用这个默认浅色跑了一次 `applyTheme('light')`,把夜间外观立刻切成白天;等异步读回偏好才切回。实测证据:打开面板瞬间记录了 `data-theme` 从 `dark` 变成 `null`(浅色)再变回 `dark`。若那次恢复的 View Transition 被跳过或中断,外观就永久停在白天,而单选仍是夜间:正是「勾选夜间、外观白天」的成因。
+
+修法:新增 `draftLoaded` 状态,打开面板先置 `false`,读到偏好后再置 `true`,预览 effect 加 `!draftLoaded` 守卫。另外把 `savedTheme.current` 的兜底值从常量 `'light'` 改成打开面板时的 `currentTheme()`:偏好读取失败时,关闭面板要回滚到打开前的真实外观,而不是默认浅色。
+
 ## Migration & Rollout
 
 - `preferences` 的 JSON 结构不变,无需数据库迁移;`mediahub.theme` 首次由启动引导写入。

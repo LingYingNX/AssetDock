@@ -48,9 +48,18 @@
 - [x] 6.3 无头验证:取消预览恢复已保存主题;保存 light/dark 后 preferences、镜像和实际外观一致;重载后权威值校正镜像
 - [x] 6.4 结构性依据:内联同步脚本位于首个 module script 前;BrowserWindow 仅在 ready-to-show 后显示。无头桥只能证明状态,不能证明无过渡帧
 - [x] 6.5 清理本任务生成的临时补丁脚本与调试日志,`git status` 仅含预期源码、测试及 OpenSpec 文件
-- [ ] 6.6 `openspec validate fix-theme-first-paint` 通过;任务全部完成后提示用户归档该 change
+- [x] 6.6 `openspec validate fix-theme-first-paint` 通过;任务全部完成后提示用户归档该 change
 
 ## 7. 明确不做
 
 - [x] 7.1 按 design 决策不改 `src/main/index.ts` 的窗口背景色
 - [x] 7.2 未改 preferences JSON 结构,未新增 IPC / preload 方法,未引入哨兵默认值
+
+## 8. 回归修复:点开偏好设置把夜间切成白天(用户复报)
+
+- [x] 8.1 复现:经 9223 桥装 `MutationObserver` 观察 `data-theme`,重载后第一次打开面板,记录到 `[[5226, null], [5227, 'dark']]`,即外观先被切成浅色再切回
+- [x] 8.2 修因:`PreferencesDialog` 新增 `draftLoaded`,打开面板先置 `false`,读到偏好后再置 `true`;预览 effect 增加 `!draftLoaded` 守卫,不再用默认浅色 `draft` 预览
+- [x] 8.3 兜底:`savedTheme.current` 初值改为打开面板时的 `currentTheme()`,偏好读取失败时关闭回滚到真实外观而非默认浅色
+- [x] 8.4 验证(9223 桥):修复后同样的观察脚本记录为 `tl: []`,打开面板全程无属性变化;面板内切浅色预览(属性移除、镜像不变)、取消回滚(回到 `dark`)、保存浅色(镜像 light、preferences light)、保存夜间(三者 dark)全部符合预期
+- [x] 8.5 `npm run typecheck` 与 `npm run test` 复跑通过(21 files / 138 tests)
+- 验证要点:React 组件不在 vitest 套件范围(见 `tests/AGENTS.md`),本条按仓库约定经无头桥验证;新增的 `draftLoaded` 语义已写入 `design.md` 决定 8 与 `glass-theme` 的「打开面板不改变外观」场景
