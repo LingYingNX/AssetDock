@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import { useUI } from '../store/ui'
 import { queryAssets } from '../data/query'
+import { FALLBACK_THUMB_AR, thumbRatio } from '../data/thumb-ratio'
 import type { Asset } from '../data/types'
 import { Card } from './Card'
 import { EmptyState } from './EmptyState'
@@ -10,13 +11,17 @@ const LHEAD_COLS = ['', '文件名', '类型', '分辨率', '大小', '时长', 
 const VIRTUAL_THRESHOLD = 500
 const GAP = 14
 const PAD_X = 22
-const CAPTION_H = 54
+/* 卡片信息区高度:缩略图占卡片 80%、信息区占 20%(默认 232px 列宽下即 44px)。
+   与 grid.css 的 figcaption padding (7+7) + name 行高 15 + meta 行高 13 + 行距 2
+   对齐。偏小会让瀑布流的虚拟化定位把上下两张卡叠在一起;
+   改 figcaption 内边距或 .name/.meta-row 的 line-height 时必须同步改这里。 */
+const CAPTION_H = 44
 const LIST_ROW_H = 68
 
+/** 列内定位高度:必须与 Card 写进 --ar 的比例同源,否则卡片会错位或留下空档 */
 function estHeight(a: Asset, colw: number): number {
-  const ar = a.width && a.height ? a.width / a.height : 4 / 3
-  const clamped = Math.min(3, Math.max(0.5, ar))
-  return Math.round(colw / clamped) + CAPTION_H
+  const ar = thumbRatio(a.width, a.height) ?? FALLBACK_THUMB_AR
+  return Math.round(colw / ar) + CAPTION_H
 }
 
 /** 列分配:贪心放入当前最矮列(保持列内顺序) */

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
+import { thumbRatio } from '../data/thumb-ratio'
 import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
@@ -58,12 +59,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
     .filter(Boolean)
     .join(' ')
 
-  const ar =
-    view === 'grid' || a.type === 'model'
-      ? undefined
-      : a.width && a.height
-        ? `${a.width}/${a.height}`
-        : undefined
+  // 比例走 thumbRatio 收敛,不再直接把原始 width/height 交给 CSS:
+  // 1200x172 这类极端比例会让缩略图矮成一条线,统一在这里收口。
+  const ratio = thumbRatio(a.width, a.height)
+  const ar = view === 'grid' || a.type === 'model' || ratio == null ? undefined : ratio.toFixed(4)
 
   const meta =
     a.type === 'model' || a.type === 'style'

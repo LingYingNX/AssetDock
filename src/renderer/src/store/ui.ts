@@ -74,6 +74,9 @@ function persistUiPrefs(): void {
   } catch { /* ignore */ }
 }
 
+/** S2-9:setColw 高频调用,落库走防抖 */
+let colwPersistTimer: ReturnType<typeof setTimeout> | null = null
+
 /** 单键读取:异常或缺失都收敛成 null(等价于"没存过",沿用原有回退语义) */
 type StateRead = { value: string | null; failed: boolean }
 
@@ -222,6 +225,8 @@ interface UIState {
   hoverSound: boolean
   setHoverPlayback: (video: boolean, sound: boolean) => void
   setAssets: (list: Asset[]) => void
+  /** S1-7:assets:changed 携带 assetIds 时按 id 增量合并;缺省数组退全量 reload */
+  applyAssetDelta: (libraryId: number, assetIds?: number[]) => void
   reloadActiveLibrary: () => void
   folderPaths: string[]
   physicalFolderPaths: string[]
@@ -326,7 +331,7 @@ export const useUI = create<UIState>((set, get) => {
     set((s) => ({ assets: s.assets.map((a) => (a.id === id ? local(a) : a)) }))
     const a = get().assets.find((x) => x.id === id)
     if (a?.dbId != null && a.libraryId != null) {
-      window.windowApi.assets.update(a.libraryId, a.dbId, patch).catch(() => alert('保存失败:数据库写入错误,请重试'))
+      window.windowApi.assets.update(a.libraryId, a.dbId, patch).catch(() => get().showToast('保存失败:数据库写入错误,请重试', 'warn'))
     }
   }
 
@@ -344,11 +349,11 @@ export const useUI = create<UIState>((set, get) => {
       }
       const r = await window.windowApi.library.create(folder, name)
       if ('error' in r) {
-        alert(r.error)
+        get().showToast(r.error, 'warn')
         return false
       }
       get().setLibraries([...libs, r])
-      if (r.warning) alert(r.warning)
+      if (r.warning) get().showToast(r.warning, 'warn')
       get().openLibrary(r.id, r.name)
       return true
     },
@@ -356,7 +361,7 @@ export const useUI = create<UIState>((set, get) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       const libraryId = t?.libraryId
       if (libraryId == null) {
-        alert('请先打开一个资源库')
+        get().showToast('请先打开一个资源库', 'warn')
         return
       }
       get().setOpenMenu(null)
@@ -368,13 +373,13 @@ export const useUI = create<UIState>((set, get) => {
           const result = await window.windowApi.library.importEagle(libraryId, folder)
           if ('error' in result) {
             set({ scanProgress: null })
-            alert(result.error)
+            get().showToast(result.error, 'warn')
             return
           }
           get().reloadActiveLibrary()
         } catch (error) {
           set({ scanProgress: null })
-          alert(`导入 Eagle 素材失败: ${error instanceof Error ? error.message : '未知错误'}`)
+          get().showToast(`导入 Eagle 素材失败: ${error instanceof Error ? error.message : '未知错误'}`, 'warn')
         }
       })()
     },
@@ -445,6 +450,55 @@ export const useUI = create<UIState>((set, get) => {
       }, 2600)
     },
     setAssets: (list) => set({ assets: list }),
+    applyAssetDelta: (libraryId, assetIds) => {
+      // S1-7 增量合并:只对当前活动库生效;其他库的事件直接丢弃(该库激活时会全量重拉)
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId !== libraryId) return
+      if (!Array.isArray(assetIds) || assetIds.length === 0) {
+        get().reloadActiveLibrary()
+        return
+      }
+      const request = ++reloadSeq
+      void window.windowApi.assets.rows(libraryId, assetIds).then((r) => {
+        if (request !== reloadSeq) return
+        const incoming = r.assets as unknown as Record<string, unknown>[]
+        if (!Array.isArray(incoming)) return
+        set((s) => {
+          const rows = incoming.map(rowToAsset)
+          const byId = new Map(rows.map((a) => [a.dbId as number, a]))
+          const idSet = new Set(byId.keys())
+          const keep: Asset[] = []
+          for (const a of s.assets) {
+            if (a.dbId != null && idSet.has(a.dbId)) {
+              keep.push(byId.get(a.dbId) as Asset)
+            } else if (assetIds.includes(a.dbId as number)) {
+              // 事件点名但查询缺席 = 行已硬删,原地剔除
+            } else {
+              keep.push(a)
+            }
+          }
+          // 新素材插入表头(全量查询按 imported_at DESC, id DESC 排序;增量行都是刚写入的)
+          const existing = new Set(keep.map((a) => a.dbId))
+          for (const a of rows) {
+            if (!existing.has(a.dbId as number)) {
+              keep.unshift(a)
+            }
+          }
+          // 新行可能带来新文件夹路径,并入文件夹树(不做重排——manual 顺序由全量 reload 恢复)
+          const folderSet = new Set(s.physicalFolderPaths)
+          for (const a of rows) for (const f of a.folders) folderSet.add(f)
+          const physicalFolderPaths = [...folderSet].sort()
+          return {
+            assets: keep,
+            folderPaths: physicalFolderPaths,
+            physicalFolderPaths
+          }
+        })
+      }).catch(() => {
+        // 增量通道异常退全量,保证一致性优先于省流量
+        get().reloadActiveLibrary()
+      })
+    },
     reloadActiveLibrary: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) {
@@ -510,7 +564,7 @@ export const useUI = create<UIState>((set, get) => {
       if (t?.libraryId == null) return
       void window.windowApi.folders.create(t.libraryId).then((r) => {
         if ('error' in r) {
-          alert(r.error)
+          get().showToast(r.error, 'warn')
           return
         }
         set({ folderEditPath: r.path, nav: `folder:${r.path}` as NavKey })
@@ -523,7 +577,7 @@ export const useUI = create<UIState>((set, get) => {
       if (t?.libraryId == null) return
       void window.windowApi.folders.rename(t.libraryId, path, name).then((r) => {
         if ('error' in r) {
-          alert(r.error)
+          get().showToast(r.error, 'warn')
           get().refreshFolders()
           return
         }
@@ -559,14 +613,14 @@ export const useUI = create<UIState>((set, get) => {
       }))
       void window.windowApi.folders.move(t.libraryId, source, target, placement).then((r) => {
         if (!('path' in r) || typeof r.path !== 'string') {
-          alert('error' in r ? r.error : '移动文件夹失败,请重试')
+          get().showToast('error' in r ? r.error : '移动文件夹失败,请重试', 'warn')
           get().reloadActiveLibrary()
           return
         }
         set((s) => ({ nav: rebaseFolderNav(s.nav, source, r.path) }))
         get().reloadActiveLibrary()
       }).catch(() => {
-        alert('移动文件夹失败,请重试')
+        get().showToast('移动文件夹失败,请重试', 'warn')
         get().reloadActiveLibrary()
       })
     },
@@ -578,12 +632,12 @@ export const useUI = create<UIState>((set, get) => {
         .filter((a) => requested.has(a.id) && a.dbId != null && a.libraryId === t.libraryId && !a.missing && !a.deletedAt)
         .map((a) => a.dbId as number)
       if (ids.length === 0) return
-      if (ids.length < assetIds.length) alert('部分素材不可处理,本次已跳过')
+      if (ids.length < assetIds.length) get().showToast('部分素材不可处理,本次已跳过', 'warn')
 
       void window.windowApi.assets.move(t.libraryId, ids, folder).then((r) => {
         if ('error' in r) {
           if (r.moved) get().reloadActiveLibrary()
-          alert(r.error)
+          get().showToast(r.error, 'warn')
           return
         }
         get().reloadActiveLibrary()
@@ -625,7 +679,10 @@ export const useUI = create<UIState>((set, get) => {
     colw: 232,
     setColw: (colw) => {
       set({ colw })
-      persistUiPrefs()
+      // S2-9:Ctrl+滚轮每 tick 都到这,落库防抖 300ms(与主窗口 resize 防抖策略对齐),
+      // 避免高频 IPC + SQLite 写;视口令牌由 App.tsx 立即更新,不等待防抖
+      if (colwPersistTimer) clearTimeout(colwPersistTimer)
+      colwPersistTimer = setTimeout(persistUiPrefs, 300)
     },
     inspHidden: false,
     toggleInspector: () => {

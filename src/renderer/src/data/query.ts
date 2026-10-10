@@ -30,7 +30,8 @@ export function formatRelativeDate(iso: string): string {
 
 /** 完整时间:2026-08-30 10:24 */
 export function formatFullDate(iso: string): string {
-  return iso.replace('T', ' ')
+  // S2-6:底层保留毫秒精度,展示层截断到分钟
+  return iso.replace('T', ' ').slice(0, 16)
 }
 
 export function formatResolution(a: Asset): string {
@@ -104,6 +105,9 @@ export interface QueryOptions {
 
 const RES_PX = (a: Asset): number => Math.max(a.width ?? 0, a.height ?? 0)
 
+/** 「最近导入」阈值:7 天(S3-3,matchNav 与计数共用) */
+export const RECENT_WINDOW_MS = 7 * 86_400_000
+
 function matchNav(a: Asset, nav: NavKey): boolean {
   if (nav === 'trash') return !!a.deletedAt
   if (a.missing) return false
@@ -112,7 +116,7 @@ function matchNav(a: Asset, nav: NavKey): boolean {
     case 'all':
       return true
     case 'recent':
-      return Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000
+      return Date.now() - new Date(a.importedAt).getTime() < RECENT_WINDOW_MS
     case 'untagged':
       return a.folders.length === 0
     case 'fav':
@@ -203,7 +207,7 @@ export function sidebarCounts(assets: Asset[]): SidebarCounts {
     tags: {}
   }
   for (const a of live) {
-    if (Date.now() - new Date(a.importedAt).getTime() < 7 * 86_400_000) c.recent++
+    if (Date.now() - new Date(a.importedAt).getTime() < RECENT_WINDOW_MS) c.recent++
     if (a.folders.length === 0) c.untagged++
     if (a.favorite) c.fav++
     for (const f of a.folders) c.folders[f] = (c.folders[f] ?? 0) + 1

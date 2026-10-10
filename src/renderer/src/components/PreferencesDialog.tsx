@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatBytes } from '../data/query'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
-import { applyTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
+import { applyTheme, currentTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
 
 type CloseAction = 'minimize' | 'quit'
 type PreferenceState = {
@@ -138,6 +138,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [libraryName, setLibraryName] = useState('')
   const [libraryPath, setLibraryPath] = useState('')
   const [autoLaunchSupported, setAutoLaunchSupported] = useState(true)
+  /** 偏好是否已从磁盘加载完成:draft 初值是默认浅色,加载前拿它预览会把夜间切成白天 */
+  const [draftLoaded, setDraftLoaded] = useState(false)
   /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
   const savedTheme = useRef<ThemeMode>('light')
 
@@ -153,12 +155,18 @@ export function PreferencesDialog(): React.JSX.Element | null {
 
   useEffect(() => {
     if (!open) return
+    // 打开面板不立即预览:draft 此刻还是默认值(浅色)。先标记未加载,
+    // 等读到真正保存的偏好再允许预览,否则点开设置就会把夜间外观切成白天。
+    setDraftLoaded(false)
+    // 兜底基线:偏好读取失败时,关闭要回滚到打开前的真实外观,而不是默认浅色。
+    savedTheme.current = currentTheme()
     let cancelled = false
     void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => {
       if (cancelled) return
       const loaded = readPreferences(raw)
       savedTheme.current = loaded.theme
       setDraft(loaded)
+      setDraftLoaded(true)
     })
     void window.windowApi.app.getAutoLaunch().then((r) => {
       if (!cancelled) setAutoLaunchSupported(r.supported)
@@ -166,11 +174,12 @@ export function PreferencesDialog(): React.JSX.Element | null {
     return () => { cancelled = true }
   }, [open])
 
-  // 主题即时预览:切换单选项立刻生效;取消关闭时回滚为已保存值
+  // 主题即时预览:切换单选项立刻生效;取消关闭时回滚为已保存值。
+  // 必须等偏好加载完成:加载前 draft 是默认浅色,预览会误切主题。
   useEffect(() => {
-    if (!open) return
+    if (!open || !draftLoaded) return
     applyTheme(draft.theme)
-  }, [open, draft.theme])
+  }, [open, draftLoaded, draft.theme])
 
   /* 遮罩与对话框都是整窗尺寸的层,原来直接 return null 卸载 —— 0ms 硬消失。
      改成:mounted 决定是否在 DOM 里,shown 决定外观两态,关闭后再等退场走完才卸载。
@@ -226,7 +235,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
         useUI.getState().setHoverPlayback(draft.hoverVideo, draft.hoverSound)
         close()
       })
-      .catch(() => alert('保存偏好设置失败,请重试'))
+      .catch(() => useUI.getState().showToast('保存偏好设置失败,请重试', 'warn'))
       .finally(() => setSaving(false))
   }
   const browseLibraryPath = (): void => {
@@ -237,11 +246,11 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const createLibrary = (): void => {
     const name = libraryName.trim()
     if (!name) {
-      alert('请输入资源库名称')
+      useUI.getState().showToast('请输入资源库名称', 'warn')
       return
     }
     if (!libraryPath) {
-      alert('请选择存储文件夹路径')
+      useUI.getState().showToast('请选择存储文件夹路径', 'warn')
       return
     }
     setCreating(true)

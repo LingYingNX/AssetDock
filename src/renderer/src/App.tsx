@@ -32,7 +32,7 @@ export default function App(): React.JSX.Element {
         if (libs.length === 0) return
         const migration = await window.windowApi.library.takeMigrationFailures()
         if (migration.names.length > 0) {
-          alert(`以下素材库无法创建本地数据库，当前会话将使用全局回退数据:\n${migration.names.join('\n')}`)
+          useUI.getState().showToast(`以下素材库无法创建本地数据库，当前会话将使用全局回退数据:\n${migration.names.join('\n')}`, 'warn')
         }
         const openIds = await window.windowApi.tabs.get()
         const tabs = openIds
@@ -57,7 +57,11 @@ export default function App(): React.JSX.Element {
       }
     }
     void boot()
-    const un1 = window.windowApi.on('assets:changed', () => useUI.getState().reloadActiveLibrary())
+    // S1-7:assets:changed 优先走增量合并(带 assetIds);不带则退全量 reload
+    const un1 = window.windowApi.on('assets:changed', (p) => {
+      const d = p as { libraryId: number; assetIds?: number[] }
+      useUI.getState().applyAssetDelta(d.libraryId, d.assetIds)
+    })
     const un3 = window.windowApi.on('window:maximized', (p) => {
       document.documentElement.dataset.maximized = p === true ? 'true' : 'false'
     })
@@ -82,7 +86,7 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const t = e.target as HTMLElement
-      const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
+      const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
       const st = useUI.getState()
 
       if (e.key === 'Escape') {
