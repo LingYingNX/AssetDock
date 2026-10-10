@@ -118,12 +118,37 @@ export async function flushManifest(libPath: string): Promise<void> {
   await writeFileAtomically(thumbManifestPath(libPath), JSON.stringify(manifest)).catch(() => undefined)
 }
 
-/** 生成串行队列:一次只解码一张,避免机械盘被并发随机读拖垮 */
-let chain: Promise<unknown> = Promise.resolve()
-function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-  const next = chain.then(fn, fn)
-  chain = next.catch(() => undefined)
-  return next
+/**
+ * 生成任务并发池(S1-8):一次最多 THUMB_CONCURRENCY 个解码任务。
+ * 原先是全局单链串行——大库首刷时每张图排队,协议请求全部挂起。
+ * sharp 解码是 CPU 密集,4 并发足以吃满单核剩余 IO 余量又不挤爆机械盘随机读。
+ */
+const THUMB_CONCURRENCY = 4
+let running = 0
+const waiters: Array<() => void> = []
+
+async function acquireSlot(): Promise<void> {
+  if (running < THUMB_CONCURRENCY) {
+    running++
+    return
+  }
+  await new Promise<void>((resolve) => waiters.push(resolve))
+  running++
+}
+
+function releaseSlot(): void {
+  running--
+  const next = waiters.shift()
+  if (next) next()
+}
+
+async function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  await acquireSlot()
+  try {
+    return await fn()
+  } finally {
+    releaseSlot()
+  }
 }
 
 async function placeholderJpeg(label: string): Promise<Buffer> {
@@ -134,6 +159,18 @@ async function placeholderJpeg(label: string): Promise<Buffer> {
   </svg>`
   const sharp = (await import('sharp')).default
   return sharp(Buffer.from(svg)).jpeg({ quality: 90 }).toBuffer()
+}
+
+/**
+ * 同步占位 SVG(S1-8):协议请求在缩略图尚未生成时立即返回的轻量响应体。
+ * 与格式占位图不同色,渲染层据此可区分「还在生成」与「生成失败」。
+ */
+export function inlinePlaceholderSvg(label: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">
+    <rect width="320" height="240" fill="#E2E6EC"/>
+    <text x="160" y="126" font-family="Segoe UI, sans-serif" font-size="22" font-weight="600"
+      fill="#8A94A6" text-anchor="middle">${label}</text>
+  </svg>`
 }
 
 /**
@@ -211,6 +248,26 @@ export async function ensureThumb(
     scheduleFlush(libPath)
     return { path: target, placeholder }
   })
+}
+
+/**
+ * 后台补齐单个缩略图(S1-8):协议请求 miss 时由 media.ts 触发,不阻塞协议响应。
+ * onDone 在生成完成(无论成功失败)后回调一次,供主进程通知渲染层重取该图。
+ * 已有有效缓存时不动、不回调——调用方在请求路径上本就先查过缓存。
+ */
+export function warmThumbInBackground(
+  libPath: string,
+  absPath: string,
+  fingerprint: string,
+  format: string,
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number },
+  look?: string | null,
+  onDone?: () => void
+): void {
+  if (!fingerprint) return
+  void ensureThumb(libPath, absPath, fingerprint, format, meta, look)
+    .catch(() => undefined)
+    .finally(() => { if (onDone) try { onDone() } catch { /* 通知失败不影响生成 */ } })
 }
 
 /** 删除单个缩略图与清单条目(原图被清除时调用);删除是关键路径,立即落盘 */
@@ -359,8 +416,9 @@ export function thumbJobRows(db: Database.Database, libraryId: number): ThumbJob
 export async function generateMissingThumbs(
   libPath: string,
   jobs: ThumbJob[],
-  onProgress?: (done: number, total: number) => void
-): Promise<{ total: number; generated: number }> {
+  onProgress?: (done: number, total: number) => void,
+  onError?: (job: ThumbJob, error: unknown) => void
+): Promise<{ total: number; generated: number; failed: number }> {
   const manifest = await loadManifest(libPath)
   const seen = new Set<string>()
   const todo: ThumbJob[] = []
@@ -372,13 +430,21 @@ export async function generateMissingThumbs(
   }
   onProgress?.(0, todo.length)
   let done = 0
+  let failed = 0
   for (const job of todo) {
-    await ensureThumb(libPath, job.absPath, job.fingerprint, job.format, job.meta)
+    try {
+      await ensureThumb(libPath, job.absPath, job.fingerprint, job.format, job.meta)
+    } catch (error) {
+      // S3-6:单张失败不中断批次,计数上报
+      failed++
+      onError?.(job, error)
+      console.error('[thumbs] generate failed', job.meta.relPath, error)
+    }
     done++
     if (done % 5 === 0 || done === todo.length) onProgress?.(done, todo.length)
   }
   if (todo.length > 0) await flushManifest(libPath)
-  return { total: todo.length, generated: done }
+  return { total: todo.length, generated: done - failed, failed }
 }
 /** 测试辅助:丢弃内存态,强制下次从磁盘重读 */
 export function resetThumbCache(): void {

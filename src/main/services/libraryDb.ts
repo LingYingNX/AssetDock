@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { randomUUID } from 'node:crypto'
 import { join, dirname } from 'node:path'
 import { mkdirSync, existsSync, renameSync, rmSync } from 'node:fs'
 import { openSqlite } from './sqlite'
@@ -120,7 +121,8 @@ export function migrateLibrary(
 ): boolean {
   if (hasLibDb(lib.path)) return false
   mkdirSync(mediaDir(lib.path), { recursive: true })
-  const tmp = libDbPath(lib.path) + `.tmp-${process.pid}`
+  // S3-4:随机后缀避免多进程同时迁移同一库时 tmp 名碰撞
+  const tmp = libDbPath(lib.path) + `.tmp-${randomUUID()}`
   try {
     const db = openSqlite(tmp)
     db.pragma('journal_mode = WAL')
@@ -194,26 +196,59 @@ export function ensureLibraryStorage(
   }
 }
 
-/** 句柄 LRU(上限 8) */
+/**
+ * 句柄 LRU(上限 64)。句柄成本(一个 fd + WAL)远低于误关活跃句柄导致的
+ * "connection is closed" 崩溃,故上限放宽;只有引用计数归零的句柄才允许驱逐关闭。
+ */
 const handles = new Map<string, Database.Database>()
-const MAX_HANDLES = 8
+/** 每个 libPath 的 in-flight 使用计数:getLibHandle/useLibHandle 配对释放 */
+const inflight = new Map<string, number>()
+const MAX_HANDLES = 64
 
+function tryEvictLocked(): void {
+  while (handles.size > MAX_HANDLES) {
+    // 找最旧的引用计数为 0 的条目;全都被占用时宁可超上限也不 close 活跃句柄
+    let victim: string | null = null
+    for (const key of handles.keys()) {
+      if ((inflight.get(key) ?? 0) === 0) { victim = key; break }
+    }
+    if (!victim) return
+    const old = handles.get(victim)
+    handles.delete(victim)
+    try { old?.close() } catch { /* ignore */ }
+  }
+}
+
+/** 获取句柄并把引用计数 +1;调用方必须用 releaseLibHandle 释放 */
 export function getLibHandle(libPath: string): Database.Database {
   let h = handles.get(libPath)
   if (h) {
     handles.delete(libPath)
     handles.set(libPath, h)
-    return h
+  } else {
+    h = openLibDb(libPath)
+    handles.set(libPath, h)
   }
-  h = openLibDb(libPath)
-  handles.set(libPath, h)
-  while (handles.size > MAX_HANDLES) {
-    const oldest = handles.keys().next().value as string
-    const old = handles.get(oldest)
-    handles.delete(oldest)
-    try { old?.close() } catch { /* ignore */ }
-  }
+  inflight.set(libPath, (inflight.get(libPath) ?? 0) + 1)
+  tryEvictLocked()
   return h
+}
+
+/** 与 getLibHandle 配对:引用计数归零后该句柄才可被 LRU 驱逐 */
+export function releaseLibHandle(libPath: string): void {
+  const n = (inflight.get(libPath) ?? 0) - 1
+  if (n <= 0) inflight.delete(libPath)
+  else inflight.set(libPath, n)
+}
+
+/** 测试辅助 */
+export function hasLibHandle(libPath: string): boolean {
+  return handles.has(libPath)
+}
+
+/** 测试辅助:当前缓存句柄数 */
+export function cachedHandleCount(): number {
+  return handles.size
 }
 
 export function closeAllLibHandles(): void {
@@ -221,6 +256,7 @@ export function closeAllLibHandles(): void {
     try { h.close() } catch { /* ignore */ }
   }
   handles.clear()
+  inflight.clear()
 }
 
 /** 测试辅助:内存库(同 schema) */

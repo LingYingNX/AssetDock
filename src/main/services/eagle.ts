@@ -57,7 +57,8 @@ function folderName(value: string): string {
 }
 
 function importTime(value: number | null): string {
-  return value == null ? new Date().toISOString().slice(0, 16) : new Date(value).toISOString().slice(0, 16)
+  // S2-6:与 upsertScanned 对齐保留毫秒精度,展示层自行截断
+  return value == null ? new Date().toISOString() : new Date(value).toISOString()
 }
 
 function pathInside(root: string, target: string): string {

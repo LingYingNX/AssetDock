@@ -84,8 +84,9 @@ describe('UI store', () => {
 
   it('reloads before reporting a partially completed move', async () => {
     const calls: string[] = []
-    vi.stubGlobal('alert', (message: string) => calls.push(`alert:${message}`))
     vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
       windowApi: {
         assets: {
           move: vi.fn().mockResolvedValue({ error: 'second asset failed', moved: 1 })
@@ -93,15 +94,16 @@ describe('UI store', () => {
       }
     })
     const { useUI } = await import('../src/renderer/src/store/ui')
-    const reload = vi.fn(() => calls.push('reload'))
     useUI.setState({
+      toast: null,
+      showToast: (text: string) => calls.push(`alert:${text}`),
       tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
       activeTabId: 'library-1',
       assets: [
         { id: 'a1', dbId: 1, libraryId: 1, type: 'image', format: 'JPG', name: 'one', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, reviewFlag: false, tags: [], folders: [], note: '', palette: [], previewUrl: '', originalUrl: '', absPath: '' },
         { id: 'a2', dbId: 2, libraryId: 1, type: 'image', format: 'JPG', name: 'two', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, reviewFlag: false, tags: [], folders: [], note: '', palette: [], previewUrl: '', originalUrl: '', absPath: '' }
       ],
-      reloadActiveLibrary: reload
+      reloadActiveLibrary: vi.fn(() => calls.push('reload'))
     })
 
     useUI.getState().moveAssetsToFolder(['a1', 'a2'], 'target')
@@ -160,9 +162,10 @@ describe('UI store', () => {
   })
 
   it('shows the storage fallback warning after creating a library', async () => {
-    const alert = vi.fn()
-    vi.stubGlobal('alert', alert)
+    const toasts: string[] = []
     vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
       windowApi: {
         pickFolder: vi.fn().mockResolvedValue('C:/Library'),
         library: {
@@ -177,11 +180,11 @@ describe('UI store', () => {
     })
     const { useUI } = await import('../src/renderer/src/store/ui')
     const openLibrary = vi.fn()
-    useUI.setState({ libraries: [], openLibrary })
+    useUI.setState({ toast: null, showToast: (text: string) => toasts.push(text), libraries: [], openLibrary })
 
     useUI.getState().createLibraryFlow()
 
-    await vi.waitFor(() => expect(alert).toHaveBeenCalledWith('素材库无法创建本地数据库，当前会话将使用全局回退数据'))
+    await vi.waitFor(() => expect(toasts).toEqual(['素材库无法创建本地数据库，当前会话将使用全局回退数据']))
     expect(openLibrary).toHaveBeenCalledWith(2, 'Library')
   })
 
@@ -259,9 +262,10 @@ describe('UI store', () => {
   })
 
   it('reports an Eagle import failure instead of silently rejecting', async () => {
-    const alert = vi.fn()
-    vi.stubGlobal('alert', alert)
+    const toasts: string[] = []
     vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
       windowApi: {
         pickFolder: vi.fn().mockResolvedValue('E:/图.library'),
         library: { importEagle: vi.fn().mockRejectedValue(new Error('IPC unavailable')) }
@@ -269,6 +273,8 @@ describe('UI store', () => {
     })
     const { useUI } = await import('../src/renderer/src/store/ui')
     useUI.setState({
+      toast: null,
+      showToast: (text: string) => toasts.push(text),
       tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
       activeTabId: 'library-1',
       scanProgress: null
@@ -276,7 +282,7 @@ describe('UI store', () => {
 
     useUI.getState().importEagleFlow()
 
-    await vi.waitFor(() => expect(alert).toHaveBeenCalledWith('导入 Eagle 素材失败: IPC unavailable'))
+    await vi.waitFor(() => expect(toasts).toEqual(['导入 Eagle 素材失败: IPC unavailable']))
     expect(useUI.getState().scanProgress).toBeNull()
   })
 })

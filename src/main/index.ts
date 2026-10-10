@@ -1,12 +1,15 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, screen } from 'electron'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
+import { randomUUID } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
 import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { openSqlite } from './services/sqlite'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries, getAppState, setAppState } from './services/store'
+import { resolveWithinAnyLibrary } from './services/libResolve'
 
 const DEFAULT_WINDOW = { width: 1600, height: 950 }
 const MIN_WINDOW = { width: 1440, height: 860 }
@@ -94,9 +97,11 @@ function checkpointAllLibraries(): void {
   } catch { /* ignore */ }
 }
 
-// media:// 需要在 app ready 前声明特权(视频流/Range)
+// media:// 需要在 app ready 前声明特权(视频流/Range)。
+// S0-1:去掉 bypassCSP——页面 CSP(index.html meta)已显式放行 media:,
+// 无需协议级豁免;保留 fetch 能力(connect-src media:)与流式播放。
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: true } }
+  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: false } }
 ])
 
 function createWindow(): void {
@@ -117,7 +122,9 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      // sandbox:true(S2-13):preload 只用 ipcRenderer/contextBridge,无需 Node 权限;
+      // 渲染层被注入时少一层 Node 能力暴露
+      sandbox: true
     }
   })
 
@@ -156,12 +163,15 @@ function createWindow(): void {
     persistWindowState(win)
     if (!quitting && closeBehavior() === 'minimize') {
       event.preventDefault()
+      // S2-8:托盘化前 checkpoint,长期挂后台时 WAL 不持续增长,断电恢复更快
+      checkpointAllLibraries()
       win.hide()
     }
   })
 
+  // 仅放行 http(s) 外链;file:// 与自定义协议不交给系统 handler,防被注入页借道打开本地内容
   win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (/^https?:/i.test(details.url)) shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
@@ -202,8 +212,12 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on('window:close', (e) => {
     BrowserWindow.fromWebContents(e.sender)?.close()
   })
-  ipcMain.on('shell:show-in-folder', (_e, p: string) => {
-    if (typeof p === 'string' && p) shell.showItemInFolder(p)
+  // 路径必须真实落在某个已注册库根内(realpath 解析符号链接),库外拒绝——
+  // 防渲染层被注入后探测任意磁盘路径存在性或在资源管理器打开敏感目录
+  ipcMain.on('shell:show-in-folder', async (_e, p: string) => {
+    if (typeof p !== 'string' || !p) return
+    const real = await resolveWithinAnyLibrary(p)
+    if (real) shell.showItemInFolder(real)
   })
 
   /** 开机自启:走 Electron 登录项,仅打包后生效(dev 下注册的是 electron.exe 无意义) */
@@ -217,13 +231,25 @@ if (!app.requestSingleInstanceLock()) {
     return { ok: true, supported: true, enabled: app.getLoginItemSettings().openAtLogin }
   })
 
-  // dev 下开放本地 HTTP 桥:GET /<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用
+  // dev 下开放本地 HTTP 桥:GET /<token>/<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用。
+  // token 每次启动随机生成并落盘 userData/debug-bridge-token(tools/hhead.mjs 消费),
+  // 防止同机任意进程(包括浏览器页面)盲打 9223 驱动渲染层执行任意 JS
   if (!app.isPackaged) {
+    const bridgeToken = randomUUID()
+    try {
+      writeFileSync(join(userData, 'debug-bridge-token'), bridgeToken, 'utf8')
+    } catch (e) {
+      console.warn('[MediaHub] debug bridge token write failed:', (e as Error).message)
+    }
     const debugBridge = createServer((req, res) => {
-      const expr = decodeURIComponent((req.url ?? '/').slice(1))
+      const raw = decodeURIComponent((req.url ?? '/').slice(1))
+      const sep = raw.indexOf('/')
+      const token = sep === -1 ? raw : raw.slice(0, sep)
+      const expr = sep === -1 ? '' : raw.slice(sep + 1)
       const w = BrowserWindow.getAllWindows()[0]
-      if (!w || !expr) {
-        res.end(JSON.stringify({ ok: false, error: 'no window or empty expression' }))
+      if (token !== bridgeToken || !w || !expr) {
+        res.statusCode = token !== bridgeToken ? 403 : 400
+        res.end(JSON.stringify({ ok: false, error: token !== bridgeToken ? 'forbidden' : 'no window or empty expression' }))
         return
       }
       w.webContents.executeJavaScript(expr, true).then(

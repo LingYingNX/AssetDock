@@ -9,10 +9,13 @@ import type { Database } from 'better-sqlite3'
 
 export interface WatchCallbacks {
   onAdded: (assetId: number | null) => void
-  onChanged: () => void
+  /** change 事件:upsertOne 已拿到 assetId 时传入,S1-7 增量通知;目录级变化传 null 走全量 */
+  onChanged: (assetId: number | null) => void
   onMissing: (relPath: string) => void
 }
 
+// S3-8:LRU 上限防大目录树峰值时 Map 无界增长(key 会在触发时自清,这里只兜底)
+const DEBOUNCE_LRU_MAX = 4096
 const debounces = new Map<string, NodeJS.Timeout>()
 
 export const WATCH_OPTIONS = {
@@ -24,6 +27,15 @@ export const WATCH_OPTIONS = {
 function debounced(key: string, fn: () => void, ms = 300): void {
   const previous = debounces.get(key)
   if (previous) clearTimeout(previous)
+  else if (debounces.size >= DEBOUNCE_LRU_MAX) {
+    // Map 迭代序即插入序:淘汰最旧未触发的条目
+    const oldest = debounces.keys().next().value
+    if (oldest !== undefined) {
+      const t = debounces.get(oldest)
+      if (t) clearTimeout(t)
+      debounces.delete(oldest)
+    }
+  }
   debounces.set(key, setTimeout(() => {
     debounces.delete(key)
     fn()
@@ -83,16 +95,19 @@ export function watchLibrary(db: Database, libraryId: number, root: string, cb: 
     .on('add', (path: string) => debounced(path, () => {
       void upsertOne(db, libraryId, root, path).then((result) => {
         if (result) cb.onAdded(result.assetId)
-      }).catch(cb.onChanged)
+      }).catch(() => cb.onChanged(null))
     }))
     .on('change', (path: string) => debounced(path, () => {
-      void upsertOne(db, libraryId, root, path).then(cb.onChanged, cb.onChanged)
+      void upsertOne(db, libraryId, root, path).then(
+        (result) => cb.onChanged(result ? result.assetId : null),
+        () => cb.onChanged(null)
+      )
     }))
     .on('unlink', (path: string) => debounced(`unlink:${path}`, () => {
       const relPath = path.slice(root.length + 1).replace(/\\/g, '/')
       if (setAssetMissing(db, libraryId, relPath, true)) cb.onMissing(relPath)
     }))
-    .on('addDir', (path: string) => { if (path !== root) cb.onChanged() })
-    .on('unlinkDir', (path: string) => { if (path !== root) cb.onChanged() })
+    .on('addDir', (path: string) => { if (path !== root) cb.onChanged(null) })
+    .on('unlinkDir', (path: string) => { if (path !== root) cb.onChanged(null) })
   return watcher
 }

@@ -72,7 +72,6 @@ CREATE TABLE IF NOT EXISTS index_sources (
   name TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE;
 `
 
 const SCHEMA_V4 = `
@@ -93,27 +92,31 @@ export function initDb(userDataDir: string): Database.Database {
   db = openSqlite(join(userDataDir, 'mediahub.db'))
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
+  // 每个版本步进独立事务,成功后才推进 user_version:
+  // 中断(进程被杀/断电)后重放是安全的——ALTER 先做幂等检查,CREATE 全部 IF NOT EXISTS
   const version = (db.pragma('user_version', { simple: true }) as number) ?? 0
-  if (version < 1) {
-    db.exec(SCHEMA_V1)
-    db.pragma('user_version = 1')
+  const step = (to: number, fn: () => void): void => {
+    if (version >= to) return
+    db!.transaction(fn)()
+    db!.pragma(`user_version = ${to}`)
   }
-  if (version < 2) {
-    db.exec(SCHEMA_V2)
-    db.pragma('user_version = 2')
-  }
-  if (version < 3) {
-    db.exec(SCHEMA_V3)
-    db.pragma('user_version = 3')
-  }
-  if (version < 4) {
-    db.exec(SCHEMA_V4)
-    db.pragma('user_version = 4')
-  }
-  if (version < 5) {
-    db.exec(SCHEMA_V5)
-    db.pragma('user_version = 5')
-  }
+  const columns = (t: string): string[] =>
+    (db!.pragma(`table_info(${t})`) as { name: string }[]).map((c) => c.name)
+
+  step(1, () => { db!.exec(SCHEMA_V1) })
+  step(2, () => {
+    db!.exec(SCHEMA_V2)
+  })
+  step(3, () => {
+    db!.exec(SCHEMA_V3)
+    if (!columns('assets').includes('source_index_id')) {
+      db!.exec('ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE')
+    }
+  })
+  step(4, () => {
+    if (!columns('assets').includes('folder_path')) db!.exec(SCHEMA_V4)
+  })
+  step(5, () => { db!.exec(SCHEMA_V5) })
   return db
 }
 
@@ -130,5 +133,11 @@ export function openMemoryDb(): Database.Database {
   d.exec(SCHEMA_V3)
   d.exec(SCHEMA_V4)
   d.exec(SCHEMA_V5)
+  // source_index_id 的 ALTER 在 initDb 的 step(3) 里幂等执行,这里需单独补齐,
+  // 否则 migrateLibrary 的 SELECT * 拿不到该列、INSERT 命名参数缺字段
+  const cols = (d.pragma('table_info(assets)') as { name: string }[]).map((c) => c.name)
+  if (!cols.includes('source_index_id')) {
+    d.exec('ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE')
+  }
   return d
 }

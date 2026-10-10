@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AssetListResponse, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
 
 const api = {
   minimize: (): void => {
@@ -23,13 +24,14 @@ const api = {
     list: (): Promise<{ id: number; name: string; path: string }[]> => ipcRenderer.invoke('library:list'),
     takeMigrationFailures: (): Promise<{ names: string[] }> => ipcRenderer.invoke('library:takeMigrationFailures'),
     legacyStats: (): Promise<{ assets: number }> => ipcRenderer.invoke('library:legacyStats'),
-    purgeLegacy: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:purgeLegacy'),
+    purgeLegacy: (confirm: boolean): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('library:purgeLegacy', confirm === true),
     importEagle: (libraryId: number, folderPath: string): Promise<{ imported: number; multiFolderAssets: number } | { error: string }> =>
       ipcRenderer.invoke('eagle:import', libraryId, folderPath)
   },
 
   folders: {
-    list: (libraryId: number): Promise<{ paths: string[]; eaglePaths: string[] } | { error: string }> =>
+    list: (libraryId: number): Promise<FolderListResponse | { error: string }> =>
       ipcRenderer.invoke('folders:list', libraryId),
     create: (libraryId: number): Promise<{ path: string } | { error: string }> =>
       ipcRenderer.invoke('folders:create', libraryId),
@@ -40,7 +42,10 @@ const api = {
   },
 
   assets: {
-    list: (libraryId: number): Promise<unknown> => ipcRenderer.invoke('assets:list', libraryId),
+    list: (libraryId: number): Promise<AssetListResponse | { error: string }> =>
+      ipcRenderer.invoke('assets:list', libraryId),
+    rows: (libraryId: number, ids: number[]): Promise<AssetRowsResponse> =>
+      ipcRenderer.invoke('assets:rows', libraryId, ids),
     update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:update', libraryId, id, patch),
     move: (libraryId: number, ids: number[], folder: string): Promise<{ moved: number } | { error: string; moved?: number }> =>
@@ -79,9 +84,9 @@ const api = {
       ipcRenderer.invoke('app:setAutoLaunch', enabled)
   },
 
-  /** 白名单事件订阅 */
-  on: (channel: 'library:scan' | 'assets:changed' | 'window:maximized' | 'thumbs:progress', cb: (payload: unknown) => void): (() => void) => {
-    const h = (_e: unknown, payload: unknown): void => cb(payload)
+  /** 白名单事件订阅(payload 类型来自 shared EventChannelMap,S2-10) */
+  on: <K extends keyof EventChannelMap>(channel: K, cb: (payload: EventChannelMap[K]) => void): (() => void) => {
+    const h = (_e: unknown, payload: EventChannelMap[K]): void => cb(payload)
     ipcRenderer.on(channel, h)
     return () => {
       ipcRenderer.removeListener(channel, h)

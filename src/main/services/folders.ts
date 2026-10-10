@@ -1,6 +1,7 @@
 import { copyFile, lstat, mkdir, readdir, rename } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isIgnoredDir } from './ignore'
+import { realPathWithinRoot } from './libResolve'
 
 const DEFAULT_NAME = '未命名'
 const INVALID_NAME = /[<>:"/\\|?*\u0000-\u001F]/
@@ -10,6 +11,11 @@ function fail(message: string): never {
   throw new Error(message)
 }
 
+/**
+ * 解析库内相对路径为绝对路径(S3-1:resolve+relative 字符串校验)。
+ * folder 操作低频,入口做一次 realpath 解析,把 symlink/Junction 语义与 media:// 对齐;
+ * 目标不存在时(创建场景)回退 lexical 校验。
+ */
 function libraryPath(root: string, relPath: string): { abs: string; rel: string } {
   const rel = relPath.replace(/\\/g, '/')
   if (!rel || rel.split('/').some((part) => !part || part === '.' || part === '..')) fail('文件夹路径无效')
@@ -18,6 +24,16 @@ function libraryPath(root: string, relPath: string): { abs: string; rel: string 
   const fromBase = relative(base, abs)
   if (!fromBase || fromBase.startsWith('..') || isAbsolute(fromBase)) fail('文件夹必须位于素材库内')
   return { abs, rel: fromBase.replace(/\\/g, '/') }
+}
+
+/** S3-1:对已存在的路径做 realpath 越界复检;不存在(即将创建)时放行 lexical 结果 */
+async function assertRealWithinRoot(root: string, abs: string): Promise<void> {
+  const real = await realPathWithinRoot(root, abs).catch(() => null)
+  if (real === null) {
+    // 目标自身不存在才允许(等待后续 mkdir/rename);存在但越界 = symlink 逃逸
+    const st = await lstat(abs).catch(() => null)
+    if (st) fail('路径解析后不在素材库内')
+  }
 }
 
 function targetFolderPath(root: string, relPath: string): { abs: string; rel: string } {
@@ -92,6 +108,7 @@ export async function createLibraryFolder(root: string): Promise<string> {
 
 export async function renameLibraryFolder(root: string, relPath: string, newName: string): Promise<string> {
   const source = libraryPath(root, relPath)
+  await assertRealWithinRoot(root, source.abs)
   const name = folderName(newName)
   const destination = resolve(dirname(source.abs), name)
   const target = libraryPath(root, relative(resolve(root), destination))
@@ -109,7 +126,9 @@ export async function renameLibraryFolder(root: string, relPath: string, newName
 
 export async function moveLibraryFolder(root: string, relPath: string, targetParent: string): Promise<string> {
   const source = libraryPath(root, relPath)
+  await assertRealWithinRoot(root, source.abs)
   const parent = targetFolderPath(root, targetParent)
+  await assertRealWithinRoot(root, parent.abs)
   if (parent.rel === source.rel || parent.rel.startsWith(`${source.rel}/`)) fail('不能移动到自身或子文件夹')
   if (!(await lstat(source.abs)).isDirectory()) fail('文件夹不存在')
   if (!(await lstat(parent.abs)).isDirectory()) fail('目标文件夹不存在')
@@ -141,7 +160,9 @@ async function uniqueAssetTarget(directory: string, fileName: string): Promise<s
 
 export async function moveLibraryAsset(root: string, relPath: string, targetFolder: string): Promise<string> {
   const source = libraryPath(root, relPath)
+  await assertRealWithinRoot(root, source.abs)
   const targetDir = targetFolderPath(root, targetFolder)
+  await assertRealWithinRoot(root, targetDir.abs)
   if (dirname(source.abs).toLowerCase() === targetDir.abs.toLowerCase()) return source.rel
   if (!(await lstat(source.abs)).isFile()) fail('素材不存在')
   if (!(await lstat(targetDir.abs)).isDirectory()) fail('目标文件夹不存在')
@@ -159,6 +180,7 @@ export async function moveLibraryAsset(root: string, relPath: string, targetFold
  */
 export async function renameLibraryAsset(root: string, relPath: string, newName: string): Promise<string> {
   const source = libraryPath(root, relPath)
+  await assertRealWithinRoot(root, source.abs)
   if (!(await lstat(source.abs)).isFile()) fail('素材不存在')
 
   const base = folderName(newName)

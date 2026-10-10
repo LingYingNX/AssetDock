@@ -71,11 +71,13 @@ export async function scanPaths(
  */
 export async function scanLibrary(
   root: string,
-  onProgress?: (done: number) => void
+  onProgress?: (done: number) => void,
+  onError?: (relPath: string, error: unknown) => void
 ): Promise<ScanEntry[]> {
   const entries: ScanEntry[] = []
   const queue: string[] = ['']
   let done = 0
+  let errors = 0
 
   async function walk(relDir: string): Promise<void> {
     const absDir = join(root, relDir)
@@ -83,7 +85,10 @@ export async function scanLibrary(
     let dirents
     try {
       dirents = await readdir(absDir, { withFileTypes: true })
-    } catch {
+    } catch (error) {
+      // S3-6:目录不可读计入错误而非静默跳过
+      errors++
+      onError?.(relDir, error)
       return
     }
     for (const dent of dirents) {
@@ -95,9 +100,17 @@ export async function scanLibrary(
       if (!dent.isFile() || isIgnored(rel)) continue
       const abs = join(root, rel)
       batch.push((async () => {
-        const st = await stat(abs).catch(() => null)
+        const st = await stat(abs).catch((error: unknown) => {
+          errors++
+          onError?.(rel, error)
+          return null
+        })
         if (!st) return
-        const entry = await collectEntry(abs, rel, st.size, st.mtimeMs).catch(() => null)
+        const entry = await collectEntry(abs, rel, st.size, st.mtimeMs).catch((error: unknown) => {
+          errors++
+          onError?.(rel, error)
+          return null
+        })
         if (!entry) return
         entries.push(entry)
         done++
@@ -113,5 +126,7 @@ export async function scanLibrary(
     await Promise.all(batch.map(walk))
   }
   onProgress?.(done)
+  // S3-6:失败计数挂到返回值,调用方随 done 事件外报
+  ;(entries as ScanEntry[] & { __errors?: number }).__errors = errors
   return entries
 }
