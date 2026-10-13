@@ -238,7 +238,29 @@ export function ContextMenu(): React.JSX.Element | null {
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 95, pointerEvents: ctxMenu ? 'auto' : 'none' }}
       onClick={close}
-      onContextMenu={(e) => { e.preventDefault(); close() }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        close()
+        /* 遮罩铺满视口,第二张卡片上的右键先落到这里。原样吃掉只关菜单,
+           用户得再右键一次才轮到卡片,表现为「右键两次才生效」。
+           这里把遮罩临时移出命中测试拿到真实目标,再把同一位置的右键原样转发,
+           于是这一次右键就直接选中并弹出新菜单。
+           命中仍在遮罩内(点在菜单自己身上)时不转发:事件会再次冒泡回本处理器。 */
+        const el = e.currentTarget as HTMLElement
+        const prev = el.style.pointerEvents
+        el.style.pointerEvents = 'none'
+        const hit = document.elementFromPoint(e.clientX, e.clientY)
+        el.style.pointerEvents = prev
+        if (!hit || el.contains(hit)) return
+        hit.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          buttons: 2,
+          clientX: e.clientX,
+          clientY: e.clientY
+        }))
+      }}
     >
       <div
         ref={menuRef}
