@@ -3,3 +3,5 @@ out/
 素材/
 *.log
 artifacts/
+design-review/
+tools/.dev-log.txt
