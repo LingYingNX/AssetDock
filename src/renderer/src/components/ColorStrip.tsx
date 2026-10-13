@@ -107,7 +107,7 @@ export function ColorStrip(): React.JSX.Element | null {
     >
       <div className="color-menu-head">颜色构造</div>
       {cell.length === 0 ? (
-        <div className="menu-empty">当前视图无颜色数据(素材缺少调色板)</div>
+        <div className="menu-empty">当前视图无颜色数据</div>
       ) : (
         <div className="color-grid">
           {cell.map((c) => (

@@ -9,11 +9,11 @@
 .content>*{position:relative;z-index:1}
 
 /* ---------- 筛选条 ---------- */
-.filterbar{display:flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-bottom:1px solid var(--line)}
+.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line)}
 /* 筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
    所以 border-color/color/background 的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
    时长用 --dur-hover(110ms):悬停是一天几十次的高频反馈,必须比按压(160ms)更短。 */
-.filterbar .btn{height:27px;padding:0 9px;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap;
+.filterbar .btn{height:var(--h-sm);padding:0 10px;font-size:var(--fs-body);background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap;
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .btn.on{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
@@ -23,42 +23,57 @@
 /* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
 .filterbar .btn.on.open{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
 .filterbar .btn .dot{width:7px;height:7px}
-.filterbar .btn .chev{width:12px;height:12px;color:var(--t3);transition:transform var(--dur-hover) var(--ease-out)}
+.filterbar .btn .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);transition:transform var(--dur-hover) var(--ease-out)}
 .filterbar .btn.open .chev{transform:rotate(180deg)}
-.cbtn{width:28px;height:27px;border-radius:9px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line);
+.cbtn{width:28px;height:var(--h-sm);border-radius:var(--r-sm);display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cbtn:hover{border-color:var(--line2)}
 .cbtn.on{border-color:var(--acc-line);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
-.cball{width:15px;height:15px;border-radius:50%;background:conic-gradient(#F1616D 0 45deg,#F97316 0 90deg,#F2B33D 0 135deg,#3ECF8E 0 180deg,#2FD6A3 0 225deg,#5EE7F9 0 270deg,#E9EDF5 0 315deg,#15171B 0 360deg);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
-.filterbar .tb-btn{width:28px;height:27px;border-radius:9px;background:var(--bg2);border:1px solid var(--line);
+.cball{width:15px;height:15px;border-radius:50%;background:var(--grad-rainbow);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
+.filterbar .tb-btn{width:28px;height:var(--h-sm);border-radius:var(--r-sm);background:var(--bg2);border:1px solid var(--line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .tb-btn.on{border-color:var(--acc-line);color:var(--acc2);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
-.zoomer{display:flex;align-items:center;gap:7px;color:var(--t3)}
-.zoomer .ic{width:13px;height:13px}
+.zoomer{display:flex;align-items:center;gap:7px;color:var(--t3);min-width:0}
+.zoomer .ic{width:var(--ic-sm);height:var(--ic-sm);flex:none}
 input[type=range]{-webkit-appearance:none;appearance:none;width:88px;height:3px;border-radius:2px;cursor:pointer;background:linear-gradient(90deg,var(--acc) 40%,rgba(255,255,255,.55) 40%)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
-.fresult{margin-left:auto;font-size:11.5px;color:var(--t3)}
+/* 「已选中 N 项 · 16.3MB」原来孤立贴在筛选组与视图组之间的缝里,和谁都不成组
+   (它靠 margin-left:auto 顶到右侧,左边却没有分界,读起来像一句悬空注释)。
+   FilterBar 在它前面插了一条 .vr-lead,由这条分隔线吸收剩余空间:
+   左=筛选组,右=计数 · 视图 · 缩放。auto 必须落在 .vr-lead 而不是 .fresult,
+   否则分隔线会被留在筛选组一侧、与计数分家。不带 lead 类的 .vr(Lightbox 复用)零 margin。 */
+.fresult{font-size:var(--fs-cap);color:var(--t3)}
 .fresult b{color:var(--t1);font-weight:600}
 .vr{width:1px;height:18px;background:var(--line2)}
+.filterbar .vr-lead{margin-left:auto}
+/* 设计基准 1920×1080 以下:筛选组 · 计数 · 视图 · 缩放排在一条 42px 的横条上,
+   窄窗里右端那组必然被挤出可视区(而且因为 overflow 隐藏,连滚过去都做不到)。
+   窄窗允许折行,按可用宽度重新排布;折行后 .vr-lead 不再用 margin-left:auto ——
+   那会把分隔线顶到上一行末尾,和它要分界的计数分家。 */
+@media (max-width:1439px){
+  .filterbar{flex-wrap:wrap;height:auto;min-height:var(--h-bar);padding-top:6px;padding-bottom:6px;row-gap:6px}
+  .filterbar .vr-lead{margin-left:0}
+  input[type=range]{width:72px}
+}
 
 /* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
 .color-menu{width:max-content;padding:6px}
-.color-menu-head{padding:2px 6px 7px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t3)}
+.color-menu-head{padding:2px 6px 7px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.04em;color:var(--t3)}
 .color-grid{display:grid;grid-template-columns:repeat(4,46px);gap:6px}
-.cs{position:relative;width:46px;height:32px;border-radius:6px;border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.cs{position:relative;width:46px;height:var(--h-md);border-radius:var(--r-sm);border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cs:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .cs em{font:600 9px/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
 .cs.on{box-shadow:0 0 0 2px var(--menu-solid),0 0 0 3.5px var(--acc)}
-.color-menu-clear{margin-top:7px;width:100%;height:26px;border-radius:6px;font-size:12px;color:var(--acc2);background:var(--acc-soft)}
+.color-menu-clear{margin-top:7px;width:100%;height:var(--h-sm);border-radius:var(--r-sm);font-size:var(--fs-body);color:var(--acc2);background:var(--acc-soft)}
 .color-menu-clear:hover{color:var(--t1)}
 
 /* ---------- 空态 ---------- */
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--t3)}
 .empty svg{animation:empty-in var(--dur-base) var(--ease-out) both}
 .empty .ic{width:34px;height:34px;opacity:.5}
-.empty .btn-clear{height:28px;padding:0 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);font-size:12px;color:var(--t2)}
+.empty .btn-clear{height:var(--h-sm);padding:0 12px;border-radius:var(--r-md);background:var(--bg2);border:1px solid var(--line);font-size:var(--fs-body);color:var(--t2)}
 .empty .btn-clear:hover{border-color:var(--acc-line);color:var(--acc2)}
 
 /* 空态入场:插画轻微浮入,避免内容凭空出现 */

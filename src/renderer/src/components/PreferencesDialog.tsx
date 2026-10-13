@@ -309,8 +309,13 @@ export function PreferencesDialog(): React.JSX.Element | null {
         <div className="pref-library">
           <div className="pref-library-badge">
             <span className="pref-library-icon"><Icon name="layers" /></span>
-            <span className="pref-current">(当前)</span>
-            <span>{activeLibrary?.name ?? '未打开资源库'}</span>
+            {/* 三行各占一行:「（当前）」是徽标的限定词,库名是对象名,两者不是一段连续文字。
+                宽度放给整块(pref-library-badge 96px),库名再单独 nowrap + ellipsis —— 
+                否则中文名一到三个字就在窄栏里折行,留下一个孤字。 */}
+            <span className="pref-current">（当前）</span>
+            <span className="pref-library-name" title={activeLibrary?.name ?? undefined}>
+              {activeLibrary?.name ?? '未打开资源库'}
+            </span>
           </div>
           <div className="pref-library-details">
             <span>资源库大小：{formatBytes(librarySize)}</span>

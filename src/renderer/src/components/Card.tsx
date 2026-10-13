@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
-import { thumbRatio } from '../data/thumb-ratio'
+import { thumbRatio, MAX_THUMB_AR } from '../data/thumb-ratio'
+import { onceInView } from '../data/viewport'
 import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
@@ -27,7 +28,7 @@ function dragPreview(count: number): HTMLDivElement {
 }
 
 export function Card({ a, view, selectionOrder }: { a: Asset; view: string; selectionOrder?: string[] }): React.JSX.Element {
-  const selected = useUI((s) => s.selectedIds.includes(a.id))
+  const selected = useUI((s) => s.selectedSet.has(a.id))
   const clickCard = useUI((s) => s.clickCard)
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
@@ -45,6 +46,18 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const [dip, setDip] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const thumbRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * 视频与三维只在卡片进过视口后才挂载：
+   * `<video>` 没有原生的懒加载，三维卡挂载即建 WebGL 上下文，两者都会在
+   * 千级素材库里凭「存在」就吃掉带宽或上下文配额。图片走原生 `loading="lazy"`。
+   */
+  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    const el = thumbRef.current
+    if (!el) return
+    return onceInView(el, () => setInView(true))
+  }, [])
   // 列表/网格悬浮自动播放偏好(设置 → 音视频);默认开启,静音默认开启
   const hoverVideo = useUI((s) => s.hoverVideo)
   const hoverSound = useUI((s) => s.hoverSound)
@@ -63,6 +76,14 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   // 1200x172 这类极端比例会让缩略图矮成一条线,统一在这里收口。
   const ratio = thumbRatio(a.width, a.height)
   const ar = view === 'grid' || a.type === 'model' || ratio == null ? undefined : ratio.toFixed(4)
+
+  // 收敛之后的容器比例最宽只到 21:9,而原始比例可能到 7:1(1200x172 的字幕/长条渲染图)。
+  // 这种素材在 cover 下会被裁掉大半宽度,4:3 的网格视图里只剩中间约 19%,主体全丢。
+  // 这里按「原始比例超出容器上界」判定,给缩略图挂 .uw 走 contain:
+  // 留白虽不美,但细长条素材本来就该整条可见。列表视图的缩略图是固定 96x58 的小图,
+  // 本身就该 cover,不参与这个判定。
+  const rawAr = a.width && a.height ? a.width / a.height : undefined
+  const ultraWide = view !== 'list' && rawAr != null && rawAr > MAX_THUMB_AR
 
   const meta =
     a.type === 'model' || a.type === 'style'
@@ -145,74 +166,89 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         e.preventDefault()
         // 右键先选中被点的素材：已在选区内则保留整组(菜单仍作用于整组)，
         // 不在选区内则替换为该张，检查器随之切换。
-        if (!useUI.getState().selectedIds.includes(a.id)) selectOnly(a.id)
+        if (!useUI.getState().selectedSet.has(a.id)) selectOnly(a.id)
         setCtxMenu({ x: e.clientX, y: e.clientY, assetId: a.id })
       }}
     >
       <div
-        className={`thumb${a.thumbClass ? ` ${a.thumbClass}` : ''}`}
+        className={`thumb${a.thumbClass ? ` ${a.thumbClass}` : ''}${ultraWide ? ' uw' : ''}`}
         style={ar ? ({ ['--ar' as string]: ar } as React.CSSProperties) : undefined}
         role="img"
+        ref={thumbRef}
         aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : '图片'}缩略图:${a.name}`}
       >
         {a.type === 'model' && a.dbId == null ? (
-          <div className="c3d-wrap">
-            <Cube3D cs="58px" />
-          </div>
+          inView ? (
+            <div className="c3d-wrap">
+              <Cube3D cs="58px" />
+            </div>
+          ) : null
         ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
-          <div className="model-card-preview">
-            <Viewer3D
-              url={a.originalUrl}
-              format={a.format as 'GLB' | 'FBX' | 'OBJ'}
-              turntable
-              wireframe={false}
-              view="auto"
-              onError={() => setModelFailed(true)}
-            />
-          </div>
+          inView ? (
+            <div className="model-card-preview">
+              <Viewer3D
+                url={a.originalUrl}
+                format={a.format as 'GLB' | 'FBX' | 'OBJ'}
+                turntable
+                wireframe={false}
+                view="auto"
+                onError={() => setModelFailed(true)}
+              />
+            </div>
+          ) : null
         ) : a.dbId != null && (a.type === 'image' || a.type === 'style') ? (
           <img
             src={a.previewUrl}
             alt={a.name}
+            loading="lazy"
+            decoding="async"
             className={imgLoaded ? 'loaded' : ''}
             onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
             draggable={false}
           />
         ) : a.dbId != null && isVideo ? (
-          <video
-            ref={videoRef}
-            /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
-            src={a.originalUrl}
-            muted={hoverSound !== true}
-            preload="auto"
-            className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
-            onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-            onTimeUpdate={(e) => {
-              const v = e.currentTarget
-              if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
-            }}
-          />
+          inView ? (
+            <video
+              ref={videoRef}
+              /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
+              src={a.originalUrl}
+              muted={hoverSound !== true}
+              /* 只预载元数据:挂载时取头部拿到首帧即可,整片留给悬浮播放与灯箱 */
+              preload="metadata"
+              className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
+              onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+              onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+              onTimeUpdate={(e) => {
+                const v = e.currentTarget
+                if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
+              }}
+            />
+          ) : null
         ) : a.previewUrl && (a.type === 'image' || a.type === 'style') ? (
           <img
             src={`/@fs/${a.previewUrl}`}
             alt={a.name}
+            loading="lazy"
+            decoding="async"
             className={imgLoaded ? 'loaded' : ''}
             onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
             draggable={false}
           />
         ) : a.previewUrl && isVideo ? (
-          <video
-            ref={videoRef}
-            src={`/@fs/${a.previewUrl}`}
-            muted={hoverSound !== true}
-            preload="auto"
-            className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
-            onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-            onTimeUpdate={(e) => {
-              const v = e.currentTarget
-              if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
-            }}
-          />
+          inView ? (
+            <video
+              ref={videoRef}
+              src={`/@fs/${a.previewUrl}`}
+              muted={hoverSound !== true}
+              preload="metadata"
+              className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
+              onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+              onTimeUpdate={(e) => {
+                const v = e.currentTarget
+                if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
+              }}
+            />
+          ) : null
         ) : null}
 
         <div className="qa">

@@ -11,14 +11,14 @@ const VIEW_ICONS: Record<string, string> = {
 
 const FORMAT_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部格式', groupEnd: true },
-  { id: 'photo', label: 'JPG / PNG / WEBP' },
-  { id: 'psd-ai', label: 'PSD / AI 源文件' },
+  { id: 'photo', label: 'JPG / PNG / WEBP', heading: '图片' },
+  { id: 'psd-ai', label: 'PSD / AI' },
   { id: 'svg-gif', label: 'SVG / GIF' },
-  { id: 'video', label: 'MP4 / MOV' },
-  { id: 'glb', label: 'GLB / glTF' },
+  { id: 'video', label: 'MP4 / MOV', heading: '视频' },
+  { id: 'glb', label: 'GLB / glTF', heading: '三维' },
   { id: 'fbx', label: 'FBX' },
   { id: 'obj', label: 'OBJ' },
-  { id: 'css', label: 'CSS' }
+  { id: 'css', label: 'CSS', heading: '代码' }
 ]
 
 const SHAPE_ITEMS: MenuItem[] = [
@@ -68,7 +68,7 @@ export function FilterBar(): React.JSX.Element {
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const assets = useUI((s) => s.assets)
-  const selectedIds = useUI((s) => s.selectedIds)
+  const selectedSet = useUI((s) => s.selectedSet)
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const swatches = useUI((s) => s.swatches)
@@ -76,7 +76,7 @@ export function FilterBar(): React.JSX.Element {
   const scanProgress = useUI((s) => s.scanProgress)
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, swatches, stripColor }))
-  const selectedStats = statsOf(assets.filter((a) => selectedIds.includes(a.id)))
+  const selectedStats = statsOf(assets.filter((a) => selectedSet.has(a.id)))
 
   const paintZoom = (el: HTMLInputElement): void => {
     const p = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100
@@ -130,6 +130,9 @@ export function FilterBar(): React.JSX.Element {
           />
         </div>
       ))}
+      {/* 计数前面补一条分隔线:它靠 margin-left:auto 顶到右侧,左侧原本没有任何分界,
+          读起来像一句悬空注释。auto 交给这条 .vr-lead,左=筛选组、右=计数·视图·缩放 各自成组。 */}
+      <span className="vr vr-lead" />
       <span className="fresult">
         {scanProgress ? `${scanProgress} · ` : ''}
         {selectedStats.count > 0 ? (

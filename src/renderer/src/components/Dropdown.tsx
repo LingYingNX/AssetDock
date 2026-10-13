@@ -12,6 +12,9 @@ export interface MenuItem {
   disabled?: boolean
   /** 分组分隔:该项之后画分隔线 */
   groupEnd?: boolean
+  /** 分组标题:渲染在每一项之前,不可点。用于把一段平铺的同类项按类目切开,
+      例如格式下拉的「图片 / 视频 / 三维」。 */
+  heading?: string
 }
 
 interface DropdownProps {
@@ -112,6 +115,7 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
         const on = it.id === value
         return (
           <div key={it.id}>
+            {it.heading ? <div className="menu-head">{it.heading}</div> : null}
             <button
               className={on ? 'on' : undefined}
               disabled={it.disabled}

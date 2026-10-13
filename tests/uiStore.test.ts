@@ -441,3 +441,324 @@ describe('restoreUiPrefs: 主题引导', () => {
     expect(setItem).not.toHaveBeenCalled()
   })
 })
+
+describe('record parsing tolerance', () => {
+  it('degrades a broken palette field to an empty array', async () => {
+    const { parsePalette } = await import('../src/renderer/src/data/safe-parse')
+
+    expect(parsePalette('[{oops')).toEqual([]) // 非法 JSON
+    expect(parsePalette('')).toEqual([]) // 空字符串
+    expect(parsePalette(null)).toEqual([]) // null
+    expect(parsePalette('{"hex":"#ffffff"}')).toEqual([]) // 合法 JSON 但非数组
+    expect(parsePalette('[{"hex":"#112233","ratio":40}]')).toEqual([{ hex: '#112233', ratio: 40 }])
+  })
+
+  it('keeps every record of a batch when one of them has a broken palette', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { rowToAsset } = await import('../src/renderer/src/store/ui')
+    const row = (id: number, palette: unknown): Record<string, unknown> => ({
+      id,
+      library_id: 7,
+      rel_path: `a${id}.jpg`,
+      fingerprint: 'fp',
+      type: 'image',
+      format: 'JPG',
+      name: `a${id}`,
+      size_bytes: 1,
+      imported_at: '2026-09-05T00:00',
+      rating: 0,
+      favorite: 0,
+      review_flag: 0,
+      tags: [],
+      palette
+    })
+
+    const batch = [row(1, '[]'), row(2, '[{broken'), row(3, '[{"hex":"#AABBCC","ratio":50}]')]
+    const assets = batch.map(rowToAsset)
+
+    // 一条坏记录不该让整批加载失败,也不该影响同批其它记录
+    expect(assets).toHaveLength(3)
+    expect(assets.map((a) => a.id)).toEqual(['a1', 'a2', 'a3'])
+    expect(assets[0].palette).toEqual([])
+    expect(assets[1].palette).toEqual([])
+    expect(assets[2].palette).toEqual([{ hex: '#AABBCC', ratio: 50 }])
+  })
+})
+
+type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (v: T) => void
+  let reject!: (e?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+const ROW = (id: number, name: string): Record<string, unknown> => ({
+  id,
+  library_id: 7,
+  rel_path: `${name}.jpg`,
+  fingerprint: 'fp',
+  type: 'image',
+  format: 'JPG',
+  name,
+  size_bytes: 1,
+  imported_at: '2026-09-05T00:00',
+  rating: 0,
+  favorite: 0,
+  review_flag: 0,
+  tags: [],
+  palette: '[]'
+})
+
+describe('library load failure visibility', () => {
+  it('reports the failure and does not keep the previous collection', async () => {
+    const toasts: { text: string; kind: string }[] = []
+    const list = vi.fn().mockRejectedValue(new Error('ipc down'))
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      windowApi: {
+        assets: { list },
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+      }
+    })
+    vi.resetModules()
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [rowToAsset(ROW(1, 'stale'))],
+      mode: 'library',
+      showToast: (text: string, kind = 'ok') => {
+        toasts.push({ text, kind })
+      }
+    })
+
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(toasts).toHaveLength(1))
+
+    expect(toasts[0].kind).toBe('warn')
+    expect(list).toHaveBeenCalledWith(7)
+    // 上次的集合没有被当成当前结果继续展示,界面进明确的失败态
+    expect(useUI.getState().assets).toEqual([])
+    expect(useUI.getState().mode).toBe('error')
+  })
+
+  it('drops a superseded request failure instead of clobbering the newer tab', async () => {
+    const toasts: { text: string; kind: string }[] = []
+    const old = deferred<{ assets: Record<string, unknown>[] }>()
+    const fresh = deferred<{ assets: Record<string, unknown>[] }>()
+    const list = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise)
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      windowApi: {
+        assets: { list },
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+      }
+    })
+    vi.resetModules()
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [],
+      mode: 'library',
+      showToast: (text: string, kind = 'ok') => {
+        toasts.push({ text, kind })
+      }
+    })
+
+    useUI.getState().reloadActiveLibrary() // 旧请求
+    useUI.getState().reloadActiveLibrary() // 新请求顶替它
+
+    old.reject(new Error('boom'))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // 旧请求的失败既不改界面也不提示 —— 它已经不属于当前界面了
+    expect(toasts).toEqual([])
+    expect(useUI.getState().mode).toBe('library')
+
+    fresh.resolve({ assets: [ROW(2, 'fresh')] })
+    await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(1))
+    expect(useUI.getState().assets[0].name).toBe('fresh')
+    expect(useUI.getState().mode).toBe('library')
+  })
+})
+
+describe('destructive operations ask first', () => {
+  const TRASHED = { ...ROW(1, 'gone'), deleted_at: '2026-10-01T00:00:00.000Z' }
+
+  const load = async (
+    answer: boolean,
+    calls: { emptyTrash: ReturnType<typeof vi.fn>; purge: ReturnType<typeof vi.fn> }
+  ): Promise<{
+    useUI: typeof import('../src/renderer/src/store/ui').useUI
+    confirm: ReturnType<typeof vi.fn>
+    toasts: { text: string; kind: string }[]
+  }> => {
+    const confirm = vi.fn().mockReturnValue(answer)
+    const toasts: { text: string; kind: string }[] = []
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      confirm,
+      windowApi: {
+        assets: {
+          emptyTrash: calls.emptyTrash,
+          purge: calls.purge,
+          list: vi.fn().mockResolvedValue({ assets: [] })
+        },
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+      }
+    })
+    vi.resetModules()
+    const mod = await import('../src/renderer/src/store/ui')
+    mod.useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [mod.rowToAsset(TRASHED)],
+      mode: 'library',
+      showToast: (text: string, kind = 'ok') => {
+        toasts.push({ text, kind })
+      }
+    })
+    return { useUI: mod.useUI, confirm, toasts }
+  }
+
+  it('sends nothing when the confirmation is dismissed', async () => {
+    const calls = { emptyTrash: vi.fn().mockResolvedValue({ ok: true }), purge: vi.fn().mockResolvedValue({ ok: true, purged: 1 }) }
+    const { useUI } = await load(false, calls)
+
+    useUI.getState().purgeAsset('a1')
+    useUI.getState().emptyTrash()
+    await Promise.resolve()
+
+    expect(calls.purge).not.toHaveBeenCalled()
+    expect(calls.emptyTrash).not.toHaveBeenCalled()
+  })
+
+  it('sends one request after confirmation, with the consequence spelled out', async () => {
+    const calls = { emptyTrash: vi.fn().mockResolvedValue({ ok: true }), purge: vi.fn().mockResolvedValue({ ok: true, purged: 1 }) }
+    const { useUI, confirm } = await load(true, calls)
+
+    useUI.getState().purgeAsset('a1')
+    await vi.waitFor(() => expect(calls.purge).toHaveBeenCalledTimes(1))
+    expect(calls.purge).toHaveBeenCalledWith(7, [1])
+
+    const purgeText = String(confirm.mock.calls[0][0])
+    expect(purgeText).toContain('1 条')
+    expect(purgeText).toContain('不删除磁盘原文件')
+
+    useUI.getState().emptyTrash()
+    await vi.waitFor(() => expect(calls.emptyTrash).toHaveBeenCalledTimes(1))
+    expect(calls.emptyTrash).toHaveBeenCalledWith(7)
+
+    const emptyText = String(confirm.mock.calls[1][0])
+    expect(emptyText).toContain('1 条')
+    expect(emptyText).toContain('不删除磁盘原文件')
+  })
+
+  it('reports a failed purge and re-reads the library', async () => {
+    const calls = { emptyTrash: vi.fn().mockResolvedValue({ ok: true }), purge: vi.fn().mockResolvedValue({ ok: false, purged: 0 }) }
+    const { useUI, toasts } = await load(true, calls)
+
+    useUI.getState().purgeAsset('a1')
+    // 失败后要报出原因并回读,界面不能停在「本地已经删掉」的假象上
+    await vi.waitFor(() => expect(toasts).toHaveLength(1))
+    expect(calls.purge).toHaveBeenCalledTimes(1)
+    expect(toasts[0].kind).toBe('warn')
+    expect(toasts[0].text).toContain('失败')
+  })
+})
+
+describe('selection membership index', () => {
+  const asset = (id: string): {
+    id: string
+    type: string
+    format: string
+    name: string
+    sizeBytes: number
+    importedAt: string
+    rating: number
+    favorite: boolean
+    tags: string[]
+    folders: string[]
+    note: string
+    palette: never[]
+  } => ({
+    id,
+    type: 'image',
+    format: 'JPG',
+    name: id,
+    sizeBytes: 1,
+    importedAt: '2026-09-05T00:00',
+    rating: 0,
+    favorite: false,
+    tags: [],
+    folders: [],
+    note: '',
+    palette: []
+  })
+
+  const load = async (ids: string[]): Promise<typeof import('../src/renderer/src/store/ui').useUI> => {
+    vi.stubGlobal('window', { windowApi: {} })
+    vi.resetModules()
+    const mod = await import('../src/renderer/src/store/ui')
+    mod.useUI.setState({ nav: 'all', assets: ids.map(asset) })
+    return mod.useUI
+  }
+
+  it('keeps the membership set in step with the ordered selection', async () => {
+    const useUI = await load(['a', 'b', 'c'])
+
+    useUI.getState().setSelectedIds(['a', 'b'])
+    expect(useUI.getState().selectedSet.has('a')).toBe(true)
+    expect(useUI.getState().selectedSet.has('c')).toBe(false)
+
+    // 替换式更新后旧成员必须立刻失效,否则卡片会停在「已选中」的样式上
+    useUI.getState().selectOnly('c')
+    expect(useUI.getState().selectedSet.has('a')).toBe(false)
+    expect(useUI.getState().selectedSet.has('c')).toBe(true)
+
+    useUI.getState().clearSelection()
+    expect(useUI.getState().selectedSet.size).toBe(0)
+  })
+
+  it('tracks every click path, including shift ranges, ctrl toggles and trashing', async () => {
+    const useUI = await load(['a', 'b', 'c'])
+    const order = ['a', 'b', 'c']
+
+    useUI.getState().clickCard('a', { order })
+    useUI.getState().clickCard('c', { order, shift: true })
+    expect([...useUI.getState().selectedSet].sort()).toEqual(['a', 'b', 'c'])
+
+    useUI.getState().clickCard('b', { order, toggle: true })
+    expect(useUI.getState().selectedSet.has('b')).toBe(false)
+
+    useUI.getState().selectAllVisible()
+    expect(useUI.getState().selectedSet.size).toBe(3)
+
+    useUI.getState().trashAsset('a')
+    expect(useUI.getState().selectedSet.has('a')).toBe(false)
+    expect(useUI.getState().selectedSet.size).toBe(2)
+    expect(useUI.getState().selectedIds).not.toContain('a')
+  })
+
+  it('holds 2000 ids so membership stays a lookup rather than a scan', async () => {
+    const ids = Array.from({ length: 2000 }, (_, i) => `a${i}`)
+    const useUI = await load(ids)
+
+    useUI.getState().selectAllVisible()
+
+    expect(useUI.getState().selectedIds).toHaveLength(2000)
+    expect(useUI.getState().selectedSet.size).toBe(2000)
+    expect(useUI.getState().selectedSet.has('a1999')).toBe(true)
+    expect(useUI.getState().selectedSet.has('absent')).toBe(false)
+  })
+})

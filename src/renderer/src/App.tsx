@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useUI, restoreUiPrefs } from './store/ui'
+import { isEditableTarget } from './data/focus-scope'
+import { createFrameBatcher, mergeAssetDelta, toAssetDelta, type AssetDelta } from './data/frame-batch'
 import { SvgDefs } from './components/Icons'
 
 // dev 下暴露 store 供无头验证脚本断言
@@ -20,13 +22,25 @@ import { ThumbProgress } from './components/ThumbProgress'
 import { Toast } from './components/Toast'
 
 export default function App(): React.JSX.Element {
-  const s = useUI()
+  /**
+   * 外壳只订阅自己真正用到的两个字段。
+   *
+   * 这里原本是 `const s = useUI()` —— 无选择器订阅整个 store，于是缩略图进度每推进
+   * 一格、选中集每次变化，整棵组件树都要重渲染一次。动作一律用 `useUI.getState()` 现取。
+   */
+  const colw = useUI((s) => s.colw)
+  const inspHidden = useUI((s) => s.inspHidden)
 
   /* 启动引导:恢复库标签/激活态,加载数据;订阅主进程事件 */
   useEffect(() => {
     const boot = async (): Promise<void> => {
+      /* 偏好恢复失败不阻断启动:回退默认偏好继续,素材库照常打开 */
       try {
         await restoreUiPrefs()
+      } catch {
+        useUI.getState().showToast('界面偏好恢复失败，已改用默认偏好', 'warn')
+      }
+      try {
         const libs = await window.windowApi.library.list()
         useUI.getState().setLibraries(libs)
         if (libs.length === 0) return
@@ -53,21 +67,41 @@ export default function App(): React.JSX.Element {
         if (active.libraryId != null) void window.windowApi.library.open(active.libraryId)
         useUI.getState().reloadActiveLibrary()
       } catch {
-        /* 引导失败保持空状态 */
+        /* 引导失败进明确的空状态并说明原因,不停在半加载的界面上 */
+        useUI.setState({
+          tabs: [],
+          activeTabId: '',
+          assets: [],
+          folderPaths: [],
+          physicalFolderPaths: [],
+          folderEditPath: null,
+          mode: 'empty'
+        })
+        useUI.getState().showToast('启动引导失败，未能读取素材库列表', 'warn')
       }
     }
     void boot()
-    // S1-7:assets:changed 优先走增量合并(带 assetIds);不带则退全量 reload
+    // S1-7:assets:changed 优先走增量合并(带 assetIds);不带则退全量 reload。
+    // 扫描期间事件是成批来的,所以按帧边界合并:同一帧内的多条并成一次重载。
+    const deltaBatch = createFrameBatcher<AssetDelta>(mergeAssetDelta, (d) => {
+      useUI.getState().applyAssetDelta(d.libraryId, d.assetIds ?? undefined)
+    })
     const un1 = window.windowApi.on('assets:changed', (p) => {
-      const d = p as { libraryId: number; assetIds?: number[] }
-      useUI.getState().applyAssetDelta(d.libraryId, d.assetIds)
+      deltaBatch.push(toAssetDelta(p as { libraryId: number; assetIds?: number[] }))
     })
     const un3 = window.windowApi.on('window:maximized', (p) => {
       document.documentElement.dataset.maximized = p === true ? 'true' : 'false'
     })
+    // 缩略图进度同理:同一帧内只保留最后一次进度快照,不逐条重渲染浮层
+    const progressBatch = createFrameBatcher<{ done: number; total: number } | null>(
+      (_pending, next) => next,
+      (d) => {
+        useUI.getState().setThumbProgress(d)
+      }
+    )
     const un4 = window.windowApi.on('thumbs:progress', (p) => {
       const d = p as { phase: string; done: number; total: number }
-      useUI.getState().setThumbProgress(d.phase === 'done' || d.total <= 0 ? null : { done: d.done, total: d.total })
+      progressBatch.push(d.phase === 'done' || d.total <= 0 ? null : { done: d.done, total: d.total })
     })
     const un2 = window.windowApi.on('library:scan', (p) => {
       const d = p as { phase: string; done: number }
@@ -79,16 +113,17 @@ export default function App(): React.JSX.Element {
       un2()
       un3()
       un4()
+      deltaBatch.cancel()
+      progressBatch.cancel()
     }
   }, [])
 
   /* 全局键盘快捷键 */
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const t = e.target as HTMLElement
-      const inField = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
       const st = useUI.getState()
 
+      /* Esc 与 Ctrl F 在任何上下文都成立:焦点在输入框里也要能关掉菜单/灯箱、跳回搜索 */
       if (e.key === 'Escape') {
         st.setOpenMenu(null)
         st.setCtxMenu(null)
@@ -97,13 +132,16 @@ export default function App(): React.JSX.Element {
         ;(document.activeElement as HTMLElement)?.blur()
         return
       }
-      if (inField) return
-
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         document.querySelector<HTMLInputElement>('.searchbox input')?.focus()
         return
       }
+
+      /* 可编辑控件与模态对话框内:方向键、Enter、Space、Del 属于输入语义,
+         不拦截也不 preventDefault,否则要么吃掉文本编辑,要么误触预览/删除 */
+      if (isEditableTarget(e.target as Element | null)) return
+
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         st.setOpenMenu('preferences')
@@ -174,8 +212,8 @@ export default function App(): React.JSX.Element {
 
   /* 列宽令牌同步 */
   useEffect(() => {
-    document.documentElement.style.setProperty('--colw', `${s.colw}px`)
-  }, [s.colw])
+    document.documentElement.style.setProperty('--colw', `${colw}px`)
+  }, [colw])
 
   return (
     <div className="app">
@@ -185,7 +223,7 @@ export default function App(): React.JSX.Element {
       {/* 折叠检查器时不要卸载它:它一旦从 DOM 消失,列宽的过渡就没有对手可动画,
           只会看到内容凭空消失、布局瞬间重排。让它留在 DOM 里,由 .layout 的
           grid-template-columns 过渡把它推到 0 宽,再由 overflow:hidden 裁掉。 */}
-      <div className={`layout${s.inspHidden ? ' insp-hidden' : ''}`}>
+      <div className={`layout${inspHidden ? ' insp-hidden' : ''}`}>
         <Sidebar />
         <main className="content">
           <FilterBar />
@@ -198,8 +236,13 @@ export default function App(): React.JSX.Element {
       </div>
       <ContextMenu />
       <PreferencesDialog />
-      <ThumbProgress />
-      <Toast />
+      {/* 两个浮层同处右下角:放进同一个纵向堆叠容器,进度在上、一次性提示贴住底边。
+          此前两者各自 position:fixed;right:18px;bottom:16px,锚点完全相同,同时出现时
+          必然互相压住;容器统一锚定后,子元素只负责自身尺寸与过渡。 */}
+      <div className="overlay-stack">
+        <ThumbProgress />
+        <Toast />
+      </div>
     </div>
   )
 }

@@ -5,58 +5,64 @@
 .insp-scroll{flex:1;overflow-y:auto;padding:14px 16px 20px}
 .insp-sec{margin-top:16px}
 .insp-sec:first-child{margin-top:0}
-.insp-h{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--t3);margin-bottom:8px}
-.insp-h .ic{width:12px;height:12px}
+/* 首块(名字+改名)是面板标题,不是又一条属性。压一条分隔线,让「这是什么素材」和
+   下面的属性/状态/标签分成两块读;否则四块之间只有同一种 16px,连读成一整段清单。 */
+.insp-id{padding-bottom:14px;border-bottom:1px solid var(--sep)}
+.insp-h{display:flex;align-items:center;gap:6px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.05em;color:var(--t3);margin-bottom:8px}
+.insp-h .ic{width:var(--ic-sm);height:var(--ic-sm)}
 .fname{display:flex;align-items:center;gap:7px}
-.fname b{font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fname input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--acc-line);border-radius:6px;outline:0;padding:3px 7px;font-size:13px;font-weight:600}
-.fname .ic{width:13px;height:13px;color:var(--t3);cursor:pointer}
+.fname b{font-size:var(--fs-sub);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fname input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--acc-line);border-radius:var(--r-sm);outline:0;padding:3px 7px;font-size:var(--fs-sub);font-weight:600}
+.fname .ic{width:var(--ic-sm);height:var(--ic-sm);color:var(--t3);cursor:pointer}
 .fname .ic:hover{color:var(--t1)}
 .rate{display:inline-flex;gap:1px}
-.rate .star{width:11px;height:11px;color:#3D4454;cursor:pointer}
-.rate .star svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.8}
+.rate .star{width:var(--ic-xs);height:var(--ic-xs);color:var(--star-off);cursor:pointer}
+.rate .star svg{width:var(--ic-xs);height:var(--ic-xs);fill:none;stroke:currentColor;stroke-width:1.8}
 .rate .star.fill{color:var(--star)}
 .rate .star.fill svg{fill:var(--star);stroke:var(--star)}
 .rate.big{gap:3px}
-.rate.big .star{width:16px;height:16px}
-.rate.big .star svg{width:16px;height:16px}
+.rate.big .star{width:var(--ic-md);height:var(--ic-md)}
+.rate.big .star svg{width:var(--ic-md);height:var(--ic-md)}
 .flagrow{display:flex;align-items:center;gap:6px}
-.flagbtn{display:flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:6px;font-size:11px;color:var(--t3);border:1px solid var(--line)}
+/* 「待审」顶到右边:评分是质量、待审是流程,分处一行两端。原先由 TSX 的 inline
+   style 承担,挪到这里 —— 视觉归属应该写在样式里。 */
+.flagrow .flagbtn{margin-left:auto}
+.flagbtn{display:flex;align-items:center;gap:5px;height:var(--h-xs);padding:0 8px;border-radius:var(--r-sm);font-size:var(--fs-cap);color:var(--t3);border:1px solid var(--line)}
 .flagbtn:hover{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.08)}
 .flagbtn.on{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.13)}
-.flagbtn .ic{width:12px;height:12px}
+.flagbtn .ic{width:var(--ic-xs);height:var(--ic-xs)}
 .tags{display:flex;flex-wrap:wrap;gap:6px}
-.tag{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:11px;font-size:11.5px;background:var(--bg3);border:1px solid var(--line);color:var(--t2)}
+.tag{display:inline-flex;align-items:center;gap:6px;height:var(--h-xs);padding:0 9px;border-radius:var(--r-pill);font-size:var(--fs-cap);background:var(--bg3);border:1px solid var(--line);color:var(--t2)}
 .tag:hover{border-color:var(--line2);color:var(--t1)}
 .tag .dot{width:7px;height:7px}
-.tag .x{width:11px;height:11px;opacity:.5;cursor:pointer}
+.tag .x{width:var(--ic-xs);height:var(--ic-xs);opacity:.5;cursor:pointer}
 .tag .x:hover{opacity:1;color:var(--t1)}
-.tagin{display:flex;align-items:center;gap:6px;margin-top:8px;height:28px;padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;color:var(--t3);font-size:12px}
+.tagin{display:flex;align-items:center;gap:6px;margin-top:8px;height:var(--h-sm);padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body)}
 .tagin:focus-within{border-color:var(--acc-line)}
-.tagin input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:12px}
-.tagin kbd{font-size:10px;padding:1px 4px}
+.tagin input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
+.tagin kbd{font-size:var(--fs-micro);padding:1px 4px}
 .sugg{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.sugg span{font-size:11px;color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:10px;cursor:pointer}
+.sugg span{font-size:var(--fs-cap);color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:var(--r-pill);cursor:pointer}
 .sugg span:hover{color:var(--acc2);border-color:var(--acc)}
 .sugg span.used{opacity:.3;pointer-events:none}
 /* 颜色构造 */
 .palette{display:flex;gap:6px}
-.palette .pal{flex:1;min-width:0;height:42px;border-radius:7px;display:flex;flex-direction:column;justify-content:flex-end;padding:4px 6px;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.palette .pal{flex:1;min-width:0;height:42px;border-radius:var(--r-sm);display:flex;flex-direction:column;justify-content:flex-end;padding:4px 6px;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .palette .pal:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .palette .pal em{font:600 10px/1.3 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
 .palette .pal span{font:9px/1.3 var(--font-mono);color:rgba(255,255,255,.78);text-shadow:0 1px 3px rgba(0,0,0,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 来源链接 */
-.linkin{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;color:var(--t3)}
+.linkin{display:flex;align-items:center;gap:6px;height:var(--h-sm);padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--t3)}
 .linkin:focus-within{border-color:var(--acc-line)}
-.linkin input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:12px}
+.linkin input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
 /* 文件信息 */
-.dl{display:grid;grid-template-columns:64px 1fr;row-gap:7px;column-gap:10px;font-size:12px}
+.dl{display:grid;grid-template-columns:64px 1fr;row-gap:7px;column-gap:10px;font-size:var(--fs-body)}
 .dl dt{color:var(--t3)}
 .dl dd{color:var(--t1)}
 .dl dd small{color:var(--t3);margin-left:5px}
 /* 备注 */
-.note{width:100%;min-height:56px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--t2);resize:none;outline:0;line-height:1.6}
+.note{width:100%;min-height:56px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;font-size:var(--fs-body);color:var(--t2);resize:none;outline:0;line-height:1.6}
 .note:focus{border-color:var(--acc-line)}
 /* 无选中占位 */
-.insp-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--t3);font-size:12px}
+.insp-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--t3);font-size:var(--fs-body)}
 .insp-empty .ic{width:30px;height:30px;opacity:.4}

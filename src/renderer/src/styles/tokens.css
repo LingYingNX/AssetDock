@@ -4,13 +4,35 @@
   --line:rgba(255,255,255,.62); --line2:rgba(255,255,255,.82);
   --t1:#101820; --t2:#3D4A5C; --t3:#64748A;
   --acc:#0A84FF; --acc2:#0A66D6; --acc-soft:rgba(10,132,255,.16); --acc-line:rgba(10,132,255,.55);
-  --star:#E8A33D; --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
+  --star:#E8A33D; --star-off:rgba(18,26,22,.26); --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
   --ok:#1FA871; --warn:#C77F1F;
   --colw:232px;
   --r-s:8px; --r-m:14px; --r-l:18px;
   /* 菜单与窗口外框使用同一圆角,保持整体一致 */
   --r-menu:5px;
   --r-window:5px;
+  /* ---- 尺度阶梯:控件级圆角/高度/图标/字号 ----
+     上面那组 --r-* 是「面板半径」(卡片、对话框、舞台),它们是尺寸语义;
+     下面这组是「控件半径」,同一层级的控件必须同档,否则并排时圆角会打架。
+     历史问题:菜单项 4/5/6px 三种、筛选按钮 9px、导航项 8px、文件夹行 2px 并存,
+     差异都不到 3px,肉眼只看出「不齐」而说不出哪里不齐。 */
+  --r-xs:4px;    /* 菜单项 / 输入框 / 小按钮 / 对话框底部按钮 */
+  --r-sm:6px;    /* chip / 分段控件 / 浮层色块 / 列表行操作按钮 */
+  --r-md:8px;    /* 导航项 / 空态按钮 */
+  --r-pill:11px; /* 标签胶囊 */
+  /* 控件高度:全部落在 4px 栅格上(原值 21/23/26/27/29/30/32/34 无栅格) */
+  --h-xs:24px;   /* 卡内浮层按钮 / 徽标 chip */
+  --h-sm:28px;   /* 输入框 / 次级按钮 */
+  --h-md:32px;   /* 主按钮 / 菜单项 / 导航项 */
+  --h-bar:42px;  /* 筛选条 / 标签页 */
+  /* 图标尺寸:同一层的图标必须同档(原 11/12/13/14/15/16/30/34 八档并存) */
+  --ic-xs:12px; --ic-sm:14px; --ic-md:16px; --ic-lg:20px; --ic-xl:30px;
+  /* 字号阶梯:正文 12.5px 是主界面基准,偏好设置此前整体用 13px,两套密度。
+     原值 9/10/10.5/11/11.5/12/12.5/13/14/15 共十档,归到五档。 */
+  --fs-micro:10.5px; --fs-cap:11px; --fs-body:12.5px; --fs-sub:13px; --fs-title:14px;
+  /* 彩虹色带唯一真源:色轮按钮与「全部颜色」色块此前各写一份,起点色不同
+     (#F1616D 对 #EF4444),并排时能看出红端偏移。 */
+  --grad-rainbow:conic-gradient(#F1616D 0 45deg,#F97316 0 90deg,#F2B33D 0 135deg,#3ECF8E 0 180deg,#2FD6A3 0 225deg,#5EE7F9 0 270deg,#E9EDF5 0 315deg,#15171B 0 360deg);
   /* 动效词汇:统一时长与缓动,新动效一律引用这些令牌 */
   --dur-hover:110ms;   /* 悬停反馈:一天几十次的高频操作,必须短于按压 */
   --dur-press:160ms;   /* 按压反馈 */
@@ -32,6 +54,10 @@
   --sheen-4:rgba(255,255,255,.25);
   --surface:rgba(219,236,255,.28);
   --hatch:rgba(18,26,22,.08);
+  /* 菜单分隔线:--hatch 是为纹理(斜纹)调的,当分隔线用时夜间只有 .09 白,
+     在 --menu-solid:#1B2430 上几乎看不见,分组就断了。单列一条比调 --hatch 安全,
+     那个令牌还有别的消费者。 */
+  --sep:rgba(18,26,22,.12);
   --ink:#101820;
   --shadow-panel:0 18px 48px rgba(20,60,120,.18);
   /* 菜单实底:不用毛玻璃,浮在素材图上也不受背景干扰 */
@@ -49,7 +75,7 @@
   --line:rgba(255,255,255,.12); --line2:rgba(255,255,255,.2);
   --t1:#E9EEF6; --t2:#B4C0D2; --t3:#7C8A9E;
   --acc:#3B9BFF; --acc2:#6FB6FF; --acc-soft:rgba(59,155,255,.2); --acc-line:rgba(59,155,255,.5);
-  --star:#E8A33D; --danger:#F0737C; --danger-soft:rgba(240,115,124,.16);
+  --star:#E8A33D; --star-off:#3D4454; --danger:#F0737C; --danger-soft:rgba(240,115,124,.16);
   --ok:#34C08A; --warn:#D99A44;
   --sheen-1:rgba(255,255,255,.09);
   --sheen-2:rgba(255,255,255,.03);
@@ -57,6 +83,7 @@
   --sheen-4:rgba(255,255,255,.05);
   --surface:rgba(22,30,42,.55);
   --hatch:rgba(255,255,255,.09);
+  --sep:rgba(255,255,255,.16);
   --ink:#E9EEF6;
   --shadow-panel:0 18px 48px rgba(0,0,0,.45);
   --menu-solid:#1B2430;
@@ -81,7 +108,8 @@ body{
   font:13px/1.5 var(--font);
   font-variant-numeric:tabular-nums;
   overflow:hidden;
-  min-width:1440px;
+  /* 窗口可以收窄到设计基准(1920×1080)以下:不再用固定最小宽度把工具栏右端顶出可视区,
+     窄窗下的布局由各层的 flex/grid 自适应。 */
   -webkit-font-smoothing:antialiased;
   user-select:none;
 }
@@ -103,8 +131,8 @@ input,textarea{font:inherit;color:inherit}
 ::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:3px solid transparent;background-clip:content-box;border-radius:8px}
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover);background-clip:content-box;border:3px solid transparent}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
-kbd{font:10.5px/1 var(--font-mono);color:var(--t3);background:var(--bg3);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:2px 5px}
+kbd{font:var(--fs-micro)/1 var(--font-mono);color:var(--t3);background:var(--bg3);border:1px solid var(--line2);border-bottom-width:2px;border-radius:var(--r-xs);padding:2px 5px}
 svg{display:block}
-.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic{width:var(--ic-md);height:var(--ic-md);stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .ic.fill{fill:currentColor;stroke:none}
 .dot{width:8px;height:8px;border-radius:50%;flex:none}

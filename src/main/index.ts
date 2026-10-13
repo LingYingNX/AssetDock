@@ -12,7 +12,10 @@ import { listLibraries, getAppState, setAppState } from './services/store'
 import { resolveWithinAnyLibrary } from './services/libResolve'
 
 const DEFAULT_WINDOW = { width: 1600, height: 950 }
-const MIN_WINDOW = { width: 1440, height: 860 }
+/* 设计基准是 1920×1080。最小尺寸必须明显小于基准,否则窄屏/分屏下窗口本身就被
+   系统挡住,用户连缩窄都做不到 —— 界面各层改为在基准以下自适应(见 tokens.css 的 body
+   与 app.css 的 .toolbar、content.css 的 .filterbar)。 */
+const MIN_WINDOW = { width: 1024, height: 640 }
 const WINDOW_STATE_KEY = 'windowBounds'
 
 /** 偏好中的关闭行为:minimize=关闭时最小化到任务栏,quit=直接退出应用 */

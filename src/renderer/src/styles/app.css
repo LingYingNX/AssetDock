@@ -1,5 +1,5 @@
 /* ============================ 骨架 ============================ */
-.app{display:grid;grid-template-rows:48px 50px 1fr;height:100vh;min-width:1440px}
+.app{display:grid;grid-template-rows:48px 50px 1fr;height:100vh;min-width:0}
 
 /* ============================ 标题栏 ============================ */
 .titlebar{display:flex;align-items:flex-end;gap:18px;height:48px;padding:0 8px 0 28px;border-bottom:0;
@@ -10,15 +10,18 @@
 .titlebar .lib-tabs button{-webkit-app-region:no-drag}
 .brand-section{display:flex;align-items:center;gap:24px;height:48px;flex:none;margin-right:30px}
 .logo{display:flex;align-items:center;gap:9px;padding-right:6px}
-.logo-mark{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#3894ff,#1672ec);border:0;display:grid;place-items:center;color:#fff;box-shadow:0 2px 6px rgba(22,114,236,.35)}
-.logo-mark .ic{width:14px;height:14px}
+.logo-mark{width:24px;height:24px;border-radius:var(--r-sm);background:linear-gradient(135deg,#3894ff,#1672ec);border:0;display:grid;place-items:center;color:#fff;box-shadow:0 2px 6px rgba(22,114,236,.35)}
+.logo-mark .ic{width:var(--ic-sm);height:var(--ic-sm)}
 /* 组件自写的 transition 会整条替换 tokens.css 里的 button{transition:opacity …},
    按压反馈就此失效。凡在 button 上声明过渡的地方,都必须把 opacity 一起列上。 */
 .settings-btn{width:44px;height:42px;margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:var(--t3);background:none;cursor:pointer;transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .settings-btn:hover,.settings-btn.on{background:var(--bg3);color:var(--t1)}
-.settings-btn .ic{width:17px;height:17px}
-.lib-tabs{display:flex;align-items:center;gap:0;align-self:flex-end;height:42px;padding:0;min-width:0;overflow:hidden}
-.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 32px;border-radius:0;font-size:15px;font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:var(--tab-bg);border:1px solid var(--line);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02);
+.settings-btn .ic{width:var(--ic-md);height:var(--ic-md)}
+/* 高度用 --h-bar 与筛选条对齐:两者是同一层的横条。
+   标签字号原为 15px,是全界面最大的一档,上层只有标题栏;收到 --fs-title 后
+   与偏好设置标题同级,不再是一个孤立的大值。 */
+.lib-tabs{display:flex;align-items:center;gap:0;align-self:flex-end;height:var(--h-bar);padding:0;min-width:0;overflow:hidden}
+.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:var(--h-bar);padding:0 32px;border-radius:0;font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:var(--tab-bg);border:1px solid var(--line);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02);
   transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .lib-tab:hover{background:var(--bg2);color:var(--t2)}
 .lib-tab.on{background:var(--bg2);border-color:var(--line);color:var(--t1);font-weight:600}
@@ -27,60 +30,70 @@
    只补过渡与打开态的颜色反馈,不动尺寸/布局,避免影响标签栏既有排布。 */
 .lib-add{transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .lib-add:hover,.lib-add.on{color:var(--acc2)}
-.tb-btn{width:32px;height:28px;border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
+.tb-btn{width:32px;height:var(--h-sm);border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}
 .win-ctrls{display:flex;margin-left:6px}
-.win-ctrls .tb-btn{width:44px;height:42px;border-radius:0;color:var(--t2)}
+.win-ctrls .tb-btn{width:44px;height:var(--h-bar);border-radius:0;color:var(--t2)}
 .win-ctrls .tb-btn:hover{background:var(--bg3);color:var(--t1)}
 .win-ctrls .close:hover{background:var(--danger-soft);color:var(--danger)}
-.tb-sep{width:1px;height:16px;background:var(--line2);margin:0 4px}
+.tb-sep{width:1px;height:var(--ic-md);background:var(--line2);margin:0 4px}
 
 /* ============================ 工具栏 ============================ */
-.toolbar{display:grid;grid-template-columns:236px minmax(0,1fr);align-items:center;border-bottom:1px solid var(--line)}
+/* 左栏与侧边栏对齐(236px),但允许在窄窗下收到 112px:两个导航箭头只需 60px,
+   固定 236px 会在窄窗里白吃掉一截搜索框宽度。 */
+.toolbar{display:grid;grid-template-columns:minmax(112px,236px) minmax(0,1fr);align-items:center;border-bottom:1px solid var(--line)}
 .nav-arrows{display:flex;gap:2px;padding-left:14px}
 .tb-main{display:flex;align-items:center;gap:8px;min-width:0;padding:0 14px 0 16px}
 .nav-arrows .tb-btn{width:28px}
 .nav-arrows .tb-btn[disabled]{opacity:.35;cursor:default}
 .nav-arrows .tb-btn[disabled]:hover{background:none;color:var(--t2)}
-.searchbox{flex:1;max-width:520px;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;color:var(--t3);transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.searchbox{flex:1;max-width:520px;height:var(--h-md);display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-md);color:var(--t3);transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .searchbox:focus-within{border-color:var(--acc-line);background:var(--bg3)}
-.searchbox input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:12.5px}
+.searchbox input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
 .searchbox input::placeholder{color:var(--t3)}
 .searchbox kbd{margin-left:auto}
 
+/* ============================ 右下角浮层堆叠 ============================ */
+/* 进度与一次性提示共用一个锚点:纵向排列,靠下的贴住底边。
+   两者原本各自 position:fixed;right:18px;bottom:16px —— 锚点一模一样,同时出现时
+   必然互相覆盖。容器统一锚定,子元素只负责自身尺寸与过渡;容器不拦截指针。 */
+.overlay-stack{
+  position:fixed;right:18px;bottom:16px;z-index:60;
+  display:flex;flex-direction:column;align-items:flex-end;gap:10px;
+  pointer-events:none;
+}
+
 /* ============================ 缩略图悬浮进度 ============================ */
-/* 右下角浮层:只在生成期间出现,完成后淡出;不占布局、不拦截指针。
+/* 只在生成期间出现,完成后淡出;不占布局、不拦截指针。
    与 Toast 同样的问题:组件在生成结束时直接 return null,卸载先于过渡,
    所以这里的 @starting-style 本来也播不出来。改成 .show 两态。 */
 .thumb-progress{
-  position:fixed;right:18px;bottom:16px;z-index:60;
-  width:236px;padding:10px 12px 12px;border-radius:8px;
+  width:236px;padding:10px 12px 12px;border-radius:var(--r-md);
   pointer-events:none;
   opacity:0;transform:translateY(6px);
   transition:opacity var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out);
 }
 .thumb-progress.show{opacity:1;transform:none}
 .thumb-progress .tp-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
-.thumb-progress .tp-label{font-size:11.5px;font-weight:600;color:var(--t1)}
-.thumb-progress .tp-count{font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums}
+.thumb-progress .tp-label{font-size:var(--fs-cap);font-weight:600;color:var(--t1)}
+.thumb-progress .tp-count{font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
 .thumb-progress .tp-track{height:4px;border-radius:2px;background:var(--bg3);overflow:hidden}
 .thumb-progress .tp-fill{height:100%;border-radius:2px;background:var(--acc);transition:width var(--dur-base) var(--ease-out)}
 
 /* ============================ 一次性操作提示 ============================ */
-/* 与缩略图进度同处右下,纵向叠放;同样不拦截指针。
+/* 与缩略图进度同处右下,由 .overlay-stack 纵向叠放;同样不拦截指针。
    这里原本写了 transition 与 @starting-style,但组件在 toast 置空时直接 return null,
    元素先被卸载,再好看的入场也永远不会播放 —— 动效写了不等于生效,得先有存活期。
    现在两态由 .show 驱动,元素的生命周期交给组件管。 */
 .app-toast{
-  position:fixed;right:18px;bottom:16px;z-index:61;
   display:inline-flex;align-items:center;gap:8px;
-  max-width:320px;padding:9px 13px;border-radius:8px;
-  font-size:12px;color:var(--t1);
+  max-width:320px;padding:9px 13px;border-radius:var(--r-md);
+  font-size:var(--fs-body);color:var(--t1);
   pointer-events:none;
   opacity:0;transform:translateY(6px);
   transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out);
 }
 .app-toast.show{opacity:1;transform:none}
-.app-toast .ic{width:14px;height:14px;flex:none;color:var(--acc2)}
+.app-toast .ic{width:var(--ic-sm);height:var(--ic-sm);flex:none;color:var(--acc2)}
 .app-toast.warn .ic{color:#B4232C}
 :root[data-theme="dark"] .app-toast.warn .ic{color:#FF9AA2}

@@ -1,8 +1,9 @@
 import { create } from 'zustand'
-import type { Asset, LibraryTab, NavKey, PaletteColor } from '../data/types'
+import type { Asset, LibraryTab, NavKey } from '../data/types'
 import { TAGS } from '../data/dataset'
 import { DEFAULT_FILTERS, queryAssets, type Filters } from '../data/query'
 import { optimisticFolderMove, rebaseFolderPath } from '../data/folder-drag'
+import { parsePalette } from '../data/safe-parse'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -183,7 +184,7 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     folders,
     note: (r.note as string) ?? '',
     sourceUrl: (r.source_url as string) ?? undefined,
-    palette: JSON.parse((r.palette as string) || '[]') as PaletteColor[],
+    palette: parsePalette(r.palette),
     previewUrl: sourceUrl,
     originalUrl,
     absPath: r.absPath as string,
@@ -193,6 +194,16 @@ function rowToAsset(r: Record<string, unknown>): Asset {
 
 function TAG_COLOR(name: string): string {
   return TAGS[name] ?? '#64748B'
+}
+
+/**
+ * 选中集在 store 里有两个表示，且必须在同一次 `set` 里一起更新：
+ * - `selectedIds` 保序，供区间运算、右键菜单与批量操作使用；
+ * - `selectedSet` 供卡片做 O(1) 成员判定 —— 卡片订阅的是「我在不在集合里」这一个布尔值，
+ *   所以选中 2000 项时，滚动不会让每张卡对选中数组做一次线性扫描。
+ */
+function withSelection(ids: string[]): { selectedIds: string[]; selectedSet: ReadonlySet<string> } {
+  return { selectedIds: ids, selectedSet: new Set(ids) }
 }
 
 interface UIState {
@@ -212,7 +223,7 @@ interface UIState {
   persistTabs: () => void
 
   /* 数据源 */
-  mode: 'empty' | 'library'
+  mode: 'empty' | 'library' | 'error'
   scanProgress: string | null
   /** 缩略图全量生成进度;null 表示没有正在进行的预热 */
   thumbProgress: { done: number; total: number } | null
@@ -283,6 +294,8 @@ interface UIState {
 
   /* 选中与焦点 */
   selectedIds: string[]
+  /** `selectedIds` 的成员索引，与它同一次 `set` 更新；卡片按它做 O(1) 命中判定 */
+  selectedSet: ReadonlySet<string>
   selectionAnchorId: string | null
   activeId: string | null
   focusedCardId: string | null
@@ -507,8 +520,11 @@ export const useUI = create<UIState>((set, get) => {
       }
       const libraryId = t.libraryId
       const request = ++reloadSeq
+      /* 已被更新的请求顶替、或用户已切到别的库:这次结果(成功或失败)都不再属于当前界面 */
+      const superseded = (): boolean =>
+        request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId
       void Promise.all([window.windowApi.assets.list(libraryId), window.windowApi.folders.list(libraryId)]).then(([r, folders]) => {
-        if (request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId) return
+        if (superseded()) return
         const data = r as {
           library?: unknown
           assets?: Record<string, unknown>[]
@@ -528,7 +544,16 @@ export const useUI = create<UIState>((set, get) => {
               mode: 'library'
             }
           })
+          return
         }
+        /* 主进程回了结构不对的响应(例如 {error}):与请求失败同待遇,不把上次的集合当当前结果 */
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
+        get().showToast('素材库加载失败，请重试', 'warn')
+      }).catch(() => {
+        /* 失败不留过期数据:清空并进失败态,界面与磁盘真实状态保持一致 */
+        if (superseded()) return
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
+        get().showToast('素材库加载失败，请重试', 'warn')
       })
     },
     folderPaths: [],
@@ -547,7 +572,11 @@ export const useUI = create<UIState>((set, get) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
       void window.windowApi.folders.list(t.libraryId).then((r) => {
-        if (!('paths' in r)) return
+        /* 失败不改目录树:留下与磁盘不符的中间态比维持原样更危险 */
+        if (!('paths' in r)) {
+          get().showToast('目录列表刷新失败，目录树保持原样', 'warn')
+          return
+        }
         set((s) => {
           const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
           return {
@@ -557,6 +586,8 @@ export const useUI = create<UIState>((set, get) => {
             nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
           }
         })
+      }).catch(() => {
+        get().showToast('目录列表刷新失败，目录树保持原样', 'warn')
       })
     },
     createFolder: () => {
@@ -718,11 +749,15 @@ export const useUI = create<UIState>((set, get) => {
       if (!a || a.dbId == null || a.libraryId == null) return
       void window.windowApi.assets.rename(a.libraryId, a.dbId, name).then((r) => {
         if ('error' in r) {
-          // 静默失败会让「重命名没反应」无从排查,这里必须报出来
+          // 静默失败会让「重命名没反应」无从排查,这里必须报出来,并把内存回读成磁盘上的真实名字
           get().showToast(r.error, 'warn')
+          void get().reloadActiveLibrary()
           return
         }
         get().showToast('已重命名')
+        void get().reloadActiveLibrary()
+      }).catch(() => {
+        get().showToast('重命名失败，界面已回读磁盘上的真实名称', 'warn')
         void get().reloadActiveLibrary()
       })
     },
@@ -743,7 +778,7 @@ export const useUI = create<UIState>((set, get) => {
       const now = new Date().toISOString()
       edit(id, { deleted_at: now }, (a) => ({ ...a, deletedAt: now, previewUrl: a.originalUrl }))
       set((s) => ({
-        selectedIds: s.selectedIds.filter((x) => x !== id),
+        ...withSelection(s.selectedIds.filter((x) => x !== id)),
         activeId: s.activeId === id ? null : s.activeId,
         lightboxId: s.lightboxId === id ? null : s.lightboxId,
         ctxMenu: null
@@ -753,15 +788,32 @@ export const useUI = create<UIState>((set, get) => {
     emptyTrash: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
-      void window.windowApi.assets.emptyTrash(t.libraryId).then(() => get().reloadActiveLibrary())
+      const count = get().assets.filter((a) => a.deletedAt).length
+      /* 破坏性操作先确认:写清后果与不做的事;取消时一个请求都不发 */
+      if (!window.confirm(`清空回收站会移除 ${count} 条素材的数据库记录与缩略图缓存,不删除磁盘原文件。确定继续吗?`)) return
+      const done = (ok: boolean): void => {
+        if (!ok) get().showToast('清空回收站失败，记录未被清除', 'warn')
+        void get().reloadActiveLibrary()
+      }
+      void window.windowApi.assets.emptyTrash(t.libraryId)
+        .then((r) => done(r?.ok === true))
+        .catch(() => done(false))
     },
     purgeAsset: (id) => {
       const a = get().assets.find((x) => x.id === id)
       if (a?.dbId == null || a.libraryId == null) return
-      void window.windowApi.assets.purge(a.libraryId, [a.dbId]).then(() => get().reloadActiveLibrary())
+      if (!window.confirm(`彻底删除「${a.name}」会移除 1 条素材的数据库记录与缩略图缓存,不删除磁盘原文件。确定继续吗?`)) return
+      const done = (ok: boolean): void => {
+        if (!ok) get().showToast('彻底删除失败，记录未被清除', 'warn')
+        void get().reloadActiveLibrary()
+      }
+      void window.windowApi.assets.purge(a.libraryId, [a.dbId])
+        .then((r) => done(r?.ok === true))
+        .catch(() => done(false))
     },
 
     selectedIds: [],
+    selectedSet: new Set<string>(),
     selectionAnchorId: null,
     activeId: null,
     focusedCardId: null,
@@ -782,19 +834,19 @@ export const useUI = create<UIState>((set, get) => {
             start >= 0 && end >= 0
               ? order.slice(Math.min(start, end), Math.max(start, end) + 1)
               : [id]
-          return { selectedIds: range, selectionAnchorId: anchor, activeId: id, focusedCardId: id }
+          return { ...withSelection(range), selectionAnchorId: anchor, activeId: id, focusedCardId: id }
         }
         if (options?.toggle) {
           const selectedIds = s.selectedIds.includes(id)
             ? s.selectedIds.filter((x) => x !== id)
             : [...s.selectedIds, id]
-          return { selectedIds, selectionAnchorId: id, activeId: id, focusedCardId: id }
+          return { ...withSelection(selectedIds), selectionAnchorId: id, activeId: id, focusedCardId: id }
         }
-        return { selectedIds: [id], selectionAnchorId: id, activeId: id, focusedCardId: id }
+        return { ...withSelection([id]), selectionAnchorId: id, activeId: id, focusedCardId: id }
       }),
     /** 单选替换（右键 / Space）：不建全量顺序表也不参与区间算法 */
     selectOnly: (id) =>
-      set({ selectedIds: [id], selectionAnchorId: id, activeId: id, focusedCardId: id }),
+      set({ ...withSelection([id]), selectionAnchorId: id, activeId: id, focusedCardId: id }),
     selectAllVisible: () =>
       set((s) => {
         const visible = queryAssets(s.assets, {
@@ -806,11 +858,12 @@ export const useUI = create<UIState>((set, get) => {
         })
         const selectedIds = visible.map((a) => a.id)
         const lastId = selectedIds[selectedIds.length - 1] ?? null
-        return { selectedIds, selectionAnchorId: lastId, activeId: lastId, focusedCardId: lastId }
+        return { ...withSelection(selectedIds), selectionAnchorId: lastId, activeId: lastId, focusedCardId: lastId }
       }),
-    setSelectedIds: (ids) => set({ selectedIds: ids, selectionAnchorId: ids[ids.length - 1] ?? null }),
+    setSelectedIds: (ids) =>
+      set({ ...withSelection(ids), selectionAnchorId: ids[ids.length - 1] ?? null }),
     setFocusedCard: (focusedCardId) => set({ focusedCardId }),
-    clearSelection: () => set({ selectedIds: [], selectionAnchorId: null }),
+    clearSelection: () => set({ ...withSelection([]), selectionAnchorId: null }),
 
     renaming: false,
     setRenaming: (renaming) => set({ renaming }),

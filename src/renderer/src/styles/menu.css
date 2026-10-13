@@ -11,16 +11,24 @@
    改 --dur-exit(140ms,快于入场)并换回 --ease-out,关闭不拖尾。 */
 .menu.closing{opacity:0;transform:translateY(-6px) scale(.98);pointer-events:none;
   transition-duration:var(--dur-exit);transition-timing-function:var(--ease-out)}
-.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--t1);text-align:left;
+/* 菜单项高度不再由 padding 撑:同一套菜单里 ctx-menu 是 31px、compact 是 27px、
+   齿轮菜单是 36px,三处并排就能看出行距不齐。统一给一个最小高度,
+   padding 只负责左右留白,纵向节奏由 --h-md 决定。 */
+.menu button{display:flex;align-items:center;gap:9px;width:100%;min-height:var(--h-md);padding:5px 9px;border-radius:var(--r-xs);font-size:var(--fs-body);color:var(--t1);text-align:left;
   transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .menu button:hover{background:var(--acc-soft);color:var(--t1)}
-.menu button .ic{width:15px;height:15px;color:var(--t2)}
+.menu button .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t2)}
 .menu button:hover .ic{color:var(--acc2)}
-.menu button .k{margin-left:auto;color:var(--t3);font-size:11px}
+.menu button .k{margin-left:auto;color:var(--t3);font-size:var(--fs-cap)}
 .menu button .sub{margin-left:auto;color:var(--t3)}
-.menu .sep{height:1px;background:var(--hatch);margin:5px 4px}
+/* 分隔线用 --sep 而不是 --hatch:后者是为斜纹纹理调的,夜间只有 .09 白,
+   在 --menu-solid:#1B2430 上几乎不可见,菜单分组直接断掉。 */
+.menu .sep{height:1px;background:var(--sep);margin:5px 4px}
+/* 分组标题:把一段平铺的同类项按类目切开(格式下拉的「图片 / 视频 / 三维」)。
+   不可点、不参与选中;左内边距与 .menu button 对齐,读起来像列首而不是缩进项。 */
+.menu .menu-head{padding:8px 9px 4px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.05em;color:var(--t3)}
 .menu .ck{width:15px;display:grid;place-items:center;color:var(--acc);flex:none}
-.menu .ck .ic{width:13px;height:13px;stroke-width:2.4}
+.menu .ck .ic{width:var(--ic-xs);height:var(--ic-xs);stroke-width:2.4}
 .menu .noicon{padding-left:34px}
 .menu button[disabled]{opacity:.45;cursor:default}
 .menu button[disabled]:hover{background:none;color:var(--t1)}
@@ -32,34 +40,41 @@
 
 /* 子菜单:相对父项定位,向右展开;垂直位置由 ContextMenu 量测后内联覆盖(top 默认值仅作兜底) */
 .menu .menu-row{position:relative}
-.menu button .sub.ic{width:11px;height:11px;margin-left:auto;color:var(--t3)}
+.menu button .sub.ic{width:var(--ic-xs);height:var(--ic-xs);margin-left:auto;color:var(--t3)}
 .menu .submenu{position:absolute;left:calc(100% + 3px);top:-5px;min-width:172px;max-height:min(320px,60vh);overflow-y:auto}
 /* 主菜单靠右时向右展开会推出窗口,翻到左侧 */
 .menu .submenu.flip-x{left:auto;right:calc(100% + 3px)}
-/* 列表被 max-height 截断时末项会切一半,需要「下面还有」的线索。
-   用伪元素做渐隐,而不是 background-image:菜单背景由 .glass-menu 的 background 简写
-   设置(深色主题那条特异性 0,3,0),长写的 background-image 会被它重置成 none。
-   渐隐层只在滚动容器可滚时才有意义,因此默认隐藏,由 JS 打上 has-more 类后显示。 */
-.menu .submenu.has-more::after{
-  content:"";position:sticky;left:0;bottom:0;display:block;height:22px;margin-top:-22px;
-  pointer-events:none;background:linear-gradient(rgba(0,0,0,0),var(--menu-solid));
+/* 列表被 max-height 截断时末项会切一半(02-ctxmenu.png 里 pro… 只露出半行,
+   看不出下面还有多少条),需要「下面还有」的线索。
+   原来用 `position:sticky;bottom:0` 的伪元素,但那在滚动容器里是失效的:
+   sticky 只在元素自然位置进入可视区后才吸附,而伪元素挂在内容流末尾 ——
+   自然位置本来就在裁切区之下的位置,于是它一直待在看不见的地方,等于没有。
+   改用 mask 做底部渐隐:mask 与滚动位置无关,只要容器还能滚就一直显示,
+   也不会被 .glass-menu 的 background 简写重置(伪元素方案当时选它正是因为怕这个)。
+   渐隐高度 22px 约等于一行高,让用户看得出「被截断」而不是「就到这里」。 */
+.menu .submenu.has-more{
+  -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent);
+  mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent);
 }
-.menu .submenu button .sub{margin-left:auto;padding-left:10px;color:var(--t3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu .submenu button .sub{margin-left:auto;padding-left:10px;color:var(--t3);font-size:var(--fs-cap);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu .submenu .dot{width:8px;height:8px}
-.menu-empty{padding:7px 9px;font-size:12px;color:var(--t3)}
-.menu-input{width:100%;height:26px;margin-top:3px;padding:0 8px;border:1px solid var(--line2);border-radius:6px;background:rgba(255,255,255,.7);font-size:12px;color:var(--t1);outline:none}
+.menu-empty{padding:7px 9px;font-size:var(--fs-body);color:var(--t3)}
+.menu-input{width:100%;height:var(--h-sm);margin-top:3px;padding:0 8px;border:1px solid var(--line2);border-radius:var(--r-sm);background:rgba(255,255,255,.7);font-size:var(--fs-body);color:var(--t1);outline:none}
 .menu-input:focus{border-color:var(--acc-line);background:#fff}
 .menu-input::placeholder{color:var(--t3)}
 .ctx-menu{min-width:210px}
 .menu.compact-menu{min-width:0;width:max-content;max-width:min(220px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu);box-shadow:0 10px 28px rgba(20,60,120,.18),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.28)}
-.menu.compact-menu button{gap:6px;padding:5px 8px;border-radius:6px;font-size:12px;white-space:nowrap}
-.menu.compact-menu button .ic{width:11px;height:11px}
+.menu.compact-menu button{gap:6px;padding:5px 8px;border-radius:var(--r-sm);font-size:var(--fs-body);white-space:nowrap}
+.menu.compact-menu button .ic{width:var(--ic-xs);height:var(--ic-xs)}
 
 /* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
 .menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu)}
-.menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:var(--r-sm);font-size:var(--fs-body);white-space:nowrap;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
-.menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:11px}
+/* pick-menu 的按钮左右内边距是 10px(比 .menu 默认的 9px 宽 1px),分组标题要跟着走,
+   否则标题比它下面每一项都左偏 1px —— 这种 1px 正是本次要收掉的漂移。 */
+.menu.pick-menu .menu-head{padding-left:10px}
+.menu.pick-menu button .sub{flex:none;margin-left:14px;color:var(--t3);font-size:var(--fs-cap)}
 .menu.pick-menu button.on{color:var(--acc2);font-weight:600;background:var(--acc-soft)}
 .menu.pick-menu button.on::before{content:"";position:absolute;left:1px;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--acc)}
 .menu.pick-menu button.on:hover{background:var(--acc-soft)}
@@ -83,18 +98,21 @@
   @starting-style{opacity:0;transform:translateY(-6px) scale(.98)}}
 .settings-menu.closing{opacity:0;transform:translateY(-6px) scale(.98);pointer-events:none;
   transition-duration:var(--dur-exit);transition-timing-function:var(--ease-out)}
-.settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:36px;margin:0 -1px;padding:0 12px;border-radius:4px;color:var(--t1);font-size:13px;cursor:pointer;transition:background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+/* 齿轮菜单与右键菜单同高:原来是 36px/13px,和主菜单的 32px/12.5px 并排能看出行距不齐。
+   图标列 20px 保留(它是固定的图标槽,不是图标尺寸本身)。 */
+.settings-menu-item{position:relative;align-self:stretch;display:flex;align-items:center;gap:5px;height:var(--h-md);margin:0 -1px;padding:0 12px;border-radius:var(--r-xs);color:var(--t1);font-size:var(--fs-body);cursor:pointer;transition:background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .settings-menu button.settings-menu-item{border:0;background:transparent;font:inherit;text-align:left}
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
 .settings-menu-parent{position:relative;display:flex;align-self:stretch}
 .settings-menu-parent>.settings-menu-item{flex:1}
 .settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-7px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in var(--dur-fast) var(--ease-spring) both}
 .settings-menu-icon{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:10px;color:var(--t2)}
-.settings-menu-icon .ic{width:16px;height:16px}
+.settings-menu-icon .ic{width:var(--ic-md);height:var(--ic-md)}
 .settings-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.settings-menu-shortcut{padding-left:8px;color:var(--t3);font-size:12px;white-space:nowrap}
-.settings-menu-arrow{width:12px!important;height:12px!important;margin-left:8px;color:var(--t3)}
-.settings-menu-divider{height:1px;background:var(--hatch);margin:5px 8px}
+.settings-menu-shortcut{padding-left:8px;color:var(--t3);font-size:var(--fs-sub);white-space:nowrap}
+.settings-menu-arrow{width:var(--ic-xs)!important;height:var(--ic-xs)!important;margin-left:8px;color:var(--t3)}
+/* 分隔线与 .menu .sep 同因:--hatch 夜间只有 .09 白,落在 --menu-solid 上看不见 */
+.settings-menu-divider{height:1px;background:var(--sep);margin:5px 8px}
 
 @keyframes settings-submenu-in{from{opacity:0;transform:translateX(6px) scale(.98)}to{opacity:1;transform:none}}
 /* 这里原来有一条 `@media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}`,

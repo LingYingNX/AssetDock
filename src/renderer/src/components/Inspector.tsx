@@ -7,7 +7,7 @@ import { Icon } from './Icons'
 export function Inspector(): React.JSX.Element {
   const assets = useUI((s) => s.assets)
   const activeId = useUI((s) => s.activeId)
-  const selectedIds = useUI((s) => s.selectedIds)
+  const firstSelectedId = useUI((s) => s.selectedIds[0] ?? null)
   const renaming = useUI((s) => s.renaming)
   const setRenaming = useUI((s) => s.setRenaming)
   const renameAsset = useUI((s) => s.renameAsset)
@@ -20,7 +20,7 @@ export function Inspector(): React.JSX.Element {
   const [tagInput, setTagInput] = useState('')
 
   /* 当前素材:激活项 > 选中第一项 */
-  const a = assets.find((x) => x.id === activeId) ?? assets.find((x) => x.id === selectedIds[0])
+  const a = assets.find((x) => x.id === activeId) ?? assets.find((x) => x.id === firstSelectedId)
 
   if (!a) {
     return (
@@ -47,7 +47,10 @@ export function Inspector(): React.JSX.Element {
           </div>
         )}
 
-        <div className="insp-sec">
+        {/* 首块承担面板标题的角色:名字 + 改名入口,下面压一条分隔线把「这是什么素材」
+            与「它的属性」分开。此前它和评分行、文件信息行只有同一种 16px 间距,
+            三块连读像一段没有层次的清单。 */}
+        <div className="insp-sec insp-id">
           <div className="fname">
             {renaming && activeId === a.id ? (
               <input
@@ -71,7 +74,11 @@ export function Inspector(): React.JSX.Element {
           </div>
         </div>
 
+        {/* 评分与待审同属「素材的工作状态」,但语义不同:评分是质量,待审是流程。
+            原来这一行没有任何标题,五颗星与右侧的「待审」并排、谁都不说明谁,
+            看起来像两个碰巧挨着的控件。补上和其它块一致的 .insp-h 标题。 */}
         <div className="insp-sec">
+          <div className="insp-h"><Icon name="star" />评分与状态</div>
           <div className="flagrow">
             <span className="rate big">
               {[1, 2, 3, 4, 5].map((v) => (
@@ -86,7 +93,6 @@ export function Inspector(): React.JSX.Element {
             </span>
             <button
               className={`flagbtn${a.reviewFlag ? ' on' : ''}`}
-              style={{ marginLeft: 'auto' }}
               onClick={() => toggleReviewFlag(a.id)}
             >
               <Icon name="flag" />待审
@@ -120,7 +126,7 @@ export function Inspector(): React.JSX.Element {
             <Icon name="plus" />
             <input
               type="text"
-              placeholder="输入标签,Enter 添加"
+              placeholder="输入标签，Enter 添加"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => {

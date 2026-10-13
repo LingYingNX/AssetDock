@@ -28,6 +28,42 @@ interface ViewerApi {
   applyProps: (turntable: boolean, wireframe: boolean, view: ViewKey) => void
 }
 
+/**
+ * 材质上可能挂贴图的槽位。
+ *
+ * glTF / FBX / OBJ 走的是不同的材质类型(MeshStandardMaterial / MeshPhysicalMaterial /
+ * MeshPhongMaterial ...),同一张贴图挂哪个槽位取决于导出器,所以这里按「槽位名」枚举而不是
+ * 按材质类分派 —— 三个示例模型与用户自备模型都能覆盖到,新增槽位只需往这张表里加名字。
+ */
+const MATERIAL_TEXTURE_SLOTS = [
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+  'emissiveMap',
+  'aoMap',
+  'alphaMap',
+  'bumpMap',
+  'displacementMap',
+  'lightMap',
+  'specularMap',
+  'envMap',
+  'clearcoatMap',
+  'clearcoatNormalMap',
+  'clearcoatRoughnessMap',
+  'sheenColorMap',
+  'sheenRoughnessMap',
+  'iridescenceMap',
+  'iridescenceThicknessMap',
+  'transmissionMap',
+  'thicknessMap',
+  'specularIntensityMap',
+  'specularColorMap',
+  'anisotropyMap',
+  'gradientMap',
+  'matcap'
+] as const
+
 /** dev 泄漏断言计数器 */
 declare global {
   interface Window {
@@ -228,6 +264,8 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
       cancelAnimationFrame(raf)
       ro.disconnect()
       controls.dispose()
+      /* 环境贴图与 PMREM 渲染目标:场景先摘掉引用再释放,别让 scene 继续持有一张已释放的贴图 */
+      scene.environment = null
       envRT.dispose()
       pmrem.dispose()
       draco.dispose()
@@ -235,7 +273,16 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
         const mesh = o as THREE.Mesh
         if (mesh.geometry) mesh.geometry.dispose()
         const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : []
-        for (const m of mats) m.dispose()
+        for (const m of mats) {
+          /* 材质句柄之外,材质还持有贴图槽位(map / normalMap / roughnessMap ...)。
+             只 dispose 材质不会带走这些贴图的显存,反复开关灯箱会一路累积。 */
+          const record = m as unknown as Record<string, unknown>
+          for (const slot of MATERIAL_TEXTURE_SLOTS) {
+            const tex = record[slot] as { isTexture?: boolean; dispose?: () => void } | null | undefined
+            if (tex && tex.isTexture === true) tex.dispose?.()
+          }
+          m.dispose()
+        }
       })
       renderer.dispose()
       renderer.forceContextLoss?.()

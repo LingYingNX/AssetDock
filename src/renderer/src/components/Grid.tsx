@@ -3,6 +3,7 @@ import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import { useUI } from '../store/ui'
 import { queryAssets } from '../data/query'
 import { FALLBACK_THUMB_AR, thumbRatio } from '../data/thumb-ratio'
+import { marqueeHits, marqueeRect, type MarqueeCandidate } from '../data/marquee'
 import type { Asset } from '../data/types'
 import { Card } from './Card'
 import { EmptyState } from './EmptyState'
@@ -52,6 +53,7 @@ export function Grid(): React.JSX.Element {
   const setSearch = useUI((s) => s.setSearch)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const emptyTrash = useUI((s) => s.emptyTrash)
+  const reloadActiveLibrary = useUI((s) => s.reloadActiveLibrary)
   const tabs = useUI((s) => s.tabs)
   const activeTabId = useUI((s) => s.activeTabId)
 
@@ -80,6 +82,25 @@ export function Grid(): React.JSX.Element {
   }, [])
 
   const canEmpty = tabs.find((t) => t.id === activeTabId)?.libraryId != null
+
+  /* 刷选中途的收尾入口。组件卸载时必须也能摘掉全局监听,否则监听会活过这个 Grid。 */
+  const dragTeardownRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => dragTeardownRef.current?.(), [])
+
+  const captureCards = (): MarqueeCandidate[] => {
+    const cards = wrapRef.current?.querySelectorAll<HTMLElement>('.card[data-asset-id]')
+    const out: MarqueeCandidate[] = []
+    if (cards) {
+      for (const card of cards) {
+        const id = card.dataset.assetId
+        if (id == null) continue
+        const r = card.getBoundingClientRect()
+        out.push({ id, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } })
+      }
+    }
+    return out
+  }
+
   const startMarquee = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     const target = event.target as HTMLElement
@@ -91,8 +112,32 @@ export function Grid(): React.JSX.Element {
     // 再把已有选区清掉——那让单击空白变成破坏性操作。
     const THRESHOLD = 4
     let armed = false
+    /* 拖动期间卡片不会重排,所以矩形只采一次;快照在结束时释放 */
+    let snapshot: MarqueeCandidate[] | null = null
 
-    const move = (moveEvent: MouseEvent) => {
+    /**
+     * 唯一的结束路径:摘掉全部全局监听、释放快照、清选框。
+     * 鼠标在窗口外松手、拖动被系统取消、组件卸载都从这一处收尾。
+     */
+    const end = (clearBox: boolean): void => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('blur', onCancel)
+      window.removeEventListener('pointercancel', onCancel)
+      snapshot = null
+      dragTeardownRef.current = null
+      if (clearBox) setMarquee(null)
+    }
+    const onUp = (): void => end(true)
+    const onCancel = (): void => end(true)
+
+    const move = (moveEvent: MouseEvent): void => {
+      // 在窗口外松手时浏览器不会补发 mouseup:按键已经抬起就当作结束,
+      // 否则回到窗口内继续移动鼠标会拖着上一次的选框。
+      if (moveEvent.buttons === 0) {
+        end(true)
+        return
+      }
       const dx = moveEvent.clientX - startX
       const dy = moveEvent.clientY - startY
       if (!armed) {
@@ -100,37 +145,37 @@ export function Grid(): React.JSX.Element {
         armed = true
         event.preventDefault()
         clearSelection()
+        snapshot = captureCards()
       }
-      const left = Math.min(startX, moveEvent.clientX)
-      const top = Math.min(startY, moveEvent.clientY)
-      const width = Math.abs(dx)
-      const height = Math.abs(dy)
-      setMarquee({ left, top, width, height })
-      const cards = wrapRef.current?.querySelectorAll<HTMLElement>('.card[data-asset-id]')
-      if (!cards) return
-      const selected = Array.from(cards)
-        .filter((card) => {
-          const r = card.getBoundingClientRect()
-          return r.left < left + width && r.right > left && r.top < top + height && r.bottom > top
-        })
-        .map((card) => card.dataset.assetId)
-        .filter((id): id is string => id != null)
-      setSelectedIds(selected)
+      const box = marqueeRect(startX, startY, moveEvent.clientX, moveEvent.clientY)
+      setMarquee({
+        left: box.left,
+        top: box.top,
+        width: box.right - box.left,
+        height: box.bottom - box.top
+      })
+      setSelectedIds(marqueeHits(box, snapshot ?? []))
     }
 
-    const finish = () => {
-      window.removeEventListener('mousemove', move)
-      setMarquee(null)
-    }
-
+    dragTeardownRef.current = () => end(false)
     window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', finish, { once: true })
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('blur', onCancel)
+    window.addEventListener('pointercancel', onCancel)
   }
   const trashHeader = nav === 'trash' ? <TrashHeader canEmpty={canEmpty} onEmpty={emptyTrash} /> : null
   const wrapProps = { onMouseDown: startMarquee }
   const marqueeOverlay = marquee ? <div className="marquee" style={marquee} /> : null
 
   if (list.length === 0) {
+    /* 加载失败是独立状态:不能借用「这个视图下没有素材」,那句话等于说库是空的 */
+    if (mode === 'error') {
+      return (
+        <div className="gridwrap" ref={wrapRef}>
+          <EmptyState kind="library" title="素材库加载失败" actionLabel="重新加载" onAction={reloadActiveLibrary} />
+        </div>
+      )
+    }
     const kind = nav === 'trash' || mode === 'library' ? (nav === 'trash' ? 'trash' : 'library') : 'results'
     const title =
       kind === 'trash'
