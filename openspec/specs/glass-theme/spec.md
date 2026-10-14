@@ -82,13 +82,12 @@ liquid-lens 位移滤镜(feTurbulence + feGaussianBlur + feDisplacementMap,参�
 - **WHEN** 在夜间主题下打开含分组分隔线的下拉菜单
 - **THEN** 分隔线与菜单底色可辨,分组边界清晰,不出现「分组消失」
 
-### Requirement: 共享视觉常量唯一真源
+### Requirement: 彩虹色带与星色令牌唯一真源
+彩虹色带 SHALL 只有一处定义(令牌 `--grad-rainbow`,`conic-gradient` 起点 `#F1616D`),色轮按钮 SHALL 引用该令牌,SHALL NOT 就地另写一份渐变。未选中星色 SHALL 使用令牌 `--star-off`(浅色 `rgba(18,26,22,.26)`,夜间 `#3D4454`),SHALL NOT 就地硬编码。
 
-彩虹色带 SHALL 只有一处定义(令牌 `--grad-rainbow`,`conic-gradient` 起点 `#F1616D`),色轮按钮与「全部颜色」色块 SHALL 引用同一令牌,SHALL NOT 各写一份各自的渐变。未选中星色 SHALL 使用令牌 `--star-off`(浅色 `rgba(18,26,22,.26)`,夜间 `#3D4454`),SHALL NOT 就地硬编码。
-
-#### Scenario: 两处彩虹色带起点一致
-- **WHEN** 并排观察筛选条色轮按钮与「全部颜色」色块
-- **THEN** 两者的红端起点相同,不存在起始色偏移
+#### Scenario: 彩虹色带单点定义
+- **WHEN** 全仓检索 `conic-gradient` 的彩虹起点 `#F1616D`
+- **THEN** 只有 `--grad-rainbow` 一处定义,色轮按钮引用该令牌
 
 #### Scenario: 未选中星不比选中星更重
 - **WHEN** 在浅色主题下观察检查器星级控件
