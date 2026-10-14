@@ -14,7 +14,7 @@ import { resolveWithinAnyLibrary } from './services/libResolve'
 const DEFAULT_WINDOW = { width: 1600, height: 950 }
 /* 设计基准是 1920×1080。最小尺寸必须明显小于基准,否则窄屏/分屏下窗口本身就被
    系统挡住,用户连缩窄都做不到 —— 界面各层改为在基准以下自适应(见 tokens.css 的 body
-   与 app.css 的 .toolbar、content.css 的 .filterbar)。 */
+   与 content.css 的 .filterbar)。 */
 const MIN_WINDOW = { width: 1024, height: 640 }
 const WINDOW_STATE_KEY = 'windowBounds'
 
@@ -158,7 +158,9 @@ function createWindow(): void {
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
   win.webContents.on('did-finish-load', sendMaximized)
-  // 关闭行为:偏好为「最小化」时拦截关闭改为隐藏(任务栏仍可唤回);真正退出走 app.quit 标记
+  // 关闭行为:偏好为「最小化」时拦截关闭改为 hide()。注意 hide() 不是最小化:
+  // 没有托盘图标、任务栏按钮也会消失,唯一唤回路径是再次启动本程序(见 second-instance)。
+  // 真正退出走 app.quit 标记。
   let quitting = false
   app.on('before-quit', () => { quitting = true })
   win.on('close', (event) => {
@@ -193,6 +195,10 @@ if (!app.requestSingleInstanceLock()) {
     const w = BrowserWindow.getAllWindows()[0]
     if (!w) return
     if (w.isMinimized()) w.restore()
+    // 关闭行为为「最小化」时窗口走的是 hide():没有托盘图标,任务栏也没有按钮,
+    // 只 restore+focus 不会让隐藏窗口重新出现;而第二实例又被单实例锁挡在门外,
+    // 现象就是「双击启动.bat 毫无反应、任务管理器里挂着一堆 electron」。
+    w.show()
     w.focus()
   })
 
