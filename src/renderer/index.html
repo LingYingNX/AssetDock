@@ -11,19 +11,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' media: data: blob:; media-src media: blob:; font-src 'self' media: data:; connect-src 'self' media: ws: http://localhost:*"
     />
     <title>MediaHub · 素材管理器</title>
-    <script>
-      /* 首帧主题:必须在模块脚本之前同步执行,否则首帧按浅色令牌绘制,
-         夜间用户会看到一次白闪。镜像键与取值同 src/renderer/src/data/theme.ts 的
-         THEME_MIRROR_KEY(内联脚本先于模块执行,import 不到它);
-         权威记录是 preferences,启动后由 restoreUiPrefs() 校正并回写镜像。 */
-      try {
-        if (localStorage.getItem('mediahub.theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark')
-        }
-      } catch (e) {
-        /* 存储不可用时按浅色启动 */
-      }
-    </script>
+    <script src="./theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

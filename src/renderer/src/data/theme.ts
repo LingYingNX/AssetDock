@@ -4,7 +4,8 @@
  * 记录分两处:
  * - `preferences` 键(主进程 app_state)是权威记录,与其它偏好同一份;
  * - localStorage 的 `mediahub.theme` 是首帧镜像——启动时渲染层还没走到
- *   `restoreUiPrefs()`,只有内联脚本能同步读到它(见 index.html)。
+ *   `restoreUiPrefs()`,只有同步经典脚本能先读到它(见 index.html 引用的
+ *   `public/theme-boot.js`;不能写成内联块,因为 CSP 的 script-src 是 'self')。
  * 权威与镜像不一致时以权威为准,启动引导会把镜像校正回来。
  */
 
@@ -13,8 +14,8 @@ export type ThemeMode = 'light' | 'dark'
 export const THEME_STORAGE_KEY = 'preferences'
 
 /**
- * 首帧镜像键。`src/renderer/index.html` 的 <head> 内联脚本按同样的字面量读取
- * (内联脚本先于模块执行,无法 import 本文件),改这里必须同步改那里。
+ * 首帧镜像键。`src/renderer/public/theme-boot.js` 按同样的字面量读取
+ * (该脚本先于模块执行,无法 import 本文件),改这里必须同步改那里。
  */
 export const THEME_MIRROR_KEY = 'mediahub.theme'
 
