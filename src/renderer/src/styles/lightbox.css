@@ -25,7 +25,7 @@
 .pv-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:0 16px 10px;min-height:0}
 .pv-stage{display:flex;flex-direction:column;min-width:0;min-height:0}
 .pv-frame{flex:1;min-height:0;display:grid;place-items:center;overflow:hidden}
-.pv-frame img,.pv-frame video{max-width:100%;max-height:100%;border-radius:12px;box-shadow:0 24px 70px rgba(20,60,120,.25)}
+.pv-frame img,.pv-frame video{max-width:100%;max-height:100%;border-radius:var(--r-m);box-shadow:0 24px 70px rgba(20,60,120,.25)}
 
 /* 3D 舞台 */
 .pv3d{position:relative;width:min(100%,calc((100vh - 210px)*16/9));aspect-ratio:16/9;border-radius:var(--r-l);overflow:hidden;box-shadow:0 24px 70px rgba(20,60,120,.22),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 1px rgba(255,255,255,.3);
@@ -46,7 +46,7 @@
    1) width:max-content 让宽度由内容决定,不再受 left 偏移截断;
    2) 子项 flex:none + white-space:nowrap,即使真的放不下也只整体溢出,不拆字。
    max-width 兜底:窗口很窄时允许工具条横向滚动,而不是把按钮压扁。 */
-.v3-bar{position:absolute;left:50%;bottom:12px;z-index:2;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:5px 7px;width:max-content;max-width:calc(100% - 28px);overflow-x:auto;scrollbar-width:none;background:linear-gradient(115deg,rgba(255,255,255,.6),rgba(255,255,255,.2) 45%,rgba(255,255,255,.45)),rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.95);border-radius:12px;backdrop-filter:blur(16px) saturate(1.75);box-shadow:0 10px 28px rgba(20,60,120,.2),inset 0 1px 1px rgba(255,255,255,1)}
+.v3-bar{position:absolute;left:50%;bottom:12px;z-index:2;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:5px 7px;width:max-content;max-width:calc(100% - 28px);overflow-x:auto;scrollbar-width:none;background:linear-gradient(115deg,rgba(255,255,255,.6),rgba(255,255,255,.2) 45%,rgba(255,255,255,.45)),rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.95);border-radius:var(--r-s);backdrop-filter:blur(16px) saturate(1.75);box-shadow:0 10px 28px rgba(20,60,120,.2),inset 0 1px 1px rgba(255,255,255,1)}
 .v3-bar::-webkit-scrollbar{height:0}
 .v3-bar .zoomer{flex:none;white-space:nowrap}
 .v3-chip{flex:none;height:var(--h-xs);padding:0 9px;border-radius:var(--r-sm);font-size:var(--fs-cap);color:var(--t2);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
@@ -98,7 +98,7 @@
    注意 transform 里已有 translateX(-50%) 做水平居中,起始态必须把它一起写全,
    否则会把面板先甩到右边再弹回来。 */
 .pv-pop{position:absolute;bottom:calc(100% + 8px);left:50%;z-index:3;
-  display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;background:var(--menu-solid);
+  display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:var(--r-s);background:var(--menu-solid);
   border:1px solid var(--line2);box-shadow:var(--shadow-panel);
   opacity:0;transform:translateX(-50%) translateY(4px);
   transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
@@ -134,7 +134,7 @@
 
 /* 3D 加载指示浮层 */
 .pv-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;padding:6px 14px;
-  border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.95);
+  border-radius:var(--r-s);background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.95);
   font-size:var(--fs-body);font-weight:600;color:#0A4E9E;box-shadow:0 6px 18px rgba(20,60,120,.18)}
 :root[data-theme="dark"] .pv-loading{background:rgba(24,32,44,.8);border-color:var(--line);color:var(--t1)}
 

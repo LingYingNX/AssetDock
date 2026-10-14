@@ -1,7 +1,19 @@
+import type { CSSProperties } from 'react'
 import { useUI } from '../store/ui'
 import { queryAssets, statsOf } from '../data/query'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
+
+/* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
+   纵向压到 ±0.4——筛选条只有 42px 高,照抄 35px 的幅度会飞出条外。 */
+const NEBULA_PARTICLES = [
+  { x: '0.2', y: '-0.25' },
+  { x: '0.45', y: '0.15' },
+  { x: '0.7', y: '-0.4' },
+  { x: '0.9', y: '0.3' },
+  { x: '1', y: '-0.1' },
+  { x: '0.35', y: '0.4' }
+]
 
 const VIEW_ICONS: Record<string, string> = {
   waterfall: 'waterfall',
@@ -71,6 +83,7 @@ export function FilterBar(): React.JSX.Element {
   const selectedSet = useUI((s) => s.selectedSet)
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
+  const setSearch = useUI((s) => s.setSearch)
   const swatches = useUI((s) => s.swatches)
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
@@ -93,6 +106,30 @@ export function FilterBar(): React.JSX.Element {
 
   return (
     <div className="filterbar glass-filterbar">
+      {/* 搜索框(原在已删除的工具栏里):外观照搬用户给的「星云输入框」——深色底 + 细边框 +
+          聚焦紫色辉光 + 粒子,变量与关键帧见 content.css 的 .searchbox。
+          按容器改了三处:去掉原设计的 width/margin 居中(位置由筛选条决定)、15px 内边距收成
+          34px 高(42px 的条里放不下 47px 的框)、放大镜与 Ctrl F 键帽按设计删掉。
+          用户验收后又收三点:描边收细、辉光收一层、标签上浮取消;最后连占位文案也去掉,
+          框里不放任何可见文字,用途交给 Ctrl F 快捷键与 aria-label。
+          受控输入框:空结果态的「清空搜索」、Esc、切换库标签都会改写关键词,
+          输入框必须跟着走,不能停在已经失效的旧文本上。 */}
+      <label className="searchbox">
+        <input
+          className="input"
+          type="text"
+          value={search}
+          aria-label="搜索名称、标签、备注、扩展名"
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {NEBULA_PARTICLES.map((p) => (
+          <span
+            key={`${p.x}-${p.y}`}
+            className="nebula-particle"
+            style={{ '--x': p.x, '--y': p.y } as CSSProperties}
+          />
+        ))}
+      </label>
       <button
         className={`cbtn${cbarOpen ? ' on' : ''}`}
         id="colorBtn"

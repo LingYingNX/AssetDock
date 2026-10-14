@@ -7,24 +7,26 @@
   --star:#E8A33D; --star-off:rgba(18,26,22,.26); --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
   --ok:#1FA871; --warn:#C77F1F;
   --colw:232px;
-  --r-s:8px; --r-m:14px; --r-l:18px;
-  /* 菜单与窗口外框使用同一圆角,保持整体一致 */
+  /* 圆角:全界面统一 5px(面板、菜单、控件同一档)。窗口外框 --r-window 是「软件边框」,
+     按用户要求不参与这次统一,单独保留原值。 */
+  --r-s:5px; --r-m:5px; --r-l:5px;
   --r-menu:5px;
   --r-window:5px;
   /* ---- 尺度阶梯:控件级圆角/高度/图标/字号 ----
-     上面那组 --r-* 是「面板半径」(卡片、对话框、舞台),它们是尺寸语义;
-     下面这组是「控件半径」,同一层级的控件必须同档,否则并排时圆角会打架。
+     四个控件半径现在同值 5px:名字保留下来是为了不打断各处的语义引用,
+     将来若要重新分档,改这里一处即可。
      历史问题:菜单项 4/5/6px 三种、筛选按钮 9px、导航项 8px、文件夹行 2px 并存,
      差异都不到 3px,肉眼只看出「不齐」而说不出哪里不齐。 */
-  --r-xs:4px;    /* 菜单项 / 输入框 / 小按钮 / 对话框底部按钮 */
-  --r-sm:6px;    /* chip / 分段控件 / 浮层色块 / 列表行操作按钮 */
-  --r-md:8px;    /* 导航项 / 空态按钮 */
-  --r-pill:11px; /* 标签胶囊 */
+  --r-xs:5px;    /* 菜单项 / 输入框 / 小按钮 / 对话框底部按钮 */
+  --r-sm:5px;    /* chip / 分段控件 / 浮层色块 / 列表行操作按钮 */
+  --r-md:5px;    /* 导航项 / 空态按钮 */
+  --r-pill:5px;  /* 标签胶囊 */
   /* 控件高度:全部落在 4px 栅格上(原值 21/23/26/27/29/30/32/34 无栅格) */
   --h-xs:24px;   /* 卡内浮层按钮 / 徽标 chip */
   --h-sm:28px;   /* 输入框 / 次级按钮 */
   --h-md:32px;   /* 主按钮 / 菜单项 / 导航项 */
   --h-bar:42px;  /* 筛选条 / 标签页 */
+  --h-title:40px;/* 标题栏:窗口控制按钮与库按钮贴满这一层 */
   /* 图标尺寸:同一层的图标必须同档(原 11/12/13/14/15/16/30/34 八档并存) */
   --ic-xs:12px; --ic-sm:14px; --ic-md:16px; --ic-lg:20px; --ic-xl:30px;
   /* 字号阶梯:正文 12.5px 是主界面基准,偏好设置此前整体用 13px,两套密度。
@@ -128,9 +130,9 @@ button:active:not([disabled]){opacity:.82}
 button{transition:opacity var(--dur-press) var(--ease-out)}
 input,textarea{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:3px solid transparent;background-clip:content-box;border-radius:8px}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:3px solid transparent;background-clip:content-box;border-radius:var(--r-xs)}
 ::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover);background-clip:content-box;border:3px solid transparent}
-:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:var(--r-xs)}
 kbd{font:var(--fs-micro)/1 var(--font-mono);color:var(--t3);background:var(--bg3);border:1px solid var(--line2);border-bottom-width:2px;border-radius:var(--r-xs);padding:2px 5px}
 svg{display:block}
 .ic{width:var(--ic-md);height:var(--ic-md);stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}

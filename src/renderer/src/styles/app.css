@@ -1,57 +1,48 @@
 /* ============================ 骨架 ============================ */
-.app{display:grid;grid-template-rows:48px 50px 1fr;height:100vh;min-width:0}
+/* 两行:标题栏 + 其余。原来第二行是 50px 的工具栏,它已整行删除——左列只剩两个导航箭头,
+   搜索框又搬进了筛选条,那一行两半都是空的。 */
+.app{display:grid;grid-template-rows:var(--h-title) 1fr;height:100vh;min-width:0}
 
 /* ============================ 标题栏 ============================ */
-.titlebar{display:flex;align-items:flex-end;gap:18px;height:48px;padding:0 8px 0 28px;border-bottom:0;
+/* 右内边距必须为 0:窗口控制按钮要贴住窗口右边缘(Windows 原生即如此),
+   留 8px 会在关窗按钮右侧露出背景条。左侧 28px 是齿轮区留白,保留。
+   高度统一走 --h-title:齿轮、挂在上面的库按钮、窗口控制按钮三者都贴满这一层,
+   写在别处的 48px 都会让它们各自算出一套高度。 */
+.titlebar{display:flex;align-items:center;gap:18px;height:var(--h-title);padding:0 0 0 28px;border-bottom:0;
   background:linear-gradient(180deg,var(--tb-1),var(--tb-2));box-shadow:0 4px 16px rgba(0,50,100,.08);
   -webkit-app-region:drag}
 .titlebar button{-webkit-app-region:no-drag}
 .titlebar .lib-tabs{-webkit-app-region:drag}
 .titlebar .lib-tabs button{-webkit-app-region:no-drag}
-.brand-section{display:flex;align-items:center;gap:24px;height:48px;flex:none;margin-right:30px}
-.logo{display:flex;align-items:center;gap:9px;padding-right:6px}
-.logo-mark{width:24px;height:24px;border-radius:var(--r-sm);background:linear-gradient(135deg,#3894ff,#1672ec);border:0;display:grid;place-items:center;color:#fff;box-shadow:0 2px 6px rgba(22,114,236,.35)}
-.logo-mark .ic{width:var(--ic-sm);height:var(--ic-sm)}
+/* 品牌区只剩齿轮一个控件;高度与窗口控制按钮一致,悬停底色贴满标题栏上下边缘。 */
+.brand-section{display:flex;align-items:center;height:var(--h-title);flex:none;margin-right:30px}
 /* 组件自写的 transition 会整条替换 tokens.css 里的 button{transition:opacity …},
    按压反馈就此失效。凡在 button 上声明过渡的地方,都必须把 opacity 一起列上。 */
-.settings-btn{width:44px;height:42px;margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:var(--t3);background:none;cursor:pointer;transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.settings-btn{width:44px;height:var(--h-title);margin:0 -12px;padding:0;border:0;border-radius:0;display:grid;place-items:center;color:var(--t3);background:none;cursor:pointer;transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .settings-btn:hover,.settings-btn.on{background:var(--bg3);color:var(--t1)}
 .settings-btn .ic{width:var(--ic-md);height:var(--ic-md)}
-/* 高度用 --h-bar 与筛选条对齐:两者是同一层的横条。
+/* 素材库切换是一列贴满标题栏高度的方块按钮,不是浏览器标签页:标签页那套形状(方角 +
+   只留上边框 + 贴住下边缘)是从网页搬来的,而窗口控制按钮、工具栏控件都是圆角小控件,
+   并排就是两套语言。
+   形状按需求定:上下不留白(height:100% 贴合标题栏的上下边缘,与窗口控制按钮同高),
+   圆角走全局统一的 5px(--r-xs 已与其它半径同值,不再有胶囊档 11px 那一套)。
    标签字号原为 15px,是全界面最大的一档,上层只有标题栏;收到 --fs-title 后
    与偏好设置标题同级,不再是一个孤立的大值。 */
-.lib-tabs{display:flex;align-items:center;gap:0;align-self:flex-end;height:var(--h-bar);padding:0;min-width:0;overflow:hidden}
-.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:var(--h-bar);padding:0 32px;border-radius:0;font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:var(--tab-bg);border:1px solid var(--line);border-bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.02);
+.lib-tabs{display:flex;align-items:center;gap:6px;align-self:stretch;height:100%;padding:0;min-width:0;overflow:hidden}
+.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:100%;padding:0 14px;border-radius:var(--r-xs);font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:transparent;border:1px solid transparent;
   transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
-.lib-tab:hover{background:var(--bg2);color:var(--t2)}
-.lib-tab.on{background:var(--bg2);border-color:var(--line);color:var(--t1);font-weight:600}
+.lib-tab:hover{background:var(--bg3);color:var(--t1)}
+.lib-tab.on{background:var(--bg3);border-color:var(--line);color:var(--t1);font-weight:600}
 .tb-spacer{flex:1}
-/* 「新建素材库」触发按钮:此前完全没有规则,颜色跳变也没有过渡。
-   只补过渡与打开态的颜色反馈,不动尺寸/布局,避免影响标签栏既有排布。 */
-.lib-add{transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
-.lib-add:hover,.lib-add.on{color:var(--acc2)}
 .tb-btn{width:32px;height:var(--h-sm);border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}
 .win-ctrls{display:flex;margin-left:6px}
-.win-ctrls .tb-btn{width:44px;height:var(--h-bar);border-radius:0;color:var(--t2)}
+/* 高度 = 标题栏高度(--h-title),不是 --h-bar(42px,那是筛选条/标签页的高度):
+   两者不再相等,用错就会在窗口上下边缘露出空隙。 */
+.win-ctrls .tb-btn{width:44px;height:var(--h-title);border-radius:0;color:var(--t2)}
 .win-ctrls .tb-btn:hover{background:var(--bg3);color:var(--t1)}
 .win-ctrls .close:hover{background:var(--danger-soft);color:var(--danger)}
 .tb-sep{width:1px;height:var(--ic-md);background:var(--line2);margin:0 4px}
-
-/* ============================ 工具栏 ============================ */
-/* 左栏与侧边栏对齐(236px),但允许在窄窗下收到 112px:两个导航箭头只需 60px,
-   固定 236px 会在窄窗里白吃掉一截搜索框宽度。 */
-.toolbar{display:grid;grid-template-columns:minmax(112px,236px) minmax(0,1fr);align-items:center;border-bottom:1px solid var(--line)}
-.nav-arrows{display:flex;gap:2px;padding-left:14px}
-.tb-main{display:flex;align-items:center;gap:8px;min-width:0;padding:0 14px 0 16px}
-.nav-arrows .tb-btn{width:28px}
-.nav-arrows .tb-btn[disabled]{opacity:.35;cursor:default}
-.nav-arrows .tb-btn[disabled]:hover{background:none;color:var(--t2)}
-.searchbox{flex:1;max-width:520px;height:var(--h-md);display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-md);color:var(--t3);transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
-.searchbox:focus-within{border-color:var(--acc-line);background:var(--bg3)}
-.searchbox input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
-.searchbox input::placeholder{color:var(--t3)}
-.searchbox kbd{margin-left:auto}
 
 /* ============================ 右下角浮层堆叠 ============================ */
 /* 进度与一次性提示共用一个锚点:纵向排列,靠下的贴住底边。

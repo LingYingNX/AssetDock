@@ -1,5 +1,4 @@
 import { useUI } from '../store/ui'
-import { Dropdown } from './Dropdown'
 import { Icon } from './Icons'
 import { SettingsMenu } from './SettingsMenu'
 
@@ -7,8 +6,6 @@ export function Titlebar(): React.JSX.Element {
   const tabs = useUI((s) => s.tabs)
   const activeTabId = useUI((s) => s.activeTabId)
   const openTab = useUI((s) => s.openTab)
-  const closeTab = useUI((s) => s.closeTab)
-  const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
 
@@ -24,10 +21,10 @@ export function Titlebar(): React.JSX.Element {
       className="titlebar glass-titlebar"
       style={dragStyle}
     >
+      {/* 品牌区只剩齿轮:logo 方块已删除(它是个没有文字的孤立色块,和下面的窗口控制、
+          库按钮都不同尺寸,只贡献噪音)。齿轮是「创建资源库 / 资源库管理 / 偏好设置」
+          的唯一入口,必须留着。 */}
       <div className="brand-section">
-        <div className="logo">
-          <span className="logo-mark"><Icon name="layers" /></span>
-        </div>
         <button
           className={`settings-btn${openMenu === 'settings' ? ' on' : ''}`}
           data-menu="settings"
@@ -40,6 +37,10 @@ export function Titlebar(): React.JSX.Element {
         </button>
       </div>
       <SettingsMenu />
+      {/* 素材库切换:每个库一颗胶囊(样式见 app.css 的 .lib-tab)。
+          这里既不挂「关闭」也不挂「新建」——它们在标题栏里就是浏览器标签页的样子,
+          且一颗胶囊才 32px 高,塞进第二个图标后命中区会挤成一团。
+          库的新建/关闭改由齿轮菜单承载:创建资源库 / 资源库管理 › 关闭当前素材库。 */}
       <nav
         className="lib-tabs"
         style={dragStyle}
@@ -58,40 +59,9 @@ export function Titlebar(): React.JSX.Element {
             >
               <Icon name="drive" />
               {t.name}
-              <span
-                className="ic x"
-                role="button"
-                title="关闭"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setOpenMenu(null)
-                  closeTab(t.id)
-                }}
-              >
-                  <svg className="ic"><use href="#i-x" /></svg>
-                </span>
             </button>
           )
         })}
-        <button
-          className={`lib-add${openMenu === 'm-libs' ? ' on' : ''}`}
-          data-menu="m-libs"
-          title="新建素材库"
-          aria-haspopup="menu"
-          aria-expanded={openMenu === 'm-libs'}
-          onClick={() => setOpenMenu(openMenu === 'm-libs' ? null : 'm-libs')}
-        >
-          <Icon name="plus" />
-        </button>
-        <Dropdown
-          compact
-          id="m-libs"
-          items={[{ id: 'new', label: '新建素材库' }]}
-          value=""
-          onPick={(id) => {
-            if (id === 'new') createLibraryFlow()
-          }}
-        />
       </nav>
       <div
         className="tb-spacer"

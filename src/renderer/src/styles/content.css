@@ -10,6 +10,31 @@
 
 /* ---------- 筛选条 ---------- */
 .filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line)}
+/* 搜索框(原在已删除的工具栏里):与筛选下拉同处一条 42px 的筛选条,是筛选的第一入口。
+   外观照搬用户给的「星云输入框」:深色底 + 细边框 + 聚焦紫色辉光 + 粒子。
+   照抄时只按容器改三处:去掉原设计的 width/margin 居中(位置交给筛选条)、15px 内边距收成
+   34px 高(42px 的条里放不下 47px 的框)、放大镜与 Ctrl F 键帽删掉。
+   用户验收后又收三点:描边收细、四层辉光收成一层(原样太扎眼)、标签不再上浮;
+   最后去掉占位文案,并把不透明黑底放成 30% 透明黑 rgba(0,0,15,.3)——框里不放任何可见文字
+   (用途交给 Ctrl F 快捷键与 aria-label),底色只留一层薄暗,不再是压在玻璃条上的一块死黑。
+   描边最终定为「未聚焦 2px 暗边、聚焦时收成 1px 亮边」:静止时框要有分量、看得见边界,
+   聚焦时改由颜色与辉光说话,不再靠粗细。
+   浅色主题用 --bg2,否则浅色界面里会嵌一块暗块。 */
+.searchbox{position:relative;display:block;flex:none;width:250px;height:34px;
+  --nb-bg:rgba(0,0,15,.3);--nb-border:#2a2a3a;--nb-fg:#fff}
+:root:not([data-theme="dark"]) .searchbox{--nb-bg:var(--bg2);--nb-border:var(--line);--nb-fg:var(--t1)}
+.searchbox .input{width:100%;height:100%;padding:0 12px;border:2px solid var(--nb-border);background:var(--nb-bg);color:var(--nb-fg);font-size:var(--fs-body);outline:none;border-radius:var(--r-xs);transition:all .4s ease-out}
+.searchbox .input:focus{border-width:1px;border-color:#b56aff;box-shadow:0 4px 14px rgba(181,106,255,.22)}
+.nebula-particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;opacity:0;top:50%;left:10px;filter:blur(.8px);mix-blend-mode:screen;transition:opacity .3s ease}
+.searchbox .input:focus ~ .nebula-particle{animation:nebula-float 2s forwards ease-out}
+@keyframes nebula-float{
+  0%{transform:translate(0,-50%) scale(.8);opacity:0;background:#c774ff}
+  20%{opacity:.8}
+  100%{transform:translate(calc(var(--x) * 140px),calc(var(--y) * 35px)) scale(1.1);opacity:0;background:#6df2ff}
+}
+/* 浅色主题里 screen 混合是白上叠白,粒子会彻底看不见;换 multiply 才显色。 */
+:root:not([data-theme="dark"]) .nebula-particle{mix-blend-mode:multiply;filter:blur(1px)}
+@media (prefers-reduced-motion:reduce){.searchbox .input:focus ~ .nebula-particle{animation:none}}
 /* 筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
    所以 border-color/color/background 的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
    时长用 --dur-hover(110ms):悬停是一天几十次的高频反馈,必须比按压(160ms)更短。 */

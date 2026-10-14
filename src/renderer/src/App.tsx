@@ -9,7 +9,6 @@ if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__ui = useUI
 }
 import { Titlebar } from './components/Titlebar'
-import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
 import { FilterBar } from './components/FilterBar'
 import { ColorStrip } from './components/ColorStrip'
@@ -219,7 +218,6 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <SvgDefs />
       <Titlebar />
-      <Toolbar />
       {/* 折叠检查器时不要卸载它:它一旦从 DOM 消失,列宽的过渡就没有对手可动画,
           只会看到内容凭空消失、布局瞬间重排。让它留在 DOM 里,由 .layout 的
           grid-template-columns 过渡把它推到 0 宽,再由 overflow:hidden 裁掉。 */}

@@ -41,6 +41,12 @@ export function SettingsMenu(): React.JSX.Element | null {
   const open = useUI((s) => s.openMenu === 'settings')
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const importEagleFlow = useUI((s) => s.importEagleFlow)
+  const createLibraryFlow = useUI((s) => s.createLibraryFlow)
+  const closeTab = useUI((s) => s.closeTab)
+  const activeTabId = useUI((s) => s.activeTabId)
+  /* 「关闭素材库」只在开了多个库时才有意义:closeTab 对最后一个 tab 直接 return,
+     那时它会变成一条点了没反应的死项,不如不给。 */
+  const canCloseTab = useUI((s) => s.tabs.length > 1)
   const menuRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<MenuPosition | null>(null)
   const [libraryMenuOpen, setLibraryMenuOpen] = useState(false)
@@ -104,12 +110,32 @@ export function SettingsMenu(): React.JSX.Element | null {
       style={{ top: position.top, left: position.left }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <SettingsItem icon="cube" label="创建资源库" />
+      {/* 标题栏那颗「+」已移除(它和标签页的「×」一起构成浏览器标签栏的样子),
+          新建素材库的入口收在这里。createLibraryFlow 会开文件夹选择器,
+          是个模态流程,所以先把菜单收掉。 */}
+      <SettingsItem
+        icon="cube"
+        label="创建资源库"
+        onClick={() => {
+          setOpenMenu(null)
+          void createLibraryFlow()
+        }}
+      />
       <div className="settings-menu-parent" onMouseEnter={() => setLibraryMenuOpen(true)} onMouseLeave={() => setLibraryMenuOpen(false)}>
         <SettingsItem icon="drive" label="资源库管理" arrow expanded={libraryMenuOpen} onClick={() => setLibraryMenuOpen((value) => !value)} />
         {libraryMenuOpen && (
           <div className="settings-menu settings-menu-submenu glass-menu" role="menu">
             <SettingsItem icon="layers" label="导入 Eagle 素材" onClick={importEagleFlow} />
+            {canCloseTab && (
+              <SettingsItem
+                icon="x"
+                label="关闭当前素材库"
+                onClick={() => {
+                  setOpenMenu(null)
+                  closeTab(activeTabId)
+                }}
+              />
+            )}
           </div>
         )}
       </div>

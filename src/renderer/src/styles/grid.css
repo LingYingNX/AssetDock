@@ -33,7 +33,7 @@
 /* ---------- 卡片 ---------- */
 /* 卡片可聚焦、可点选、可双击打开、可拖拽,却给了默认箭头;而同一张卡上的浮层按钮
    反而是 pointer。光标是最廉价的可点击性线索,这里必须与真实行为一致。 */
-.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:calc(var(--r-m) - 5px);overflow:hidden;cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out),outline-color var(--dur-fast) var(--ease-out);position:relative}
+.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out),outline-color var(--dur-fast) var(--ease-out);position:relative}
 .card:hover{border-color:var(--line2)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 78%,rgba(0,0,0,.34));pointer-events:none}
