@@ -12,7 +12,7 @@
 - **THEN** 面板透出壁纸光斑的颜色变化,不同位置颜色不同
 
 ### Requirement: 玻璃面板配方
-标题栏 / 工具栏 / 侧栏 / 检查器 / 筛选条 / 色带 / 菜单 SHALL 使用统一玻璃配方:斜向镜面高光渐变 + 蓝调基底 rgba(219,236,255,.24~.36);backdrop-filter 两条声明依次为 blur 回退版与 url(#liquid-lens) 折射版(顺序不可颠倒);边框为白色玻璃亮边;带上下缘 inset 高光与蓝调投影。素材卡片只使用 blur(18px) saturate(1.7) brightness(1.04),不挂折射滤镜。
+标题栏 / 侧栏 / 检查器 / 筛选条 / 色带 / 菜单 SHALL 使用统一玻璃配方:斜向镜面高光渐变 + 蓝调基底 rgba(219,236,255,.24~.36);backdrop-filter 两条声明依次为 blur 回退版与 url(#liquid-lens) 折射版(顺序不可颠倒);边框为白色玻璃亮边;带上下缘 inset 高光与蓝调投影。素材卡片只使用 blur(18px) saturate(1.7) brightness(1.04),不挂折射滤镜。
 
 #### Scenario: Chromium 折射
 - **WHEN** 应用运行于 Chromium 内核(Electron)
@@ -33,7 +33,7 @@ liquid-lens 位移滤镜(feTurbulence + feGaussianBlur + feDisplacementMap,参�
 - **THEN** 卡片上浮、缩略图缓放、立方体自转等动画全部停止,界面功能不受影响
 
 ### Requirement: 主题持久化与首帧一致
-应用 SHALL 把主题(浅色 / 夜间)同时记录在两处:`preferences` 键的 `theme` 字段是权威记录;localStorage 键 `mediahub.theme`(值为 `light` / `dark` 明文,不做 JSON 包装)是供首帧同步读取的镜像。`src/renderer/index.html` 的 `<head>` SHALL 在模块脚本之前执行一段同步内联脚本,读该镜像并在首个绘制帧之前落定根元素的 `data-theme`;`<meta name="color-scheme">` SHALL 声明为 `light dark`,不得为 `light`。镜像与权威记录不一致时以 `preferences` 为准,启动引导 SHALL 把镜像校正回权威值;镜像缺失或取值非法时 SHALL 回退浅色,不得抛错。
+应用 SHALL 把主题(浅色 / 夜间)同时记录在两处:`preferences` 键的 `theme` 字段是权威记录;localStorage 键 `mediahub.theme`(值为 `light` / `dark` 明文,不做 JSON 包装)是供首帧同步读取的镜像。`src/renderer/index.html` 的 `<head>` SHALL 在模块脚本之前以经典脚本(同源外部文件 `theme-boot.js`,无 `defer`/`async`)同步执行读镜像逻辑,并在首个绘制帧之前落定根元素的 `data-theme`;该脚本 SHALL NOT 是内联块`script-src 'self'` 的 CSP 会拦截内联块并静默不执行,首帧因此退回浅色;`<meta name="color-scheme">` SHALL 声明为 `light dark`,不得为 `light`。镜像与权威记录不一致时以 `preferences` 为准,启动引导 SHALL 把镜像校正回权威值;镜像缺失或取值非法时 SHALL 回退浅色,不得抛错。
 
 #### Scenario: 夜间启动不闪白
 - **WHEN** 上次保存的主题为夜间,用户启动应用
@@ -64,7 +64,7 @@ liquid-lens 位移滤镜(feTurbulence + feGaussianBlur + feDisplacementMap,参�
 
 ### Requirement: 控件级尺寸阶梯
 
-应用 SHALL 提供一套控件级尺寸令牌,与面板级半径令牌(`--r-s` 8px / `--r-m` 14px / `--r-l` 18px)并存并区分语义:圆角 `--r-xs` 4px / `--r-sm` 6px / `--r-md` 8px / `--r-pill` 11px;控件高 `--h-xs` 24px / `--h-sm` 28px / `--h-md` 32px / `--h-bar` 42px;图标 `--ic-xs` 12px / `--ic-sm` 14px / `--ic-md` 16px / `--ic-lg` 20px / `--ic-xl` 30px;字号 `--fs-micro` 10.5px / `--fs-cap` 11px / `--fs-body` 12.5px / `--fs-sub` 13px / `--fs-title` 14px。同一层级的同类控件 SHALL 取同一档;控件高度 SHALL 落在 4px 栅格上;界面样式 SHALL 引用这些令牌,SHALL NOT 就地写同一语义的字面值。
+应用 SHALL 提供一套控件级尺寸令牌,与面板级半径令牌(`--r-s` / `--r-m` / `--r-l`)并存并区分语义:圆角 `--r-xs` 5px / `--r-sm` 5px / `--r-md` 5px / `--r-pill` 5px;控件高 `--h-xs` 24px / `--h-sm` 28px / `--h-md` 32px / `--h-bar` 42px / `--h-title` 40px;图标 `--ic-xs` 12px / `--ic-sm` 14px / `--ic-md` 16px / `--ic-lg` 20px / `--ic-xl` 30px;字号 `--fs-micro` 10.5px / `--fs-cap` 11px / `--fs-body` 12.5px / `--fs-sub` 13px / `--fs-title` 14px。同一层级的同类控件 SHALL 取同一档;控件高度 SHALL 落在 4px 栅格上;界面样式 SHALL 引用这些令牌,SHALL NOT 就地写同一语义的字面值。全界面可见边框的圆角 SHALL 统一为 5px(面板级 `--r-s`/`--r-m`/`--r-l` 与控件级四档同值),例外只有两类:圆形元素(色点、开关圆点、滑块把手等 `border-radius:50%`)、以及窗口外框 `--r-window`(软件边框,不受此统一约束);高度小于 10px 的细条(滑块轨道、左缘指示条)仍按自身高度取半圆,视觉上是胶囊。
 
 #### Scenario: 菜单行高与字号跨组件一致
 - **WHEN** 依次打开素材右键菜单、筛选下拉与齿轮菜单
