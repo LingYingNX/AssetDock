@@ -1,4 +1,4 @@
-import { ASSETS, COLOR_STRIP, FOLDERS, SWATCHES } from './dataset'
+import { ASSETS, COLOR_STRIP, FOLDERS } from './dataset'
 import type { Asset, NavKey } from './types'
 
 /* ---------- 展示格式化 ---------- */
@@ -12,7 +12,9 @@ export function formatBytes(bytes: number): string {
   return `${bytes} B`
 }
 
-export function formatFaces(n: number): string {
+/** 计数千分位:侧栏与筛选条共用,避免同屏出现「4,084」与「4084」两种口径。
+    固定 en-US:只取千分位分隔,不随系统区域变化。 */
+export function fmtCount(n: number): string {
   return n.toLocaleString('en-US')
 }
 
@@ -97,8 +99,6 @@ export interface QueryOptions {
   nav: NavKey
   search: string
   filters: Filters
-  /** 侧栏颜色圆点(多选) */
-  swatches: string[]
   /** 色带选中块(单选) */
   stripColor: string | null
 }
@@ -174,7 +174,6 @@ export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
   const matched = assets.filter((a) => {
     if (!matchNav(a, opts.nav)) return false
     if (!matchFilters(a, opts.filters)) return false
-    if (opts.swatches.length > 0 && !opts.swatches.some((c) => paletteHasColor(a, c))) return false
     if (opts.stripColor && !paletteHasColor(a, opts.stripColor)) return false
     if (kw) {
       const hay = [a.name, ...a.tags.map((t) => t.name), a.note, a.format].join(' ').toLowerCase()
@@ -308,4 +307,4 @@ function pxLabel(a: Asset): string | undefined {
   return undefined
 }
 
-export { ASSETS, FOLDERS, SWATCHES, COLOR_STRIP }
+export { ASSETS, FOLDERS, COLOR_STRIP }

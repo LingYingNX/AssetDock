@@ -261,9 +261,6 @@ interface UIState {
   /* 筛选 */
   filters: Filters
   setFilter: (k: keyof Filters, v: string) => void
-  swatches: string[]
-  toggleSwatch: (color: string) => void
-  clearSwatches: () => void
   stripColor: string | null
   setStripColor: (hex: string | null) => void
   cbarOpen: boolean
@@ -685,12 +682,6 @@ export const useUI = create<UIState>((set, get) => {
 
     filters: DEFAULT_FILTERS,
     setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
-    swatches: [],
-    toggleSwatch: (color) =>
-      set((s) => ({
-        swatches: s.swatches.includes(color) ? s.swatches.filter((c) => c !== color) : [...s.swatches, color]
-      })),
-    clearSwatches: () => set({ swatches: [] }),
     stripColor: null,
     setStripColor: (stripColor) => set({ stripColor }),
     cbarOpen: false,
@@ -853,7 +844,6 @@ export const useUI = create<UIState>((set, get) => {
           nav: s.nav,
           search: s.search,
           filters: s.filters,
-          swatches: s.swatches,
           stripColor: s.stripColor
         })
         const selectedIds = visible.map((a) => a.id)

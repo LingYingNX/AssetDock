@@ -36,7 +36,6 @@ export function Filmstrip(): React.JSX.Element | null {
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const filters = useUI((s) => s.filters)
-  const swatches = useUI((s) => s.swatches)
   const stripColor = useUI((s) => s.stripColor)
   const openLightbox = useUI((s) => s.openLightbox)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -47,8 +46,8 @@ export function Filmstrip(): React.JSX.Element | null {
      但右键从别处打开、或筛选条件刚变时,当前素材可能不在这一串里——
      那时退回「全库未删除」,免得胶片带上一个都不高亮、看着像坏了。 */
   const scoped = useMemo(
-    () => queryAssets(assets, { nav, search, filters, swatches, stripColor }),
-    [assets, nav, search, filters, swatches, stripColor]
+    () => queryAssets(assets, { nav, search, filters, stripColor }),
+    [assets, nav, search, filters, stripColor]
   )
   const visible = useMemo(
     () => (scoped.some((a) => a.id === lightboxId) ? scoped : assets.filter((a) => !a.deletedAt)),

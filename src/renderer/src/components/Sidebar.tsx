@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
-import { SWATCHES } from '../data/dataset'
-import { sidebarCounts } from '../data/query'
+import { fmtCount, sidebarCounts } from '../data/query'
 import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
 import { type FolderPlacement, canDropFolder, folderDropClass, folderDropPlacement } from '../data/folder-drag'
 import { Icon } from './Icons'
@@ -178,7 +177,7 @@ function DirTree({
               <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 22px))` }}>
                 <Icon name="folder" />
                 <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
-                <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{n.count}</span>
+                <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
               </div>
             ) : (
               <div
@@ -236,7 +235,7 @@ function DirTree({
                 <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
                   <Icon name="folder" />
                   <span className="folder-label">{n.label}</span>
-                  <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{n.count}</span>
+                  <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
                 </button>
               </div>
             )}
@@ -273,9 +272,6 @@ function DirTree({
 export function Sidebar(): React.JSX.Element {
   const nav = useUI((s) => s.nav)
   const setNav = useUI((s) => s.setNav)
-  const swatches = useUI((s) => s.swatches)
-  const toggleSwatch = useUI((s) => s.toggleSwatch)
-  const clearSwatches = useUI((s) => s.clearSwatches)
   const assets = useUI((s) => s.assets)
   const mode = useUI((s) => s.mode)
   const folderPaths = useUI((s) => s.folderPaths)
@@ -367,10 +363,10 @@ export function Sidebar(): React.JSX.Element {
               「最近导入」使用,重复会让人误以为两者相关 */}
           <div className="side-title"><Icon name="sliders" />浏览</div>
           <button className={`nav-item${nav === 'all' ? ' on' : ''}`} onClick={() => setNav('all')}>
-            <Icon name="layers" />全部素材<span className="cnt has-items">{c.all.toLocaleString('en-US')}</span>
+            <Icon name="layers" />全部素材<span className="cnt has-items">{fmtCount(c.all)}</span>
           </button>
           <button className={`nav-item${nav === 'recent' ? ' on' : ''}`} onClick={() => setNav('recent')}>
-            <Icon name="clock" />最近导入<span className={`cnt${c.recent > 0 ? ' has-items' : ''}`}>{c.recent}</span>
+            <Icon name="clock" />最近导入<span className={`cnt${c.recent > 0 ? ' has-items' : ''}`}>{fmtCount(c.recent)}</span>
           </button>
           <button
                 className={`nav-item${nav === 'untagged' ? ' on' : ''}`}
@@ -387,13 +383,13 @@ export function Sidebar(): React.JSX.Element {
             }}
             onDrop={(e) => moveDrop('', e)}
           >
-            <Icon name="inbox" />未分类<span className={`cnt${c.untagged > 0 ? ' has-items' : ''}`}>{c.untagged}</span>
+            <Icon name="inbox" />未分类<span className={`cnt${c.untagged > 0 ? ' has-items' : ''}`}>{fmtCount(c.untagged)}</span>
           </button>
           <button className={`nav-item${nav === 'fav' ? ' on' : ''}`} onClick={() => setNav('fav')}>
-            <Icon name="heart" />收藏<span className={`cnt${c.fav > 0 ? ' has-items' : ''}`}>{c.fav}</span>
+            <Icon name="heart" />收藏<span className={`cnt${c.fav > 0 ? ' has-items' : ''}`}>{fmtCount(c.fav)}</span>
           </button>
           <button className={`nav-item${nav === 'trash' ? ' on' : ''}`} onClick={() => setNav('trash')}>
-            <Icon name="trash" />回收站<span className={`cnt${c.trash > 0 ? ' has-items' : ''}`}>{c.trash}</span>
+            <Icon name="trash" />回收站<span className={`cnt${c.trash > 0 ? ' has-items' : ''}`}>{fmtCount(c.trash)}</span>
           </button>
         </section>
 
@@ -453,35 +449,11 @@ export function Sidebar(): React.JSX.Element {
               <button key={name} className={`nav-item${nav === key ? ' on' : ''}`} onClick={() => setNav(key)}>
                 <span className="dot" style={{ background: info.color }} />
                 {name}
-                <span className={`cnt${info.n > 0 ? ' has-items' : ''}`}>{info.n}</span>
+                <span className={`cnt${info.n > 0 ? ' has-items' : ''}`}>{fmtCount(info.n)}</span>
               </button>
             )
           })}
           <button className="side-add"><Icon name="edit" />管理标签</button>
-        </section>
-
-        <section className="side-sec">
-          <div className="side-title"><Icon name="image" />颜色筛选</div>
-          <div className="swatches" role="group" aria-label="按颜色筛选">
-            <button
-              className="sw all"
-              title="全部颜色"
-              onClick={clearSwatches}
-            />
-            {SWATCHES.filter((sw) => sw.color).map((sw) => {
-              const color = sw.color as string
-              const on = swatches.includes(color)
-              return (
-                <button
-                  key={color}
-                  className={`sw${on ? ' on' : ''}`}
-                  style={{ background: color }}
-                  title={sw.title}
-                  onClick={() => toggleSwatch(color)}
-                />
-              )
-            })}
-          </div>
         </section>
       </div>
     </aside>

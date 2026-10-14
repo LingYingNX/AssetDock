@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatBytes } from '../data/query'
+import { fmtCount, formatBytes } from '../data/query'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
 import { applyTheme, currentTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
@@ -319,7 +319,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
           </div>
           <div className="pref-library-details">
             <span>资源库大小：{formatBytes(librarySize)}</span>
-            <span>素材数量：{libraryAssets.length.toLocaleString('en-US')}</span>
+            <span>素材数量：{fmtCount(libraryAssets.length)}</span>
             <span className="pref-library-path">{activeLibrary?.path ?? '—'}</span>
             {activeLibrary ? <button className="pref-link" onClick={() => window.windowApi.showInFolder(activeLibrary.path)}>打开</button> : null}
           </div>

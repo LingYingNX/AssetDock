@@ -16,12 +16,11 @@ export function ColorStrip(): React.JSX.Element | null {
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const filters = useUI((s) => s.filters)
-  const swatches = useUI((s) => s.swatches)
   const ref = useRef<HTMLDivElement>(null)
 
   const strip = useMemo(
-    () => (cbarOpen ? aggregatePalette(queryAssets(assets, { nav, search, filters, swatches, stripColor: null })) : []),
-    [cbarOpen, assets, nav, search, filters, swatches]
+    () => (cbarOpen ? aggregatePalette(queryAssets(assets, { nav, search, filters, stripColor: null })) : []),
+    [cbarOpen, assets, nav, search, filters]
   )
 
   /* 三态:open 决定外观,shown 决定是否带 .open,mounted 决定是否留在 DOM。

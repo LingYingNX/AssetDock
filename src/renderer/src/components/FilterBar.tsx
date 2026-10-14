@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useUI } from '../store/ui'
-import { queryAssets, statsOf } from '../data/query'
+import { fmtCount, queryAssets, statsOf } from '../data/query'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
 
@@ -84,11 +84,10 @@ export function FilterBar(): React.JSX.Element {
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const setSearch = useUI((s) => s.setSearch)
-  const swatches = useUI((s) => s.swatches)
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
 
-  const stats = statsOf(queryAssets(assets, { nav, search, filters, swatches, stripColor }))
+  const stats = statsOf(queryAssets(assets, { nav, search, filters, stripColor }))
   const selectedStats = statsOf(assets.filter((a) => selectedSet.has(a.id)))
 
   const paintZoom = (el: HTMLInputElement): void => {
@@ -173,9 +172,9 @@ export function FilterBar(): React.JSX.Element {
       <span className="fresult">
         {scanProgress ? `${scanProgress} · ` : ''}
         {selectedStats.count > 0 ? (
-          <>已选中 <b>{selectedStats.count}</b> 项 · {selectedStats.size}</>
+          <>已选中 <b>{fmtCount(selectedStats.count)}</b> 项 · {selectedStats.size}</>
         ) : (
-          <>筛选结果 <b>{stats.count}</b> 项 · {stats.size}</>
+          <>筛选结果 <b>{fmtCount(stats.count)}</b> 项 · {stats.size}</>
         )}
       </span>
       <button

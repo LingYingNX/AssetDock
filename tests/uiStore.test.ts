@@ -77,7 +77,6 @@ describe('UI store', () => {
       nav: 'folder:target',
       search: '',
       filters: DEFAULT_FILTERS,
-      swatches: [],
       stripColor: null
     })).toEqual([asset])
   })

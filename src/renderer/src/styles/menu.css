@@ -84,7 +84,10 @@
 .menu.pick-menu.menu-anchor-right{transform-origin:top right}
 
 /* 齿轮菜单:沿用当前浅色玻璃主题 */
-.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:6px 0;user-select:none;color:var(--t1);
+/* 上下不留内边距:菜单项高亮必须贴到菜单边缘。留 6px 会让第一项上方、最后一项下方
+   各出现一条无高亮的暗带(实测截图里高亮 32px、其上 6px 是纯菜单底),用户会读成
+   「高亮没有占满」。高亮自身 5px 圆角与菜单 5px 圆角同值,首末项贴边时弧线正好重合。 */
+.settings-menu{position:fixed;z-index:95;display:flex;flex-direction:column;justify-content:center;width:184px;border-radius:var(--r-menu);padding:0;user-select:none;color:var(--t1);
   transition:opacity var(--dur-fast) var(--ease-spring),transform var(--dur-fast) var(--ease-spring)}
 /* 齿轮菜单的两态:原来组件一关就卸载,只有 @starting-style 管入场,退场无从发生。
    起始态必须写进 .show 这一条里,不能留在基础规则 ——
@@ -105,14 +108,16 @@
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
 .settings-menu-parent{position:relative;display:flex;align-self:stretch}
 .settings-menu-parent>.settings-menu-item{flex:1}
-.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-7px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in var(--dur-fast) var(--ease-spring) both}
+/* top 由 -7px 收到 -1px:子菜单自己没有内边距了(上面那条改成 padding:0),
+   原来那 6px 是在补父菜单的内边距,不减掉子菜单首项会比父项高 6px。 */
+.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-1px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in var(--dur-fast) var(--ease-spring) both}
 .settings-menu-icon{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:10px;color:var(--t2)}
 .settings-menu-icon .ic{width:var(--ic-md);height:var(--ic-md)}
 .settings-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .settings-menu-shortcut{padding-left:8px;color:var(--t3);font-size:var(--fs-sub);white-space:nowrap}
 .settings-menu-arrow{width:var(--ic-xs)!important;height:var(--ic-xs)!important;margin-left:8px;color:var(--t3)}
-/* 分隔线与 .menu .sep 同因:--hatch 夜间只有 .09 白,落在 --menu-solid 上看不见 */
-.settings-menu-divider{height:1px;background:var(--sep);margin:5px 8px}
+/* 这里原有 `.settings-menu-divider`:它带 5px 上下外边距,悬停下方「偏好设置」时
+   高亮上方会空出一条暗带,用户要求删掉分组线。下拉菜单的 `.menu .sep` 不受影响。 */
 
 @keyframes settings-submenu-in{from{opacity:0;transform:translateX(6px) scale(.98)}to{opacity:1;transform:none}}
 /* 这里原来有一条 `@media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}`,

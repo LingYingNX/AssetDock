@@ -7,7 +7,7 @@ const asset = (patch: Partial<Asset>): Asset => ({
   id: 'a', type: 'image', format: 'JPG', name: 'asset', sizeBytes: 1, importedAt: '2026-09-10T00:00', rating: 0,
   favorite: false, tags: [], folders: [], note: '', palette: [], ...patch
 })
-const query = (assets: Asset[], nav: NavKey = 'all', patch: Partial<Filters> = {}) => queryAssets(assets, { nav, search: '', filters: { ...filters, ...patch }, swatches: [], stripColor: null })
+const query = (assets: Asset[], nav: NavKey = 'all', patch: Partial<Filters> = {}) => queryAssets(assets, { nav, search: '', filters: { ...filters, ...patch }, stripColor: null })
 
 describe('queryAssets', () => {
   it('filters real folder paths and omits deleted or missing assets', () => {
@@ -18,7 +18,7 @@ describe('queryAssets', () => {
   it('supports type, rating, tag and text filtering', () => {
     const assets = [asset({ id: 'photo', name: 'mountain', rating: 5, tags: [{ name: 'nature', color: '#3ECF8E' }] }), asset({ id: 'movie', type: 'video', format: 'MP4', name: 'river' })]
     expect(query(assets, 'all', { format: 'photo', rating: '5', tag: 'nature' }).map((item) => item.id)).toEqual(['photo'])
-    expect(queryAssets(assets, { nav: 'all', search: 'river', filters, swatches: [], stripColor: null }).map((item) => item.id)).toEqual(['movie'])
+    expect(queryAssets(assets, { nav: 'all', search: 'river', filters, stripColor: null }).map((item) => item.id)).toEqual(['movie'])
   })
 
   it('treats css as its own format without shape/size misfires', () => {

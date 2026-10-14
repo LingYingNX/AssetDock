@@ -9,7 +9,7 @@
 .content>*{position:relative;z-index:1}
 
 /* ---------- 筛选条 ---------- */
-.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line)}
+.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body)}
 /* 搜索框(原在已删除的工具栏里):与筛选下拉同处一条 42px 的筛选条,是筛选的第一入口。
    外观照搬用户给的「星云输入框」:深色底 + 细边框 + 聚焦紫色辉光 + 粒子。
    照抄时只按容器改三处:去掉原设计的 width/margin 居中(位置交给筛选条)、15px 内边距收成
@@ -47,7 +47,6 @@
 .filterbar .btn.open{background:var(--bg3);border-color:var(--line2);color:var(--t1)}
 /* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
 .filterbar .btn.on.open{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
-.filterbar .btn .dot{width:7px;height:7px}
 .filterbar .btn .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);transition:transform var(--dur-hover) var(--ease-out)}
 .filterbar .btn.open .chev{transform:rotate(180deg)}
 .cbtn{width:28px;height:var(--h-sm);border-radius:var(--r-sm);display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line);
@@ -60,7 +59,7 @@
 .filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .tb-btn.on{border-color:var(--acc-line);color:var(--acc2);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
 .zoomer{display:flex;align-items:center;gap:7px;color:var(--t3);min-width:0}
-.zoomer .ic{width:var(--ic-sm);height:var(--ic-sm);flex:none}
+.zoomer .ic{width:var(--ic-md);height:var(--ic-md);flex:none}
 input[type=range]{-webkit-appearance:none;appearance:none;width:88px;height:3px;border-radius:2px;cursor:pointer;background:linear-gradient(90deg,var(--acc) 40%,rgba(255,255,255,.55) 40%)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}

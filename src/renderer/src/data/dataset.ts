@@ -21,20 +21,6 @@ export const FOLDERS: FolderNode[] = [
   { name: '归档' }
 ]
 
-/** 侧栏颜色筛选圆点(首项为「全部颜色」) */
-export const SWATCHES: { color?: string; title: string }[] = [
-  { title: '全部颜色' },
-  { color: '#EF4444', title: '红色' },
-  { color: '#F97316', title: '橙色' },
-  { color: '#EAB308', title: '黄色' },
-  { color: '#22C55E', title: '绿色' },
-  { color: '#14B8A6', title: '青色' },
-  { color: '#3B82F6', title: '蓝色' },
-  { color: '#8B5CF6', title: '紫色' },
-  { color: '#EC4899', title: '粉色' },
-  { color: '#64748B', title: '灰色' }
-]
-
 /** 色带(当前文件夹颜色构造,8 块) */
 export const COLOR_STRIP: { hex: string; ratio: number }[] = [
   { hex: '#2FD6A3', ratio: 24 },

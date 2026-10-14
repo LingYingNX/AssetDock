@@ -45,7 +45,6 @@ export function Grid(): React.JSX.Element {
   const nav = useUI((s) => s.nav)
   const search = useUI((s) => s.search)
   const filters = useUI((s) => s.filters)
-  const swatches = useUI((s) => s.swatches)
   const stripColor = useUI((s) => s.stripColor)
   const colw = useUI((s) => s.colw)
   const clearSelection = useUI((s) => s.clearSelection)
@@ -62,12 +61,12 @@ export function Grid(): React.JSX.Element {
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
 
   const list = useMemo(
-    () => queryAssets(assets, { nav, search, filters, swatches, stripColor }),
-    [assets, nav, search, filters, swatches, stripColor]
+    () => queryAssets(assets, { nav, search, filters, stripColor }),
+    [assets, nav, search, filters, stripColor]
   )
 
   // colw 不进 resetKey:拖列宽滑块只该重排列,不该把滚动位置打回顶部
-  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${swatches.join(',')}|${stripColor}|${view}|${list.length}`
+  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${stripColor}|${view}|${list.length}`
   useEffect(() => {
     wrapRef.current?.scrollTo({ top: 0 })
   }, [resetKey])

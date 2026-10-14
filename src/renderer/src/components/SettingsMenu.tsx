@@ -139,7 +139,8 @@ export function SettingsMenu(): React.JSX.Element | null {
           </div>
         )}
       </div>
-      <div className="settings-menu-divider" />
+      {/* 原来这里有一条 .settings-menu-divider:它自带 5px 上下外边距,悬停
+          「偏好设置」时高亮上方会空出一条暗带(与菜单内边距同一个症状)。删掉。 */}
       <SettingsItem icon="gear" label="偏好设置" shortcut="Ctrl+," onClick={() => setOpenMenu('preferences')} />
     </div>,
     document.body
