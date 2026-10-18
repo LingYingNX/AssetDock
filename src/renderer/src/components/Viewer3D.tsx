@@ -6,11 +6,13 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { modelBaseUrl } from '../data/model-url'
 import type { AssetFormat } from '../data/types'
 
 export type ViewKey = 'auto' | 'front' | 'side' | 'top' | 'back'
+const LOAD_TIMEOUT_MS = 20_000
 
-interface Viewer3DProps {
+export interface Viewer3DProps {
   url: string
   format: Extract<AssetFormat, 'GLB' | 'FBX' | 'OBJ'>
   turntable: boolean
@@ -217,15 +219,18 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
       return buf.buffer
     }
 
+    let loadTimer: ReturnType<typeof setTimeout> | null = null
     fetchWithProgress(url)
       .then((buf) => {
         if (disposed) return
         onProgressRef.current?.(null) // null = 解析阶段(旋转指示)
         if (format === 'OBJ') return new OBJLoader().parse(new TextDecoder().decode(buf))
-        if (format === 'FBX') return new FBXLoader().parse(buf, '')
-        return new Promise<THREE.Group>((res, rej) => loader.parse(buf, '', (g) => res(g.scene as THREE.Group), rej))
+        const baseUrl = modelBaseUrl(url)
+        if (format === 'FBX') return new FBXLoader().parse(buf, baseUrl)
+        return new Promise<THREE.Group>((res, rej) => loader.parse(buf, baseUrl, (g) => res(g.scene as THREE.Group), rej))
       })
       .then((model) => {
+        if (loadTimer) clearTimeout(loadTimer)
         if (disposed || !model) return
         onProgressRef.current?.(100)
         group.add(model)
@@ -242,10 +247,16 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
         onLoaded?.()
       })
       .catch(() => {
+        if (loadTimer) clearTimeout(loadTimer)
         if (disposed) return
         setFailed(true)
         onError?.()
       })
+    loadTimer = setTimeout(() => {
+      if (disposed) return
+      setFailed(true)
+      onError?.()
+    }, LOAD_TIMEOUT_MS)
 
     let raf = 0
     let last = performance.now()
@@ -261,6 +272,7 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
 
     return () => {
       disposed = true
+      if (loadTimer) clearTimeout(loadTimer)
       cancelAnimationFrame(raf)
       ro.disconnect()
       controls.dispose()

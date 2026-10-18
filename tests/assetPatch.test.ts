@@ -84,7 +84,7 @@ describe('sanitizeAssetPatch (S1-4)', () => {
   it('updateAsset persists nothing when every value is invalid', () => {
     const { db } = seedLibrary()
     const row = seedAsset(db, 'a/b.jpg')
-    updateAsset(db, row.id, { rating: 'nine' as never, favorite: true as never })
+    updateAsset(db, 1, row.id, { rating: 'nine' as never, favorite: true as never })
     const after = db.prepare('SELECT rating, favorite FROM assets WHERE id = ?').get(row.id) as
       { rating: number; favorite: number }
     expect(after.rating).toBe(0)
@@ -94,7 +94,7 @@ describe('sanitizeAssetPatch (S1-4)', () => {
   it('updateAsset persists valid values round-trip', () => {
     const { db } = seedLibrary()
     const row = seedAsset(db, 'a/c.jpg')
-    updateAsset(db, row.id, { rating: 4, note: '好的', favorite: 1 })
+    updateAsset(db, 1, row.id, { rating: 4, note: '好的', favorite: 1 })
     const after = db.prepare('SELECT rating, note, favorite FROM assets WHERE id = ?').get(row.id) as
       { rating: number; note: string; favorite: number }
     expect(after.rating).toBe(4)
@@ -105,7 +105,7 @@ describe('sanitizeAssetPatch (S1-4)', () => {
   it('assetsByIds still returns patched rows with tags join intact', () => {
     const { db } = seedLibrary()
     const row = seedAsset(db, 'x/y.jpg')
-    updateAsset(db, row.id, { rating: 2 })
+    updateAsset(db, 1, row.id, { rating: 2 })
     const rows = assetsByIds(db, 1, [row.id])
     expect(rows).toHaveLength(1)
     expect(rows[0].rating).toBe(2)

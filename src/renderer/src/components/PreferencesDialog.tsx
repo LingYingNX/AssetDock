@@ -6,27 +6,21 @@ import { applyTheme, currentTheme, parseTheme, writeMirroredTheme, type ThemeMod
 
 type CloseAction = 'minimize' | 'quit'
 type PreferenceState = {
-  openMode: 'recent' | 'specified'
   autoSync: boolean
   theme: ThemeMode
   autoLaunch: boolean
   closeAction: CloseAction
-  hoverAudio: boolean
   hoverVideo: boolean
-  hoverGif: boolean
   hoverSound: boolean
 }
 
 const PREFERENCES_KEY = 'preferences'
 const DEFAULT_PREFERENCES: PreferenceState = {
-  openMode: 'recent',
   autoSync: true,
   theme: 'light',
   autoLaunch: false,
   closeAction: 'minimize',
-  hoverAudio: true,
   hoverVideo: true,
-  hoverGif: true,
   hoverSound: false
 }
 
@@ -89,14 +83,11 @@ function readPreferences(raw: string | null): PreferenceState {
   try {
     const value = JSON.parse(raw) as Partial<PreferenceState>
     return {
-      openMode: value.openMode === 'specified' ? 'specified' : 'recent',
       autoSync: value.autoSync !== false,
       theme: parseTheme(raw),
       autoLaunch: value.autoLaunch === true,
       closeAction: value.closeAction === 'quit' ? 'quit' : 'minimize',
-      hoverAudio: value.hoverAudio !== false,
       hoverVideo: value.hoverVideo !== false,
-      hoverGif: value.hoverGif !== false,
       hoverSound: value.hoverSound === true
     }
   } catch {
@@ -291,13 +282,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const libraryPane = (
     <>
       <section className="pref-section">
-        <h2>默认打开</h2>
-        <div className="pref-options">
-          <Choice name="open-mode" label="默认打开最近使用资源库" checked={draft.openMode === 'recent'} onChange={() => setDraft({ ...draft, openMode: 'recent' })} />
-          <Choice name="open-mode" label="启动时打开指定资源库" checked={draft.openMode === 'specified'} disabled />
-        </div>
-      </section>
-      <section className="pref-section">
         <h2>打开资源库是否自动同步</h2>
         <div className="pref-row">
           <Choice name="auto-sync" label="是" checked={draft.autoSync} onChange={() => setDraft({ ...draft, autoSync: true })} />
@@ -336,9 +320,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
       <section className="pref-section">
         <h2>列表模式悬浮是否自动播放</h2>
         <div className="pref-row">
-          <Check checked={draft.hoverAudio} label="音频自动播放" onChange={() => setDraft({ ...draft, hoverAudio: !draft.hoverAudio })} />
           <Check checked={draft.hoverVideo} label="视频自动播放" onChange={() => setDraft({ ...draft, hoverVideo: !draft.hoverVideo })} />
-          <Check checked={draft.hoverGif} label="GIF 自动播放" onChange={() => setDraft({ ...draft, hoverGif: !draft.hoverGif })} />
         </div>
       </section>
       <section className="pref-section">

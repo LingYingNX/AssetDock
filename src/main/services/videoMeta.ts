@@ -9,6 +9,36 @@ export interface VideoMeta {
   fps?: number
 }
 
+export const MAX_VIDEO_PROBES = 4
+
+export function createLimiter(max: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let active = 0
+  const waiters: Array<() => void> = []
+  const acquire = async (): Promise<void> => {
+    if (active < max) {
+      active++
+      return
+    }
+    await new Promise<void>((resolve) => waiters.push(resolve))
+    active++
+  }
+  const release = (): void => {
+    active--
+    const next = waiters.shift()
+    if (next) next()
+  }
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    await acquire()
+    try {
+      return await task()
+    } finally {
+      release()
+    }
+  }
+}
+
+const videoProbeLimit = createLimiter(MAX_VIDEO_PROBES)
+
 function parseDuration(s: string): number | undefined {
   const m = s.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/)
   if (!m) return undefined
@@ -34,12 +64,17 @@ function parseFps(s: string): number | undefined {
   return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : undefined
 }
 
+/** ffmpeg 只读输入头；不要加输出参数，否则会把整段视频解码一遍。 */
+export function videoProbeArgs(absPath: string): string[] {
+  return ['-hide_banner', '-i', absPath]
+}
+
 /** 经 ffmpeg -i 解析视频时长/分辨率/编码/帧率(解析失败返回空对象,不抛错) */
 export function probeVideo(absPath: string): Promise<VideoMeta> {
-  return new Promise((resolve) => {
+  return videoProbeLimit(() => new Promise((resolve) => {
     execFile(
       ffmpegPath as string,
-      ['-i', absPath, '-f', 'null', '-'],
+      videoProbeArgs(absPath),
       { timeout: 15000, maxBuffer: 1024 * 256 },
       (_err, _stdout, stderr) => {
         const out = stderr?.toString() ?? ''
@@ -48,7 +83,7 @@ export function probeVideo(absPath: string): Promise<VideoMeta> {
         resolve({ duration, ...dims, codec: parseCodec(out), fps: parseFps(out) })
       }
     )
-  })
+  }))
 }
 
 /** 供单测:纯文本解析 */

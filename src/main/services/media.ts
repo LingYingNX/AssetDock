@@ -21,17 +21,29 @@ export function mimeForExtension(ext: string): string {
 }
 
 /**
- * 解析 HTTP Range 头为流式读取的 [start, end](含端);不合法时回退全文件。
- * 边界规则:缺 start=0;缺 end=total-1;start 越界回退 0;end 越界钳到 total-1。
- * 纯函数(S1-11):协议 handler 之外可直接单测。
+ * 解析 HTTP Range 头为流式读取的 [start, end](含端)。
+ * 返回 null 表示区间不可满足,由协议层转成 416。
  */
-export function parseRangeHeader(range: string, total: number): { start: number; end: number } {
-  const m = range.match(/bytes=(\d*)-(\d*)/)
-  let start = m?.[1] ? Number(m[1]) : 0
-  let end = m?.[2] ? Number(m[2]) : total - 1
-  if (Number.isNaN(start) || start >= total) start = 0
-  if (end >= total) end = total - 1
-  return { start, end }
+export function parseRangeHeader(range: string, total: number): { start: number; end: number } | null {
+  if (!Number.isSafeInteger(total) || total <= 0) return null
+  const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim())
+  if (!m || (m[1] === '' && m[2] === '')) return null
+
+  if (m[1] === '') {
+    const suffix = Number(m[2])
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null
+    return { start: Math.max(0, total - suffix), end: total - 1 }
+  }
+
+  const start = Number(m[1])
+  const end = m[2] === '' ? total - 1 : Number(m[2])
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= total || end < start) return null
+  return { start, end: Math.min(end, total - 1) }
+}
+
+/** 缩略图缓存参数只接受内容指纹,不能把任意字符串拼进缓存路径。 */
+export function isValidThumbFingerprint(value: string): boolean {
+  return /^[0-9a-f]{20}$/i.test(value)
 }
 
 /** 只有位图能生成缩略图;PSD/SVG 交给占位图路径,视频仍走原文件首帧 */
@@ -103,8 +115,13 @@ export function registerMediaProtocol(): void {
 
       const ext = extname(realPath).toLowerCase()
       const fingerprint = u.searchParams.get('v') ?? ''
+      const thumbRequested = u.searchParams.get('thumb') === '1'
 
-      if (u.searchParams.get('thumb') === '1' && fingerprint) {
+      if (thumbRequested && !isValidThumbFingerprint(fingerprint)) {
+        return new Response('forbidden', { status: 403 })
+      }
+
+      if (thumbRequested) {
         // 回收站素材的缩略图已随删除清理;此处不再懒生成,直接回原图,避免把刚删掉的缓存写回来
         const scope = libScopeDb(libId)
         let trashed = false
@@ -154,7 +171,14 @@ export function registerMediaProtocol(): void {
       const range = request.headers.get('range')
       if (range) {
         const total = st.size
-        const { start, end } = parseRangeHeader(range, total)
+        const parsed = parseRangeHeader(range, total)
+        if (!parsed) {
+          return new Response('range not satisfiable', {
+            status: 416,
+            headers: { 'content-range': `bytes */${total}` }
+          })
+        }
+        const { start, end } = parsed
         const stream = createReadStream(realPath, { start, end })
         return new Response(Readable.toWeb(stream) as ReadableStream, {
           status: 206,

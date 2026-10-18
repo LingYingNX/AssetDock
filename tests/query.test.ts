@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { infoRows, queryAssets, sidebarCounts, type Filters } from '../src/renderer/src/data/query'
+import { formatResolution, infoRows, queryAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
 
 const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tag: 'all' }
@@ -43,8 +43,17 @@ describe('queryAssets', () => {
     expect(rows.map(([k]) => k)).toEqual(['类型', '大小', '导入', '来源'])
     expect(rows[0][1]).toContain('CSS')
   })
+
+  it('uses a placeholder for images without dimensions', () => {
+    expect(formatResolution(asset({ format: 'PSD', width: undefined, height: undefined }))).toBe('—')
+  })
   it('counts only live local assets in the sidebar', () => {
     const assets = [asset({ id: 'one', folders: ['图'], favorite: true }), asset({ id: 'two' }), asset({ id: 'trash', deletedAt: '2026-09-10T00:00' })]
     expect(sidebarCounts(assets)).toMatchObject({ all: 2, untagged: 1, fav: 1, trash: 1, folders: { 图: 1 } })
+  })
+
+  it('reports the count and total size for the current result set', () => {
+    const assets = [asset({ id: 'one', sizeBytes: 1024 }), asset({ id: 'two', sizeBytes: 2048 })]
+    expect(statsOf(query(assets))).toEqual({ count: 2, size: '3 KB' })
   })
 })

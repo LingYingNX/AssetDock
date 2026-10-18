@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react'
+import { Fragment } from 'react'
 import { useUI } from '../store/ui'
 import { fmtCount, queryAssets, statsOf } from '../data/query'
+import { tagMenuItems } from '../data/filter-menu'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
 
@@ -56,16 +58,6 @@ const RATE_ITEMS: MenuItem[] = [
   { id: 'none', label: '未评分' }
 ]
 
-function tagMenuItems(): MenuItem[] {
-  const assets = useUI.getState().assets
-  const seen = new Map<string, string>()
-  for (const a of assets) for (const t of a.tags) seen.set(t.name, t.color)
-  return [
-    { id: 'all', label: '全部标签', groupEnd: true },
-    ...[...seen.entries()].map(([name, color]) => ({ id: name, label: name, dotColor: color }))
-  ]
-}
-
 export function FilterBar(): React.JSX.Element {
   const view = useUI((s) => s.view)
   const setView = useUI((s) => s.setView)
@@ -79,16 +71,16 @@ export function FilterBar(): React.JSX.Element {
   const setFilter = useUI((s) => s.setFilter)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
+  const search = useUI((s) => s.search)
+  const setSearch = useUI((s) => s.setSearch)
   const assets = useUI((s) => s.assets)
   const selectedSet = useUI((s) => s.selectedSet)
   const nav = useUI((s) => s.nav)
-  const search = useUI((s) => s.search)
-  const setSearch = useUI((s) => s.setSearch)
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, stripColor }))
-  const selectedStats = statsOf(assets.filter((a) => selectedSet.has(a.id)))
+  const selectedStats = statsOf(assets.filter((asset) => selectedSet.has(asset.id)))
 
   const paintZoom = (el: HTMLInputElement): void => {
     const p = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100
@@ -100,7 +92,7 @@ export function FilterBar(): React.JSX.Element {
     { key: 'shape', label: '形状', items: SHAPE_ITEMS },
     { key: 'size', label: '尺寸', items: SIZE_ITEMS },
     { key: 'rating', label: '评分', items: RATE_ITEMS },
-    { key: 'tag', label: '标签', items: tagMenuItems() }
+    { key: 'tag', label: '标签', items: tagMenuItems(assets) }
   ]
 
   return (
@@ -140,7 +132,7 @@ export function FilterBar(): React.JSX.Element {
         <span className="cball" />
       </button>
       {dropdowns.map((d) => (
-        <div key={d.key} style={{ display: 'contents' }}>
+        <Fragment key={d.key}>
           <button
             className={`btn${filters[d.key] !== 'all' ? ' on' : ''}${openMenu === `m-f-${d.key}` ? ' open' : ''}`}
             data-menu={`m-f-${d.key}`}
@@ -152,7 +144,7 @@ export function FilterBar(): React.JSX.Element {
             {d.key === 'tag' && filters.tag !== 'all' ? (
               <span
                 className="dot"
-                style={{ background: useUI.getState().assets.flatMap((a) => a.tags).find((t) => t.name === filters.tag)?.color ?? '#64748B' }}
+                style={{ background: assets.flatMap((a) => a.tags).find((t) => t.name === filters.tag)?.color ?? '#64748B' }}
               />
             ) : null}
             {d.label}
@@ -164,10 +156,8 @@ export function FilterBar(): React.JSX.Element {
             value={filters[d.key]}
             onPick={(v) => setFilter(d.key, v)}
           />
-        </div>
+        </Fragment>
       ))}
-      {/* 计数前面补一条分隔线:它靠 margin-left:auto 顶到右侧,左侧原本没有任何分界,
-          读起来像一句悬空注释。auto 交给这条 .vr-lead,左=筛选组、右=计数·视图·缩放 各自成组。 */}
       <span className="vr vr-lead" />
       <span className="fresult">
         {scanProgress ? `${scanProgress} · ` : ''}

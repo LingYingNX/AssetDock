@@ -9,7 +9,17 @@
 .content>*{position:relative;z-index:1}
 
 /* ---------- 筛选条 ---------- */
-.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body)}
+/* 空间不足时的收缩顺序:搜索框先收(72px 触底)→ 滑块次之(68px 下限) →
+   按钮组 flex:none 永不变形。全都装不下时只藏被挤出条外的部分(不横滚):
+   用户明确要求「挤不下就到最小限制,不要滚动条再放开缩小」。缩小的极限 =
+   右端(滑块 + 面板开关)刚好完整落在条内;再窄,控件被裁——与设计基准一致。
+   overflow:hidden + flex-shrink:0:只裁 x 溢出,垂直方向 42px 条高恒定;
+   flex-shrink:0 防止条本身在 flex 列里被压变形。 */
+/* 溢出裁切:overflow:hidden 在 flex 容器上常被 Chromium 忽略(实际渲染仍然可见,
+   实测 1334 窗下面板按钮被画到检查器上),必须配合 flex-shrink:0 之外的显式
+   裁切手段。contain:paint 把绘制限定在筛选条盒内,溢出部分真正不渲染。 */
+.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body);overflow:hidden;flex-shrink:0;contain:paint inline-size}
+.filterbar>.btn,.filterbar>div>.btn,.filterbar .cbtn,.filterbar .tb-btn,.filterbar .vr{flex:none}
 /* 搜索框(原在已删除的工具栏里):与筛选下拉同处一条 42px 的筛选条,是筛选的第一入口。
    外观照搬用户给的「星云输入框」:深色底 + 细边框 + 聚焦紫色辉光 + 粒子。
    照抄时只按容器改三处:去掉原设计的 width/margin 居中(位置交给筛选条)、15px 内边距收成
@@ -20,7 +30,12 @@
    描边最终定为「未聚焦 2px 暗边、聚焦时收成 1px 亮边」:静止时框要有分量、看得见边界,
    聚焦时改由颜色与辉光说话,不再靠粗细。
    浅色主题用 --bg2,否则浅色界面里会嵌一块暗块。 */
-.searchbox{position:relative;display:block;flex:none;width:250px;height:34px;
+/* 右端(视图·缩放·面板按钮)永远留在条内:窄窗不折行,而是让搜索框收窄、按钮组往左补齐。
+   clamp 给理想宽,但基准不能用 100vw——筛选条在中间列,开了检查器后中间列远窄于窗口,
+   按窗宽算出的宽度装不下,右侧按钮会被顶出条外叠到检查器上(实测溢出 41px)。
+   所以搜索框 flex-shrink:1:空间不够先收缩自己(min-width 120px 触底),
+   触底后才轮到按钮往左挤;挤不下即 1024px 窗口最小宽度,那是设计边界。 */
+.searchbox{position:relative;display:block;flex:0 1 auto;min-width:72px;width:382px;height:34px;
   --nb-bg:rgba(0,0,15,.3);--nb-border:#2a2a3a;--nb-fg:#fff}
 :root:not([data-theme="dark"]) .searchbox{--nb-bg:var(--bg2);--nb-border:var(--line);--nb-fg:var(--t1)}
 .searchbox .input{width:100%;height:100%;padding:0 12px;border:2px solid var(--nb-border);background:var(--nb-bg);color:var(--nb-fg);font-size:var(--fs-body);outline:none;border-radius:var(--r-xs);transition:all .4s ease-out}
@@ -58,29 +73,25 @@
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
 .filterbar .tb-btn.on{border-color:var(--acc-line);color:var(--acc2);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
-.zoomer{display:flex;align-items:center;gap:7px;color:var(--t3);min-width:0}
-.zoomer .ic{width:var(--ic-md);height:var(--ic-md);flex:none}
-input[type=range]{-webkit-appearance:none;appearance:none;width:88px;height:3px;border-radius:2px;cursor:pointer;background:linear-gradient(90deg,var(--acc) 40%,rgba(255,255,255,.55) 40%)}
+/* 右端(视图·缩放·面板按钮)留在条内:窄窗不折行,而是让搜索框先收、滑块次之、
+    按钮组往左补齐。收缩顺序:搜索框 120px 触底 → 滑块 96px 下限 → 按钮组
+    flex:none 永不变形。全装不下时筛选条 overflow:hidden 只裁被挤出条外的部分
+    (不横滚,不要滚动条再放开缩小限制):最小窗口 = 右端完整进条内,再窄则裁。
+    滑块最小 96px:再窄 thumb 在最左端时会压住轨道起点,盖住面板开关按钮。 */
+.zoomer{display:flex;align-items:center;color:var(--t3);flex-shrink:1;min-width:68px}
+/* zoomer 内容:图标 + 滑块。图标 16px + 滑块 80px = 96px 刚好贴住 96px 下限,
+   所以图标必须 flex:none、滑块可以再缩(60px),整体才不会撑破 96px 溢出条外。 */
+.zoomer .ic{flex:none}
+.zoomer input[type=range]{flex:0 1 auto;width:80px;min-width:52px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:88px;min-width:0;height:3px;border-radius:2px;cursor:pointer;background:linear-gradient(90deg,var(--acc) 40%,rgba(255,255,255,.55) 40%)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
-/* 「已选中 N 项 · 16.3MB」原来孤立贴在筛选组与视图组之间的缝里,和谁都不成组
-   (它靠 margin-left:auto 顶到右侧,左边却没有分界,读起来像一句悬空注释)。
-   FilterBar 在它前面插了一条 .vr-lead,由这条分隔线吸收剩余空间:
-   左=筛选组,右=计数 · 视图 · 缩放。auto 必须落在 .vr-lead 而不是 .fresult,
-   否则分隔线会被留在筛选组一侧、与计数分家。不带 lead 类的 .vr(Lightbox 复用)零 margin。 */
-.fresult{font-size:var(--fs-cap);color:var(--t3)}
-.fresult b{color:var(--t1);font-weight:600}
 .vr{width:1px;height:18px;background:var(--line2)}
 .filterbar .vr-lead{margin-left:auto}
-/* 设计基准 1920×1080 以下:筛选组 · 计数 · 视图 · 缩放排在一条 42px 的横条上,
-   窄窗里右端那组必然被挤出可视区(而且因为 overflow 隐藏,连滚过去都做不到)。
-   窄窗允许折行,按可用宽度重新排布;折行后 .vr-lead 不再用 margin-left:auto ——
-   那会把分隔线顶到上一行末尾,和它要分界的计数分家。 */
-@media (max-width:1439px){
-  .filterbar{flex-wrap:wrap;height:auto;min-height:var(--h-bar);padding-top:6px;padding-bottom:6px;row-gap:6px}
-  .filterbar .vr-lead{margin-left:0}
-  input[type=range]{width:72px}
-}
+.fresult{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-cap);color:var(--t3)}
+.fresult b{color:var(--t1);font-weight:600}
+/* 旧响应式 clamp(1600px 起线性收窄)已删:收缩改由 flex-shrink 按实际可用空间进行,
+   不再依赖窗口宽(基准 100vw 在检查器打开时是错的)。 */
 
 /* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
 .color-menu{width:max-content;padding:6px}

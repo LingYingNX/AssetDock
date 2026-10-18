@@ -23,9 +23,6 @@ const api = {
     open: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:open', libraryId),
     list: (): Promise<{ id: number; name: string; path: string }[]> => ipcRenderer.invoke('library:list'),
     takeMigrationFailures: (): Promise<{ names: string[] }> => ipcRenderer.invoke('library:takeMigrationFailures'),
-    legacyStats: (): Promise<{ assets: number }> => ipcRenderer.invoke('library:legacyStats'),
-    purgeLegacy: (confirm: boolean): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('library:purgeLegacy', confirm === true),
     importEagle: (libraryId: number, folderPath: string): Promise<{ imported: number; multiFolderAssets: number } | { error: string }> =>
       ipcRenderer.invoke('eagle:import', libraryId, folderPath)
   },

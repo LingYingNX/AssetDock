@@ -1,4 +1,3 @@
-import { ASSETS, COLOR_STRIP, FOLDERS } from './dataset'
 import type { Asset, NavKey } from './types'
 
 /* ---------- 展示格式化 ---------- */
@@ -39,6 +38,7 @@ export function formatFullDate(iso: string): string {
 export function formatResolution(a: Asset): string {
   if (a.type === 'model') return ''
   if (a.format === 'SVG') return '矢量'
+  if (!a.width || !a.height) return '—'
   return `${a.width}×${a.height}`
 }
 
@@ -306,5 +306,3 @@ function pxLabel(a: Asset): string | undefined {
   if (px >= 1920) return 'FHD'
   return undefined
 }
-
-export { ASSETS, FOLDERS, COLOR_STRIP }

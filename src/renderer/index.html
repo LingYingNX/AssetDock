@@ -8,7 +8,7 @@
          CSS 预览 iframe 各自需要的源;connect-src 放行 media: 保住 fetch 能力 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' media: data: blob:; media-src media: blob:; font-src 'self' media: data:; connect-src 'self' media: ws: http://localhost:*"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' media: data: blob:; media-src media: blob:; font-src 'self' media: data:; connect-src 'self' media: ws: http://localhost:*"
     />
     <title>MediaHub · 素材管理器</title>
     <script src="./theme-boot.js"></script>

@@ -13,8 +13,8 @@
 import { registerLibraryIpc } from './ipc/libraries'
 import { registerAssetsIpc } from './ipc/assets'
 
-export function registerIpc(userData: string): void {
-  registerLibraryIpc(userData)
+export function registerIpc(): void {
+  registerLibraryIpc()
   registerAssetsIpc()
 }
 

@@ -151,6 +151,10 @@ export default function App(): React.JSX.Element {
         st.selectAllVisible()
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        if (st.copySelected()) e.preventDefault()
+        return
+      }
       if (st.lightboxId) {
         if (e.key === 'ArrowLeft') st.stepLightbox(-1)
         if (e.key === 'ArrowRight') st.stepLightbox(1)

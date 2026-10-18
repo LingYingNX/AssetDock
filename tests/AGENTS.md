@@ -6,7 +6,7 @@
 
 ## Overview
 
-vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）。没有 `vitest.config.ts`，走默认配置，因此**测试文件放 `tests/` 顶层**，import 路径用 `../src/...`。
+vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）。`vitest.config.mts` 将 `sharp` / `better-sqlite3` 外置给 Node 加载，因此**测试文件放 `tests/` 顶层**，import 路径用 `../src/...`。
 
 覆盖对象是**主进程的纯逻辑与文件/库行为**，外加渲染层的纯函数（`query.ts`、`folder-drag.ts`、`ui.ts` 的 `rowToAsset`）。React 组件与真实 Electron 窗口不在测试范围内。
 
@@ -32,7 +32,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 
 ## Setup & environment
 
-- 前置：`npm run test` 会先跑 `node tools/rebuild-native-dual.mjs --ensure` 备好 better-sqlite3 双 ABI，再 `vitest run`。
+- 前置：`npm run test` 会逐文件运行 `tools/run-tests.mjs`，避免原生模块跨测试进程累积。
 - 只用内存库：`openMemoryDb()`（全局库）与 `openMemoryLibDb()`（每库库），不要碰真实 `userData`。
 - 需要真实文件系统时用临时目录 + `afterEach` 清理：
 
@@ -80,10 +80,10 @@ it('rejects moving a folder into itself', async () => {
 - [ ] `npm run test` 全绿（贴出输出）
 - [ ] 新增/改动的行为有对应用例；没有为了通过而放宽或删除断言
 - [ ] 新用例无临时目录残留、无遗留 `console.log`
-- [ ] 涉及原生模块的用例在跑过 `npm run rebuild:native:dual` 后仍通过
+- [ ] 涉及原生模块的用例在 Electron 与 Node 两侧都可加载
 
 ## When stuck
 
-- `ERR_DLOPEN_FAILED` / 打不开库 → better-sqlite3 是双 ABI，先 `npm run rebuild:native:dual`。
+- `ERR_DLOPEN_FAILED` / 打不开库 → 先重新安装依赖，确认 N-API 预编译包完整。
 - 用例只在单独跑时通过 → 检查是否共享了模块级可变状态（如 `watch.ts` 的 `debounces` 表）；用到每库数据库句柄时按 `libraryConsistency.test.ts` 的做法在收尾调 `closeAllLibHandles()`。
 - 用例依赖真实 Electron 能力（`protocol` / `BrowserWindow`）→ 那类行为不在本套件覆盖，改走根 `AGENTS.md` 里的 9223 无头调试桥验证。

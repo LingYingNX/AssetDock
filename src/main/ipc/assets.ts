@@ -2,7 +2,7 @@ import { ipcMain, dialog, clipboard } from 'electron'
 import { access } from 'node:fs/promises'
 import { getDb } from '../services/db'
 import {
-  addTag, removeTag, setAssetFolder, renameAssetFolder, renameFolderOrders,
+  addTag, removeTag, applyMovedAssets, renameAssetFolder, renameFolderOrders,
   listFolderOrders, replaceFolderOrders, listAssets, updateAsset, getLibrary, sanitizeAssetPatch,
   upsertScanned, type AssetPatch
 } from '../services/store'
@@ -14,7 +14,7 @@ import {
 import { removeThumbsIfUnused, retargetThumb } from '../services/thumbs'
 import { readShellAsset, readTextAsset, renameShellAlongside, writeShellAsset, writeTextAsset } from '../services/textAssets'
 import { copyFilesToClipboard } from '../services/clipboardFiles'
-import { moveEagleLibraryAssets, scanEagleLibrary, type EagleScan } from '../services/eagle'
+import { copyEagleLibraryAssets, scanEagleLibrary, type EagleScan } from '../services/eagle'
 import { assetsByIds } from '../services/store'
 import { send } from '../events'
 import { absPathFor, libRootOf, releaseScope, scopeFor, win, type Scope } from './context'
@@ -174,7 +174,7 @@ export function registerAssetsIpc(): void {
             | undefined)
         : undefined
       // 先落库再处理缓存,否则恢复时预热仍会读到旧的 deleted_at 而跳过该素材
-      updateAsset(s.db, id, clean)
+      if (!updateAsset(s.db, libraryId, id, clean)) return { ok: false }
       if (row && trashing) await removeThumbsIfUnused(s.libPath, s.db, libraryId, [row.fingerprint])
       if (row && restoring) queueThumbWarmup(libraryId)
       // 单素材编辑(评分/收藏/备注/回收站)走增量:渲染层只合并这一行
@@ -332,18 +332,14 @@ export function registerAssetsIpc(): void {
         if (row.missing) return { error: '缺失文件不能移动' }
       }
 
-      // 磁盘 move 逐个执行(可给出失败清单);行更新全部包进 better-sqlite3
-      // 事务,磁盘已动而库更新失败时不留半截状态——同一素材失败即整体回滚计数
-      let moved = 0
-      const tx = s.db.transaction((items: { id: number; rel_path: string; fingerprint: string }[], newRelPaths: Map<number, string>) => {
-        const upd = s.db.prepare('UPDATE assets SET rel_path = ?, folder_path = NULL WHERE id = ? AND library_id = ?')
+      const commitMoved = async (items: { id: number; rel_path: string; fingerprint: string }[]): Promise<number> => {
+        const moved = applyMovedAssets(s.db, libraryId, items, newRelPaths)
         for (const item of items) {
-          const relPath = newRelPaths.get(item.id) ?? item.rel_path
-          upd.run(relPath, item.id, libraryId)
-          setAssetFolder(s.db, item.id, null)
-          moved++
+          await retargetThumb(s.libPath, item.fingerprint, newRelPaths.get(item.id) ?? item.rel_path).catch(() => {})
         }
-      })
+        if (moved > 0) send('assets:changed', { libraryId, assetIds: items.map((item) => item.id) })
+        return moved
+      }
 
       // 先完成全部磁盘 rename,收集新 rel_path;任一失败立即中止并返回已移动清单
       const newRelPaths = new Map<number, string>()
@@ -355,22 +351,13 @@ export function registerAssetsIpc(): void {
           newRelPaths.set(assetId, relPath)
           movedItems.push(item)
         } catch (error) {
-          // S1-5:磁盘部分成功 + 库零写入,直接如实上报失败清单;已 rename 的文件
-          // 由库记录仍指向旧路径时的「missing 重扫」兜底(行为与旧版一致,不再有半截库状态)
-          return { error: error instanceof Error ? error.message : '移动素材失败', moved: 0 }
+          // 磁盘已成功移动的前缀必须先落库,否则重扫会把它们当成新素材,丢掉标签和评分。
+          const moved = await commitMoved(movedItems)
+          return { error: error instanceof Error ? error.message : '移动素材失败', moved }
         }
       }
 
-      // 库更新一次性事务:全成或全不成
-      tx(movedItems, newRelPaths)
-
-      // 缩略图清单按新路径同步(fingerprint 不变,移动后缩略图继续有效)
-      for (const item of movedItems) {
-        await retargetThumb(s.libPath, item.fingerprint, newRelPaths.get(item.id) ?? item.rel_path).catch(() => {})
-      }
-
-      // S1-7:移动会改 rel_path/folder_path,目标集合按 id 增量合并即可
-      send('assets:changed', { libraryId, assetIds: idList })
+      const moved = await commitMoved(movedItems)
       return { moved }
     } finally {
       releaseScope(s)
@@ -401,7 +388,7 @@ export function registerAssetsIpc(): void {
       return { copied: fileDrop.copied, mode: 'files' as const, skipped: fileDrop.skipped, paths: abs }
     }
 
-    clipboard.write({ text: abs.join('\r\n') })
+    await clipboard.writeText(abs.join('\r\n'))
     return { copied: abs.length, mode: 'paths' as const, skipped: fileDrop?.skipped ?? [], paths: abs }
   })
 
@@ -440,8 +427,7 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
     try {
-      addTag(s.db, id, name)
-      return { ok: true }
+      return { ok: addTag(s.db, libraryId, id, name) }
     } finally {
       releaseScope(s)
     }
@@ -451,8 +437,7 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
     try {
-      removeTag(s.db, id, name)
-      return { ok: true }
+      return { ok: removeTag(s.db, libraryId, id, name) }
     } finally {
       releaseScope(s)
     }
@@ -544,7 +529,7 @@ export function registerAssetsIpc(): void {
       await watchManager.close(rootKey)
 
       try {
-        const imported = await moveEagleLibraryAssets(folderPath, s.libPath, eagle, (done) => {
+        const imported = await copyEagleLibraryAssets(folderPath, s.libPath, eagle, (done) => {
           send('library:scan', { libraryId, done, phase: 'moving' })
         })
         upsertScanned(s.db, libraryId, imported.entries)

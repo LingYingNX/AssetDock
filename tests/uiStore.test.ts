@@ -761,3 +761,176 @@ describe('selection membership index', () => {
     expect(useUI.getState().selectedSet.has('absent')).toBe(false)
   })
 })
+
+describe('lightbox filtered navigation', () => {
+  it('stays inside the current favorites view when stepping next', async () => {
+    vi.stubGlobal('window', { windowApi: {}, confirm: () => true })
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    const row = (id: number, name: string, favorite: number) => ({
+      id,
+      library_id: 7,
+      rel_path: `${name}.jpg`,
+      fingerprint: '0123456789abcdef0123',
+      type: 'image',
+      format: 'JPG',
+      name,
+      size_bytes: 1,
+      imported_at: '2026-10-01T00:00',
+      rating: 0,
+      favorite,
+      review_flag: 0,
+      tags: [],
+      palette: '[]'
+    })
+    const favA = rowToAsset(row(1, 'fav-a', 1))
+    const normal = rowToAsset(row(2, 'normal', 0))
+    const favB = rowToAsset(row(3, 'fav-b', 1))
+    useUI.setState({
+      assets: [favA, normal, favB],
+      nav: 'fav',
+      search: '',
+      filters: DEFAULT_FILTERS,
+      stripColor: null,
+      lightboxId: favA.id,
+      cssDirty: false
+    })
+
+    useUI.getState().stepLightbox(1)
+
+    expect(useUI.getState().lightboxId).toBe(favB.id)
+  })
+})
+
+describe('copy selected assets', () => {
+  it('copies selected rows from the active library', async () => {
+    const copy = vi.fn().mockResolvedValue({ copied: 1, mode: 'files', skipped: [], paths: [] })
+    const toasts: string[] = []
+    vi.stubGlobal('window', { setTimeout, clearTimeout, windowApi: { assets: { copy } } })
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    const row = rowToAsset({
+      id: 1,
+      library_id: 7,
+      rel_path: 'a.jpg',
+      fingerprint: '0123456789abcdef0123',
+      type: 'image',
+      format: 'JPG',
+      name: 'a',
+      size_bytes: 1,
+      imported_at: '2026-10-01T00:00',
+      rating: 0,
+      favorite: 0,
+      review_flag: 0,
+      tags: [],
+      palette: '[]'
+    })
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [row],
+      selectedIds: [row.id],
+      selectedSet: new Set([row.id]),
+      showToast: (text: string) => toasts.push(text)
+    })
+
+    expect(useUI.getState().copySelected()).toBe(true)
+    await vi.waitFor(() => expect(copy).toHaveBeenCalledWith(7, [1]))
+    expect(toasts).toEqual(['已复制 1 个文件'])
+  })
+
+  it('does not intercept copy when nothing is selected', async () => {
+    const copy = vi.fn()
+    vi.stubGlobal('window', { windowApi: { assets: { copy } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [],
+      selectedIds: [],
+      selectedSet: new Set()
+    })
+
+    expect(useUI.getState().copySelected()).toBe(false)
+    expect(copy).not.toHaveBeenCalled()
+  })
+
+  it('reports a rejected copy request', async () => {
+    const copy = vi.fn().mockRejectedValue(new Error('ipc down'))
+    const toasts: string[] = []
+    vi.stubGlobal('window', { windowApi: { assets: { copy } } })
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    const row = rowToAsset({
+      id: 1, library_id: 7, rel_path: 'a.jpg', fingerprint: '0123456789abcdef0123',
+      type: 'image', format: 'JPG', name: 'a', size_bytes: 1, imported_at: '2026-10-01T00:00',
+      rating: 0, favorite: 0, review_flag: 0, tags: [], palette: '[]'
+    })
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [row],
+      selectedIds: [row.id],
+      selectedSet: new Set([row.id]),
+      showToast: (text: string) => toasts.push(text)
+    })
+
+    useUI.getState().copySelected()
+    await vi.waitFor(() => expect(toasts).toEqual(['复制失败,请重试']))
+  })
+})
+
+describe('persistence failure feedback', () => {
+  const row = (id: number): Record<string, unknown> => ({
+    id,
+    library_id: 7,
+    rel_path: `a${id}.jpg`,
+    fingerprint: '0123456789abcdef0123',
+    type: 'image',
+    format: 'JPG',
+    name: `a${id}`,
+    size_bytes: 1,
+    imported_at: '2026-10-01T00:00',
+    rating: 0,
+    favorite: 0,
+    review_flag: 0,
+    tags: [],
+    palette: '[]'
+  })
+
+  it('reports a rejected move and reloads the library', async () => {
+    const move = vi.fn().mockRejectedValue(new Error('ipc down'))
+    const reload = vi.fn()
+    const toasts: string[] = []
+    vi.stubGlobal('window', { setTimeout, clearTimeout, windowApi: { assets: { move } } })
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [rowToAsset(row(1))],
+      reloadActiveLibrary: reload,
+      showToast: (text: string) => toasts.push(text)
+    })
+
+    useUI.getState().moveAssetsToFolder(['a1'], 'target')
+    await vi.waitFor(() => expect(toasts).toEqual(['移动素材失败,请重试']))
+    expect(reload).toHaveBeenCalled()
+  })
+
+  it('reports a rejected tag write and reloads the library', async () => {
+    const update = vi.fn().mockResolvedValue({ ok: true })
+    const addTag = vi.fn().mockRejectedValue(new Error('ipc down'))
+    const reload = vi.fn()
+    const toasts: string[] = []
+    vi.stubGlobal('window', { setTimeout, clearTimeout, windowApi: { assets: { update, addTag } } })
+    const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 't1', name: 'lib', libraryId: 7 }],
+      activeTabId: 't1',
+      assets: [rowToAsset(row(1))],
+      reloadActiveLibrary: reload,
+      showToast: (text: string) => toasts.push(text)
+    })
+
+    useUI.getState().addTag('a1', 'new-tag')
+    await vi.waitFor(() => expect(toasts).toEqual(['添加标签失败,请重试']))
+    expect(reload).toHaveBeenCalled()
+  })
+})

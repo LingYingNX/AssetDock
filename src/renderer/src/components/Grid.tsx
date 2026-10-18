@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import { useUI } from '../store/ui'
 import { queryAssets } from '../data/query'
+import { DEFAULT_FILTERS } from '../data/query'
+import { emptyStateFor } from '../data/empty-state'
 import { FALLBACK_THUMB_AR, thumbRatio } from '../data/thumb-ratio'
 import { marqueeHits, marqueeRect, type MarqueeCandidate } from '../data/marquee'
 import type { Asset } from '../data/types'
@@ -50,6 +52,7 @@ export function Grid(): React.JSX.Element {
   const clearSelection = useUI((s) => s.clearSelection)
   const setSelectedIds = useUI((s) => s.setSelectedIds)
   const setSearch = useUI((s) => s.setSearch)
+  const setNav = useUI((s) => s.setNav)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const emptyTrash = useUI((s) => s.emptyTrash)
   const reloadActiveLibrary = useUI((s) => s.reloadActiveLibrary)
@@ -175,32 +178,36 @@ export function Grid(): React.JSX.Element {
         </div>
       )
     }
-    const kind = nav === 'trash' || mode === 'library' ? (nav === 'trash' ? 'trash' : 'library') : 'results'
-    const title =
-      kind === 'trash'
-        ? '回收站是空的'
-        : mode === 'empty'
-          ? '还没有素材库'
-          : kind === 'library'
-          ? '这个视图下没有素材'
-          : '没有符合当前筛选条件的素材'
+    const empty = emptyStateFor({ mode, nav, search, filters, stripColor })
+    const clearFilters = (): void => {
+      clearSelection()
+      setSearch('')
+      useUI.setState({ filters: DEFAULT_FILTERS, stripColor: null })
+    }
+    const onEmptyAction =
+      empty.action === 'newLibrary'
+        ? createLibraryFlow
+        : empty.action === 'clearFilters'
+          ? clearFilters
+          : empty.action === 'backAll'
+            ? () => setNav('all')
+            : undefined
     return (
       <div className="gridwrap" ref={wrapRef}>
         {trashHeader}
         <EmptyState
-          kind={kind}
-          title={title}
-          actionLabel={mode === 'empty' ? '新建素材库' : kind === 'results' ? '清空搜索' : undefined}
-          onAction={
-            mode === 'empty'
-              ? createLibraryFlow
-              : kind === 'results'
-              ? () => {
-                  clearSelection()
-                  setSearch('')
-                }
-              : undefined
+          kind={empty.kind}
+          title={empty.title}
+          actionLabel={
+            empty.action === 'newLibrary'
+              ? '新建素材库'
+              : empty.action === 'clearFilters'
+                ? '清空筛选'
+                : empty.action === 'backAll'
+                  ? '返回全部素材'
+                  : undefined
           }
+          onAction={onEmptyAction}
         />
       </div>
     )

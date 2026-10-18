@@ -2,17 +2,29 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { openMemoryDb } from '../src/main/services/db'
 import { scanLibrary } from '../src/main/services/scan'
+import { upsertScanned, type ScanEntry } from '../src/main/services/store'
 
 describe('library scan', () => {
   it('scans batches without a preview scheduler', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mediahub-scan-'))
+    const db = openMemoryDb()
     try {
+      db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'scan', root)
       await Promise.all(Array.from({ length: 65 }, (_, index) => writeFile(join(root, `asset-${index}.obj`), 'model')))
       const progress: number[] = []
-      await expect(scanLibrary(root, (done) => progress.push(done))).resolves.toHaveLength(65)
+      const batches: number[] = []
+      await expect(scanLibrary(root, (done) => progress.push(done), undefined, (batch) => {
+        batches.push(batch.length)
+        upsertScanned(db, 1, batch)
+      })).resolves.toHaveLength(65)
       expect(progress).toEqual([20, 40, 60, 65])
+      expect(batches.reduce((sum, count) => sum + count, 0)).toBe(65)
+      expect(batches.length).toBeGreaterThan(1)
+      expect(db.prepare('SELECT COUNT(*) AS count FROM assets WHERE library_id = 1').get()).toEqual({ count: 65 })
     } finally {
+      db.close()
       await rm(root, { recursive: true, force: true })
     }
   })
@@ -35,6 +47,26 @@ describe('library scan', () => {
       expect(css?.fingerprint).toBeTruthy()
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('persists ten thousand synthetic entries', () => {
+    const db = openMemoryDb()
+    try {
+      db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'batch', 'C:/batch')
+      const entries: ScanEntry[] = Array.from({ length: 10_000 }, (_, index) => ({
+        relPath: `synthetic/asset-${index}.obj`,
+        name: `asset-${index}`,
+        type: 'model',
+        format: 'OBJ',
+        sizeBytes: 1,
+        mtimeMs: 1,
+        fingerprint: `synthetic-${index}`
+      }))
+      upsertScanned(db, 1, entries)
+      expect(db.prepare('SELECT COUNT(*) AS count FROM assets WHERE library_id = 1').get()).toEqual({ count: 10_000 })
+    } finally {
+      db.close()
     }
   })
 })

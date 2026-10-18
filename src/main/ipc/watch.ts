@@ -1,5 +1,5 @@
 import { scanLibrary } from '../services/scan'
-import type { ScanEntry } from '../services/store'
+import type { ScanEntry, ScanUpsertResult } from '../services/store'
 import { probeVideo } from '../services/videoMeta'
 import { refreshPalettes } from '../services/palette'
 import {
@@ -97,12 +97,25 @@ export async function scanLibraryContents(libraryId: number): Promise<void> {
   const s = scopeFor(libraryId)
   if (!s) return
   try {
-    const entries = await scanLibrary(s.libPath, (done) => send('library:scan', { libraryId, done, phase: 'scanning' }), (rel, error) => {
-      console.error('[scan] read failed', rel, error)
-    })
-    const results = upsertScanned(s.db, libraryId, entries)
+    const results: ScanUpsertResult[] = []
+    const entries = await scanLibrary(
+      s.libPath,
+      (done) => send('library:scan', { libraryId, done, phase: 'scanning' }),
+      (rel, error) => {
+        console.error('[scan] read failed', rel, error)
+      },
+      (batch) => {
+        const batchResults = upsertScanned(s.db, libraryId, batch)
+        results.push(...batchResults)
+        const changed = batchResults
+          .filter((result) => result.action !== 'unchanged')
+          .map((result) => result.assetId)
+        if (changed.length > 0) send('assets:changed', { libraryId, assetIds: changed })
+      }
+    )
     const scanErrors = (entries as ScanEntry[] & { __errors?: number }).__errors ?? 0
-    send('library:scan', { libraryId, done: entries.length, phase: 'done', added: entries.length, ...(scanErrors > 0 ? { errors: scanErrors } : {}) })
+    const added = results.filter((result) => result.action === 'added').length
+    send('library:scan', { libraryId, done: entries.length, phase: 'done', added, ...(scanErrors > 0 ? { errors: scanErrors } : {}) })
     queuePaletteRefresh(s, libraryId, entries, results)
   } finally {
     releaseScope(s)
@@ -171,7 +184,7 @@ async function enrichMissingMeta(libraryId: number): Promise<void> {
     for (let i = 0; i < rows.length; i += PROBE_CONCURRENCY) {
       await Promise.all(rows.slice(i, i + PROBE_CONCURRENCY).map(async (r) => {
         const m = await probeVideo(absPathFor(s, r.rel_path))
-        updateAsset(s.db, r.id, { codec: m.codec ?? null, fps: m.fps ?? null, width: m.width, height: m.height, duration: m.duration })
+        updateAsset(s.db, libraryId, r.id, { codec: m.codec ?? null, fps: m.fps ?? null, width: m.width, height: m.height, duration: m.duration })
       }))
     }
     send('assets:changed', { libraryId })

@@ -159,6 +159,7 @@ export function Inspector(): React.JSX.Element {
           <label className="linkin">
             <Icon name="external" />
             <input
+              key={`source-${a.id}`}
               type="url"
               placeholder="粘贴素材来源链接 https://…"
               defaultValue={a.sourceUrl ?? ''}
@@ -170,6 +171,7 @@ export function Inspector(): React.JSX.Element {
         <div className="insp-sec">
           <div className="insp-h"><Icon name="edit" />备注</div>
           <textarea
+            key={`note-${a.id}`}
             className="note"
             placeholder="添加备注、拍摄信息、使用限制…"
             defaultValue={a.note}

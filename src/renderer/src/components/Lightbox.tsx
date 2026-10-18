@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
-import { Viewer3D, type ViewKey } from './Viewer3D'
+import { LazyViewer3D } from './LazyViewer3D'
+import type { ViewKey } from './Viewer3D'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
@@ -327,7 +328,7 @@ export function Lightbox(): React.JSX.Element | null {
             {realModel ? (
               <div className="pv3d" style={{ position: 'relative' }}>
                 <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
-                <Viewer3D
+                <LazyViewer3D
                   url={a.originalUrl ?? ''}
                   format={a.format as 'GLB' | 'FBX' | 'OBJ'}
                   turntable={realTurn}

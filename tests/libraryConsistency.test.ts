@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { openMemoryDb } from '../src/main/services/db'
 import { isPathWithinRoot, realPathWithinRoot } from '../src/main/services/libResolve'
 import { closeAllLibHandles, ensureLibraryStorage, openLibDb } from '../src/main/services/libraryDb'
-import { addTag, assetById, listAssets, renameAssetFolder, updateAsset, upsertScanned } from '../src/main/services/store'
+import { addTag, assetById, listAssets, removeTag, renameAssetFolder, updateAsset, upsertScanned } from '../src/main/services/store'
 
 const entry = (relPath: string, fingerprint: string, mtimeMs = 1) => ({
   relPath, name: relPath.slice(0, relPath.lastIndexOf('.')), type: 'image' as const, format: 'JPG', sizeBytes: 1, mtimeMs, fingerprint
@@ -27,8 +27,8 @@ describe('library consistency', () => {
     const db = openMemoryDb()
     db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', 'C:/one')
     const [first] = upsertScanned(db, 1, [entry('a.jpg', 'first')])
-    addTag(db, first.assetId, 'nature')
-    updateAsset(db, first.assetId, { note: 'keep me', rating: 5, source_url: 'https://example.test/ref' })
+    addTag(db, 1, first.assetId, 'nature')
+    updateAsset(db, 1, first.assetId, { note: 'keep me', rating: 5, source_url: 'https://example.test/ref' })
     upsertScanned(db, 1, [entry('a.jpg', 'second', 2)])
     expect(assetById(db, 1, first.assetId)).toMatchObject({ fingerprint: 'second', mtime_ms: 2, note: 'keep me', rating: 5, tags: [{ name: 'nature', color: expect.any(String) }] })
     db.close()
@@ -40,6 +40,22 @@ describe('library consistency', () => {
     upsertScanned(db, 1, [entry('sub/a.jpg', 'a'), entry('sub/child/b.jpg', 'b')])
     renameAssetFolder(db, 1, 'sub', 'renamed')
     expect(listAssets(db, 1).map((asset) => asset.rel_path).sort()).toEqual(['renamed/a.jpg', 'renamed/child/b.jpg'])
+    db.close()
+  })
+
+  it('rejects id-based edits from another fallback library', () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', 'C:/one')
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(2, 'two', 'C:/two')
+    const [a] = upsertScanned(db, 1, [entry('same.jpg', 'one')])
+    const [b] = upsertScanned(db, 2, [entry('same.jpg', 'two')])
+    addTag(db, 2, b.assetId, 'owned-by-two')
+
+    expect(updateAsset(db, 1, b.assetId, { rating: 5, note: 'wrong' })).toBe(false)
+    expect(addTag(db, 1, b.assetId, 'wrong-tag')).toBe(false)
+    expect(removeTag(db, 1, b.assetId, 'owned-by-two')).toBe(false)
+    expect(assetById(db, 2, b.assetId)).toMatchObject({ rating: 0, note: '', tags: [{ name: 'owned-by-two' }] })
+    expect(assetById(db, 1, a.assetId)?.rating).toBe(0)
     db.close()
   })
 

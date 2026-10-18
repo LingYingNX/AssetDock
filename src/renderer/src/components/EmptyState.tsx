@@ -1,6 +1,4 @@
-/** 空态插画(规格 §9):三款玻璃风几何插画 + 主文案 + 动作按钮 */
-
-type EmptyKind = 'results' | 'library' | 'trash'
+import type { EmptyKind } from '../data/empty-state'
 
 function Art({ kind }: { kind: EmptyKind }): React.JSX.Element {
   if (kind === 'library') {

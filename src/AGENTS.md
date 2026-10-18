@@ -22,7 +22,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 | 模块 | 职责 |
 |------|------|
-| `db.ts` / `sqlite.ts` | 全局库（注册表 `libraries`、`app_state`）；`openSqlite` 按 ABI 选原生二进制 |
+| `db.ts` / `sqlite.ts` | 全局库（注册表 `libraries`、`app_state`）；`openSqlite` 使用 N-API 预编译绑定 |
 | `libraryDb.ts` | 每库 `.mediahub/library.db` 的建表与句柄；`mediaDir()` 给出该目录 |
 | `store.ts` | 资产/标签/库的读写与 upsert（`AssetRow`、`upsertScanned`） |
 | `libResolve.ts` | 库作用域解析：`isPathWithinRoot` / `realPathWithinRoot` / `libScopeDb` |
@@ -48,7 +48,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 ## Setup & environment
 
-- `npm install` 后如原生模块报错，跑 `npm run rebuild:native:dual`；镜像已配在 `.npmrc`。
+- `npm install` 会下载 Electron 与 N-API 预编译模块；镜像已配在 `.npmrc`。
 - 无 `.env`，无需环境变量；应用数据在 `app.getPath('userData')`。
 - `npm run dev` 打开窗口，同时监听 `127.0.0.1:9223`（仅 dev，`tools/hhead.mjs` 可直接执行表达式断言）。
 
@@ -56,7 +56,6 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 - 类型检查：`npm run typecheck`（分 node/web 两侧，改类型边界后必跑）
 - 测试：`npm run test`；单文件 `npm run test -- tests/xxx.test.ts`
-- 原生重建：`npm run rebuild:native:dual`（动 better-sqlite3 / sharp 后必跑）
 - 开发：`npm run dev`（dev 下 9223 是调试桥，`tools/hhead.mjs` 包了一层）
 
 ## Code style & conventions
@@ -141,7 +140,7 @@ export function probeVideo(absPath: string): Promise<VideoMeta> { /* execFile */
 
 - [ ] `npm run typecheck` 通过（贴出输出）
 - [ ] `npm run test` 通过；新逻辑有对应测试
-- [ ] 改了原生依赖 → 跑过 `npm run rebuild:native:dual`
+- [ ] 改了原生依赖 → `npm run test` 与 Electron 冒烟均通过
 - [ ] 改了 preload → 完整重启验证过，不是只看 HMR
 - [ ] 无遗留调试输出与临时断言
 - [ ] 未提交 `out/`、`artifacts/`、`素材/`
@@ -149,5 +148,5 @@ export function probeVideo(absPath: string): Promise<VideoMeta> { /* execFile */
 ## When stuck
 
 - 先看 `docs/ARCHITECTURE.md` 与 `openspec/specs/<能力>/spec.md`，再看根 `AGENTS.md` 的「非显然的坑」表。
-- 运行时报错且现象诡异（方法 undefined、库打不开）→ 多半是 preload 未重启或 better-sqlite3 ABI 不匹配，先按根文件那两条排查。
+- 运行时报错且现象诡异（方法 undefined、库打不开）→ 先确认 preload 已完整重启、原生预编译包安装完整。
 - 仓库里的旧 proposal / change delta 可能仍在描述已删除的「索引外部目录」语义，别照它实现。

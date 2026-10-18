@@ -20,8 +20,8 @@ describe('legacy source migration', () => {
       db.prepare("INSERT INTO index_sources(id, path, name) VALUES (7, ?, 'external')").run(source)
       const asset = Number(db.prepare("INSERT INTO assets(library_id, rel_path, name, type, format, size_bytes, mtime_ms, fingerprint, imported_at, source_index_id) VALUES (1, '@index:7/nested/asset.jpg', 'asset', 'image', 'JPG', 8, 1, 'asset', '2026-09-10T00:00', 7)").run().lastInsertRowid)
       db.prepare("INSERT INTO assets(library_id, rel_path, name, type, format, size_bytes, mtime_ms, fingerprint, imported_at, source_index_id, missing) VALUES (1, '@index:7/missing.jpg', 'missing', 'image', 'JPG', 1, 1, 'missing', '2026-09-10T00:00', 7, 1)").run()
-      addTag(db, asset, 'keep')
-      updateAsset(db, asset, { note: 'keep note', rating: 5, favorite: 1, source_url: 'https://example.test/asset' })
+      addTag(db, 1, asset, 'keep')
+      updateAsset(db, 1, asset, { note: 'keep note', rating: 5, favorite: 1, source_url: 'https://example.test/asset' })
 
       await expect(migrateLegacySources(db, 1, library)).resolves.toEqual({ moved: 1, removedMissing: 1, sourceIds: [7] })
 

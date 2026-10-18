@@ -47,10 +47,9 @@ MediaHub 素材管理器 — 本地优先的 Electron 桌面应用（Electron 33
 |------|---------|------|
 | 开发 | `npm run dev` | electron-vite dev；dev 下 9223 是无头调试桥 |
 | 类型检查 | `npm run typecheck` | node + web 两侧 tsc --noEmit |
-| 测试 | `npm run test` | 先 ensure 原生双 ABI，再 vitest run |
+| 测试 | `npm run test` | 逐文件运行 vitest，避免原生模块跨进程累积 |
 | 单测 | `npm run test -- tests/xxx.test.ts` | 参数追加给 vitest，只跑一个文件 |
 | 构建 | `npm run build` | 产物在 out/ |
-| 原生重建 | `npm run rebuild:native:dual` | 动原生依赖后必跑 |
 | 双击启动 | `启动.bat` | 先 cd 到脚本目录再跑 dev |
 
 ## Structure
@@ -72,7 +71,7 @@ tests/              vitest 用例   tools/ 开发与无头验证脚本   openspe
 
 | 症状 | 真相 |
 |------|------|
-| `node -e "require('better-sqlite3')"` 报 ERR_DLOPEN_FAILED | 双 ABI：默认二进制是 Electron ABI。查库用 npx electron 跑 .cjs 脚本，且脚本必须放在项目目录内才能解析依赖 |
+| `npm install` 后 Electron 报 `failed to install correctly` | Electron 二进制未下载完整；重新执行 `npx install-electron`，`.npmrc` 已配置国内镜像 |
 | 新加的 windowApi 方法在渲染层是 undefined | HMR 只重载渲染层；改 preload 必须完整重启 Electron |
 | 窗口拖不动 / 浮层点了没反应 | 标题栏拖拽由 Titlebar.tsx 的 openMenu 决定；任何覆盖顶部 48px 的浮层都会吃掉拖拽区 |
 | 改了主题却玻璃发灰 | 新表面要用 tokens.css 的 --sheen-* / --surface 令牌；用了 backdrop-filter 就得补 :root[data-theme="dark"] 对应规则 |

@@ -1,23 +1,26 @@
 import { ipcMain, dialog } from 'electron'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join as joinPath } from 'node:path'
 import { getDb } from '../services/db'
 import {
   createLibrary, getOpenTabs, saveOpenTabs, getAppState, setAppState,
   listLibraries, APP_STATE_KEYS
 } from '../services/store'
 import { ensureLibraryStorage } from '../services/libraryDb'
+import { rememberPickedPath, validateLibraryCreatePath, type PickedPathMap } from '../services/libraryCreate'
 import { win, libRootOf } from './context'
 import { reconcileWhenOpened, scanLibraryContents, migrationFailures, attachRootWatcher } from './watch'
 
+const pickedLibraryPaths: PickedPathMap = new Map()
+
 /** 库域 handler:library:* / tabs / state / dialog(S1-1 拆分) */
-export function registerLibraryIpc(userData: string): void {
+export function registerLibraryIpc(): void {
   ipcMain.handle('dialog:pickFolder', async () => {
     // S3-7:窗口可能在托盘化后不存在,不再用非空断言
     const w = win()
     if (!w) return null
     const r = await dialog.showOpenDialog(w, { properties: ['openDirectory'] })
-    return r.canceled ? null : r.filePaths[0]
+    if (r.canceled || !r.filePaths[0]) return null
+    rememberPickedPath(pickedLibraryPaths, r.filePaths[0])
+    return r.filePaths[0]
   })
 
   ipcMain.handle('library:open', (_e, libraryId: number) => {
@@ -26,18 +29,20 @@ export function registerLibraryIpc(userData: string): void {
     return { ok: true }
   })
 
-  ipcMain.handle('library:create', (_e, folderPath: string, requestedName?: string) => {
-    if (typeof folderPath !== 'string' || !folderPath.trim()) return { error: '请选择素材库目录' }
+  ipcMain.handle('library:create', async (_e, folderPath: string, requestedName?: string) => {
+    const checked = await validateLibraryCreatePath(pickedLibraryPaths, folderPath)
+    if (!checked.ok) return { error: checked.error }
+    const realPath = checked.path
     const db = getDb()
-    const bound = listLibraries(db).find((l) => l.path.toLowerCase() === folderPath.toLowerCase())
+    const bound = listLibraries(db).find((l) => l.path.toLowerCase() === realPath.toLowerCase())
     if (bound) return bound // 已绑定:直接当重开处理
     const name = typeof requestedName === 'string' && requestedName.trim()
       ? requestedName.trim()
-      : folderPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? folderPath
-    const lib = createLibrary(db, name, folderPath)
+      : realPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? realPath
+    const lib = createLibrary(db, name, realPath)
     if ('error' in lib) return lib
     const storageReady = ensureLibraryStorage(db, lib)
-    attachRootWatcher(lib.id, folderPath)
+    attachRootWatcher(lib.id, realPath)
     void scanLibraryContents(lib.id)
     return storageReady ? lib : { ...lib, warning: '素材库无法创建本地数据库，当前会话将使用全局回退数据' }
   })
@@ -66,38 +71,4 @@ export function registerLibraryIpc(userData: string): void {
     }
   })
 
-  // 迁移残留清理(全局兜底库):危险操作,要求显式 confirm + 删除前备份(S1-10)
-  ipcMain.handle('library:legacyStats', () => {
-    const d = getDb()
-    const r = d.prepare('SELECT COUNT(*) AS c FROM assets').get() as { c: number }
-    return { assets: r.c }
-  })
-
-  ipcMain.handle('library:purgeLegacy', (_e, confirm?: unknown) => {
-    if (confirm !== true) return { ok: false, error: 'missing confirm' }
-    const d = getDb()
-    const count = (d.prepare('SELECT COUNT(*) AS c FROM assets').get() as { c: number }).c
-    if (count > 0) {
-      try {
-        const backupDir = joinPath(userData, 'backups')
-        mkdirSync(backupDir, { recursive: true })
-        const dump = {
-          created_at: new Date().toISOString(),
-          assets: d.prepare('SELECT * FROM assets').all(),
-          tags: d.prepare('SELECT * FROM tags').all(),
-          asset_tags: d.prepare('SELECT * FROM asset_tags').all()
-        }
-        writeFileSync(joinPath(backupDir, `legacy-purge-${Date.now()}.json`), JSON.stringify(dump), 'utf8')
-      } catch {
-        // 备份失败不阻断清理:残留表本就是迁移兜底数据,清理本身幂等可重做
-      }
-    }
-    d.transaction(() => {
-      d.prepare('DELETE FROM asset_tags').run()
-      d.prepare('DELETE FROM tags').run()
-      d.prepare('DELETE FROM assets').run()
-    })()
-    d.pragma('wal_checkpoint(TRUNCATE)')
-    return { ok: true }
-  })
 }

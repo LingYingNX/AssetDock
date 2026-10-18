@@ -14,9 +14,10 @@ export interface CtxMenuState {
 }
 
 
-const mmss = (sec: number): string => {
-  const m = Math.floor(sec / 60)
-  const s = Math.round(sec % 60)
+export const mmss = (sec: number): string => {
+  const total = Math.max(0, Math.round(sec))
+  const m = Math.floor(total / 60)
+  const s = total % 60
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
@@ -279,6 +280,8 @@ interface UIState {
   setRating: (id: string, v: number) => void
   toggleFavorite: (id: string) => void
   toggleReviewFlag: (id: string) => void
+  /** 复制当前库的选中素材；返回是否发起了复制请求 */
+  copySelected: () => boolean
   renameAsset: (id: string, name: string) => void
   addTag: (id: string, name: string) => void
   removeTag: (id: string, name: string) => void
@@ -669,6 +672,9 @@ export const useUI = create<UIState>((set, get) => {
           return
         }
         get().reloadActiveLibrary()
+      }).catch(() => {
+        get().showToast('移动素材失败,请重试', 'warn')
+        get().reloadActiveLibrary()
       })
     },
 
@@ -728,6 +734,34 @@ export const useUI = create<UIState>((set, get) => {
         ...a,
         reviewFlag: !a.reviewFlag
       })),
+    copySelected: () => {
+      const tab = get().tabs.find((item) => item.id === get().activeTabId)
+      const libraryId = tab?.libraryId
+      if (libraryId == null) return false
+      const ids = get().assets
+        .filter((asset) => get().selectedSet.has(asset.id) && asset.dbId != null && asset.libraryId === libraryId)
+        .map((asset) => asset.dbId as number)
+      if (ids.length === 0) return false
+      void window.windowApi.assets.copy(libraryId, ids).then((result) => {
+        if ('error' in result) {
+          get().showToast(result.error, 'warn')
+          return
+        }
+        const skipped = result.skipped.length
+        if (result.mode === 'paths') {
+          get().showToast(
+            skipped > 0 ? `已复制 ${result.copied} 条路径,${skipped} 个文件已缺失` : `已复制 ${result.copied} 条路径`,
+            skipped > 0 ? 'warn' : 'ok'
+          )
+          return
+        }
+        get().showToast(
+          skipped > 0 ? `已复制 ${result.copied} 个文件,跳过 ${skipped} 个缺失项` : `已复制 ${result.copied} 个文件`,
+          skipped > 0 ? 'warn' : 'ok'
+        )
+      }).catch(() => get().showToast('复制失败,请重试', 'warn'))
+      return true
+    },
     /**
      * 重命名素材:改磁盘文件名,库记录随 `assets:changed` 一起刷新。
      *
@@ -756,12 +790,30 @@ export const useUI = create<UIState>((set, get) => {
       const a = get().assets.find((x) => x.id === id)
       if (!a || a.tags.some((t) => t.name === name)) return
       edit(id, {}, (x) => ({ ...x, tags: [...x.tags, { name, color: TAG_COLOR(name) }] }))
-      if (a.dbId != null && a.libraryId != null) void window.windowApi.assets.addTag(a.libraryId, a.dbId, name)
+      if (a.dbId != null && a.libraryId != null) {
+        void window.windowApi.assets.addTag(a.libraryId, a.dbId, name).then((result) => {
+          if (result.ok) return
+          get().showToast('添加标签失败,请重试', 'warn')
+          get().reloadActiveLibrary()
+        }).catch(() => {
+          get().showToast('添加标签失败,请重试', 'warn')
+          get().reloadActiveLibrary()
+        })
+      }
     },
     removeTag: (id, name) => {
       edit(id, {}, (x) => ({ ...x, tags: x.tags.filter((t) => t.name !== name) }))
       const a = get().assets.find((x) => x.id === id)
-      if (a?.dbId != null && a.libraryId != null) void window.windowApi.assets.removeTag(a.libraryId, a.dbId, name)
+      if (a?.dbId != null && a.libraryId != null) {
+        void window.windowApi.assets.removeTag(a.libraryId, a.dbId, name).then((result) => {
+          if (result.ok) return
+          get().showToast('删除标签失败,请重试', 'warn')
+          get().reloadActiveLibrary()
+        }).catch(() => {
+          get().showToast('删除标签失败,请重试', 'warn')
+          get().reloadActiveLibrary()
+        })
+      }
     },
     setNote: (id, note) => edit(id, { note }, (a) => ({ ...a, note })),
     setSourceUrl: (id, url) => edit(id, { source_url: url || null }, (a) => ({ ...a, sourceUrl: url || undefined })),
@@ -884,9 +936,12 @@ export const useUI = create<UIState>((set, get) => {
       set({ lightboxId: null, cssDirty: false, lightboxFullscreen: false })
     },
     stepLightbox: (dir) => {
-      const { lightboxId, assets } = get()
+      const { lightboxId, assets, nav, search, filters, stripColor } = get()
       if (get().cssDirty && !window.confirm('CSS 有未保存的修改,切换素材将丢弃这些改动。')) return
-      const visible = assets.filter((a) => !a.deletedAt)
+      const scoped = queryAssets(assets, { nav, search, filters, stripColor })
+      const visible = scoped.some((asset) => asset.id === lightboxId)
+        ? scoped
+        : assets.filter((asset) => !asset.deletedAt)
       if (visible.length === 0) return
       const idx = visible.findIndex((a) => a.id === lightboxId)
       if (idx < 0) return

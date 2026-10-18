@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAllowedMediaReferrer, mimeForExtension, parseRangeHeader } from '../src/main/services/media'
+import { isAllowedMediaReferrer, isValidThumbFingerprint, mimeForExtension, parseRangeHeader } from '../src/main/services/media'
 
 describe('isAllowedMediaReferrer (S0-1)', () => {
   it('allows the production file:// document', () => {
@@ -54,6 +54,18 @@ describe('mimeForExtension', () => {
   })
 })
 
+describe('isValidThumbFingerprint', () => {
+  it('accepts the 20-character content fingerprint format', () => {
+    expect(isValidThumbFingerprint('0123456789abcdefABCD')).toBe(true)
+  })
+
+  it('rejects path fragments and arbitrary cache keys', () => {
+    expect(isValidThumbFingerprint('../../Windows/file')).toBe(false)
+    expect(isValidThumbFingerprint('fp')).toBe(false)
+    expect(isValidThumbFingerprint('')).toBe(false)
+  })
+})
+
 describe('parseRangeHeader', () => {
   const total = 1000
 
@@ -61,8 +73,9 @@ describe('parseRangeHeader', () => {
     expect(parseRangeHeader('bytes=100-199', total)).toEqual({ start: 100, end: 199 })
   })
 
-  it('defaults missing start to 0', () => {
-    expect(parseRangeHeader('bytes=-199', total)).toEqual({ start: 0, end: 199 })
+  it('returns the final bytes for a suffix range', () => {
+    expect(parseRangeHeader('bytes=-199', total)).toEqual({ start: 801, end: 999 })
+    expect(parseRangeHeader('bytes=-200', total)).toEqual({ start: 800, end: 999 })
   })
 
   it('defaults missing end to total-1', () => {
@@ -73,13 +86,15 @@ describe('parseRangeHeader', () => {
     expect(parseRangeHeader('bytes=0-99999', total)).toEqual({ start: 0, end: 999 })
   })
 
-  it('falls back to whole file when start is out of range', () => {
-    expect(parseRangeHeader('bytes=5000-', total)).toEqual({ start: 0, end: 999 })
-    expect(parseRangeHeader('bytes=1000-2000', total)).toEqual({ start: 0, end: 999 })
+  it('rejects a range whose start is out of bounds', () => {
+    expect(parseRangeHeader('bytes=5000-', total)).toBeNull()
+    expect(parseRangeHeader('bytes=1000-2000', total)).toBeNull()
   })
 
-  it('falls back to whole file for malformed headers', () => {
-    expect(parseRangeHeader('not-a-range', total)).toEqual({ start: 0, end: 999 })
-    expect(parseRangeHeader('bytes=abc-def', total)).toEqual({ start: 0, end: 999 })
+  it('rejects malformed and inverted ranges', () => {
+    expect(parseRangeHeader('not-a-range', total)).toBeNull()
+    expect(parseRangeHeader('bytes=abc-def', total)).toBeNull()
+    expect(parseRangeHeader('bytes=900-100', total)).toBeNull()
+    expect(parseRangeHeader('bytes=-0', total)).toBeNull()
   })
 })

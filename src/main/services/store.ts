@@ -139,13 +139,13 @@ export function sanitizeAssetPatch(patch: AssetPatch): AssetPatch {
   return out as AssetPatch
 }
 
-export function updateAsset(d: Database, id: number, patch: AssetPatch): void {
+export function updateAsset(d: Database, libraryId: number, id: number, patch: AssetPatch): boolean {
   const clean = sanitizeAssetPatch(patch)
   const keys = Object.keys(clean)
-  if (keys.length === 0) return
+  if (keys.length === 0) return false
   const sets = keys.map((k) => `${k} = ?`).join(', ')
   const vals = keys.map((k) => (clean as Record<string, unknown>)[k])
-  d.prepare(`UPDATE assets SET ${sets} WHERE id = ?`).run(...vals, id)
+  return d.prepare(`UPDATE assets SET ${sets} WHERE id = ? AND library_id = ?`).run(...vals, id, libraryId).changes > 0
 }
 
 export function setAssetMissing(d: Database, libraryId: number, relPath: string, missing: boolean): boolean {
@@ -155,8 +155,28 @@ export function setAssetMissing(d: Database, libraryId: number, relPath: string,
   return r.changes > 0
 }
 
-export function setAssetFolder(d: Database, assetId: number, folderPath: string | null): void {
-  d.prepare('UPDATE assets SET folder_path = ? WHERE id = ?').run(folderPath, assetId)
+export interface MovedAssetRow {
+  id: number
+  rel_path: string
+  fingerprint: string
+}
+
+/** 提交已经成功移动到磁盘的素材子集;失败前成功移动的行不会留在旧路径。 */
+export function applyMovedAssets(
+  d: Database,
+  libraryId: number,
+  items: MovedAssetRow[],
+  newRelPaths: ReadonlyMap<number, string>
+): number {
+  const update = d.prepare('UPDATE assets SET rel_path = ?, folder_path = NULL WHERE id = ? AND library_id = ?')
+  return d.transaction(() => {
+    let moved = 0
+    for (const item of items) {
+      const relPath = newRelPaths.get(item.id) ?? item.rel_path
+      if (update.run(relPath, item.id, libraryId).changes > 0) moved++
+    }
+    return moved
+  })()
 }
 
 export function renameAssetFolder(d: Database, libraryId: number, oldPath: string, newPath: string): void {
@@ -202,19 +222,23 @@ export function replaceFolderOrders(d: Database, libraryId: number, paths: reado
   })()
 }
 
-export function addTag(d: Database, assetId: number, name: string): void {
+export function addTag(d: Database, libraryId: number, assetId: number, name: string): boolean {
   const trimmed = name.trim()
-  if (!trimmed) return
+  if (!trimmed) return false
   const color = TAG_COLORS[Math.abs(hashStr(trimmed)) % TAG_COLORS.length]
-  d.transaction(() => {
+  return d.transaction(() => {
+    if (!d.prepare('SELECT 1 FROM assets WHERE library_id = ? AND id = ?').get(libraryId, assetId)) return false
     let tag = d.prepare('SELECT id FROM tags WHERE name = ?').get(trimmed) as { id: number } | undefined
     if (!tag) tag = { id: Number(d.prepare('INSERT INTO tags(name, color) VALUES (?, ?)').run(trimmed, color).lastInsertRowid) }
     d.prepare('INSERT OR IGNORE INTO asset_tags(asset_id, tag_id) VALUES (?, ?)').run(assetId, tag.id)
+    return true
   })()
 }
 
-export function removeTag(d: Database, assetId: number, name: string): void {
+export function removeTag(d: Database, libraryId: number, assetId: number, name: string): boolean {
+  if (!d.prepare('SELECT 1 FROM assets WHERE library_id = ? AND id = ?').get(libraryId, assetId)) return false
   d.prepare('DELETE FROM asset_tags WHERE asset_id = ? AND tag_id = (SELECT id FROM tags WHERE name = ?)').run(assetId, name)
+  return true
 }
 
 export interface ScanEntry {

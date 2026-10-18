@@ -72,7 +72,8 @@ export async function scanPaths(
 export async function scanLibrary(
   root: string,
   onProgress?: (done: number) => void,
-  onError?: (relPath: string, error: unknown) => void
+  onError?: (relPath: string, error: unknown) => void,
+  onBatch?: (entries: ScanEntry[]) => void
 ): Promise<ScanEntry[]> {
   const entries: ScanEntry[] = []
   const queue: string[] = ['']
@@ -82,6 +83,12 @@ export async function scanLibrary(
   async function walk(relDir: string): Promise<void> {
     const absDir = join(root, relDir)
     const batch: Promise<void>[] = []
+    const batchEntries: ScanEntry[] = []
+    const flushBatch = (): void => {
+      if (batchEntries.length === 0) return
+      const ready = batchEntries.splice(0)
+      onBatch?.(ready)
+    }
     let dirents
     try {
       dirents = await readdir(absDir, { withFileTypes: true })
@@ -113,12 +120,17 @@ export async function scanLibrary(
         })
         if (!entry) return
         entries.push(entry)
+        batchEntries.push(entry)
         done++
         if (onProgress && done % 20 === 0) onProgress(done)
       })())
-      if (batch.length >= SCAN_BATCH_SIZE) await Promise.all(batch.splice(0))
+      if (batch.length >= SCAN_BATCH_SIZE) {
+        await Promise.all(batch.splice(0))
+        flushBatch()
+      }
     }
     await Promise.all(batch)
+    flushBatch()
   }
 
   while (queue.length > 0) {

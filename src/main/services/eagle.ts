@@ -1,4 +1,4 @@
-import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, unlink } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { scanPaths } from './scan'
@@ -27,7 +27,7 @@ export interface EagleImportResult {
   entries: ScanEntry[]
 }
 
-interface EagleMove {
+interface EagleCopy {
   source: string
   target: string
 }
@@ -101,19 +101,8 @@ async function uniqueTarget(directory: string, fileName: string, claimed: Set<st
   }
 }
 
-async function moveFile(source: string, target: string): Promise<void> {
-  try {
-    await rename(source, target)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
-    await copyFile(source, target, constants.COPYFILE_EXCL)
-    try {
-      await unlink(source)
-    } catch (unlinkError) {
-      await rm(target, { force: true }).catch(() => undefined)
-      throw unlinkError
-    }
-  }
+async function copyFileExclusive(source: string, target: string): Promise<void> {
+  await copyFile(source, target, constants.COPYFILE_EXCL)
 }
 
 function eagleFolders(data: JsonObject, rootName: string): { folders: { path: string }[]; paths: Map<string, string> } {
@@ -200,12 +189,13 @@ export async function scanEagleLibrary(root: string, onProgress?: (done: number)
   return { entries, folders, assets }
 }
 
-/** 将 Eagle 原文件迁入当前素材库；多分类素材以首个分类作为物理位置。 */
-export async function moveEagleLibraryAssets(
+/** 将 Eagle 原文件复制进当前素材库；多分类素材以首个分类作为物理位置。 */
+export async function copyEagleLibraryAssets(
   eagleRoot: string,
   libraryRoot: string,
   eagle: EagleScan,
-  onProgress?: (done: number) => void
+  onProgress?: (done: number) => void,
+  copy: (source: string, target: string) => Promise<void> = copyFileExclusive
 ): Promise<EagleImportResult> {
   if (pathsOverlap(eagleRoot, libraryRoot) || pathsOverlap(libraryRoot, eagleRoot)) {
     throw new Error('Eagle 素材库不能与当前素材库重叠')
@@ -213,7 +203,7 @@ export async function moveEagleLibraryAssets(
   if (eagle.entries.length !== eagle.assets.length) throw new Error('Eagle 素材清单不完整')
 
   const claimed = new Set<string>()
-  const moves: EagleMove[] = []
+  const copies: EagleCopy[] = []
   let multiFolderAssets = 0
   for (const folder of eagle.folders) await mkdir(pathInside(libraryRoot, join(libraryRoot, ...folder.path.split('/'))), { recursive: true })
   for (let index = 0; index < eagle.entries.length; index++) {
@@ -227,30 +217,30 @@ export async function moveEagleLibraryAssets(
     if (asset.folderPaths.length > 2) multiFolderAssets++
     const directory = pathInside(libraryRoot, join(libraryRoot, ...folder.split('/')))
     await mkdir(directory, { recursive: true })
-    moves.push({ source, target: await uniqueTarget(directory, basename(entry.relPath), claimed) })
+    copies.push({ source, target: await uniqueTarget(directory, basename(entry.relPath), claimed) })
   }
 
-  const moved: EagleMove[] = []
+  const copied: EagleCopy[] = []
   try {
-    for (const move of moves) {
-      await moveFile(move.source, move.target)
-      moved.push(move)
-      if (moved.length % 20 === 0 || moved.length === moves.length) onProgress?.(moved.length)
+    for (const item of copies) {
+      await copy(item.source, item.target)
+      copied.push(item)
+      if (copied.length % 20 === 0 || copied.length === copies.length) onProgress?.(copied.length)
     }
   } catch (error) {
-    const restoreFailures: EagleMove[] = []
-    for (const move of moved.reverse()) {
-      await moveFile(move.target, move.source).catch(() => restoreFailures.push(move))
+    const cleanupFailures: EagleCopy[] = []
+    for (const item of copied.reverse()) {
+      await rm(item.target, { force: true }).catch(() => cleanupFailures.push(item))
     }
-    if (restoreFailures.length > 0) throw new Error(`导入失败，${restoreFailures.length} 个已迁移文件未能自动恢复`)
+    if (cleanupFailures.length > 0) throw new Error(`导入失败，${cleanupFailures.length} 个已复制文件未能自动清理`)
     throw error
   }
   return {
-    imported: moves.length,
+    imported: copies.length,
     multiFolderAssets,
     entries: eagle.entries.map((entry, index) => ({
       ...entry,
-      relPath: relative(libraryRoot, moves[index].target).replace(/\\/g, '/')
+      relPath: relative(libraryRoot, copies[index].target).replace(/\\/g, '/')
     }))
   }
 }

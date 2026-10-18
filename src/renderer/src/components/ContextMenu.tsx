@@ -26,6 +26,7 @@ export function ContextMenu(): React.JSX.Element | null {
   const assets = useUI((s) => s.assets)
   const selectedIds = useUI((s) => s.selectedIds)
   const folderPaths = useUI((s) => s.folderPaths)
+  const copySelected = useUI((s) => s.copySelected)
   const showToast = useUI((s) => s.showToast)
   const [openSub, setOpenSub] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -142,27 +143,16 @@ export function ContextMenu(): React.JSX.Element | null {
   /** 子菜单动作:执行后关闭整个菜单 */
   const subAct = (fn: () => void): (() => void) => () => act(fn)
 
-  const copySelection = (): void => {
-    if (!copyable || libraryId == null) return
-    const ids = dbIds.map((x) => x.dbId as number)
-    void window.windowApi.assets.copy(libraryId, ids).then((r) => {
-      if ('error' in r) {
-        showToast(r.error, 'warn')
-        return
-      }
-      const skipped = r.skipped.length
-      if (r.mode === 'paths') {
-        // 拿不到文件对象时明确告知,免得用户去资源管理器粘贴却发现是空的
-        showToast(skipped > 0 ? `已复制 ${r.copied} 条路径,${skipped} 个文件已缺失` : `已复制 ${r.copied} 条路径`, skipped > 0 ? 'warn' : 'ok')
-        return
-      }
-      showToast(skipped > 0 ? `已复制 ${r.copied} 个文件,跳过 ${skipped} 个缺失项` : `已复制 ${r.copied} 个文件`, skipped > 0 ? 'warn' : 'ok')
-    })
-  }
-
   const exportSelection = (): void => {
     if (!copyable || libraryId == null) return
-    void window.windowApi.assets.export(libraryId, dbIds.map((x) => x.dbId as number))
+    void window.windowApi.assets.export(libraryId, dbIds.map((x) => x.dbId as number)).then((result) => {
+      if ('canceled' in result) return
+      if ('error' in result) {
+        showToast(result.error, 'warn')
+        return
+      }
+      showToast(`已导出 ${result.exported} 个文件`)
+    }).catch(() => showToast('导出失败,请重试', 'warn'))
   }
 
   const moveTargets = folderPaths.filter((path) => path !== '')
@@ -185,7 +175,7 @@ export function ContextMenu(): React.JSX.Element | null {
     ...(a?.deletedAt
       ? [{ icon: 'sync', label: '从回收站恢复', fn: () => restoreAsset(m.assetId) }]
       : []),
-    { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? copySelection : undefined },
+    { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? () => { copySelected() } : undefined },
     { icon: 'download', label: '导出…', fn: copyable ? exportSelection : undefined },
     { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAsset(m.assetId) : trashAsset(m.assetId)) }
   ]

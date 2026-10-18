@@ -206,7 +206,7 @@ if (!app.requestSingleInstanceLock()) {
     const userData = app.getPath('userData')
     initServices(userData)
     registerMediaProtocol()
-    registerIpc(userData)
+    registerIpc()
     await attachWatchersFor(listLibraries(getDb()))
 
   ipcMain.on('window:minimize', (e) => {

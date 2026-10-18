@@ -30,13 +30,13 @@ IPC 与事件入口：`index.ts`、`ipc.ts`、`events.ts`。业务逻辑拆成 `
 
 ## Data & Build
 
-- 库：better-sqlite3（原生模块，需按平台/架构重建，见 `npm run rebuild:native:dual`）。
+- 库：better-sqlite3（自带 N-API 跨运行时预编译绑定，无需按 Electron ABI 重建）。
 - 媒体：sharp（缩略图）、ffmpeg-static（视频元数据）、chokidar（文件变化）。
 - 构建：electron-vite（main/preload/renderer 三入口），脚本见 `package.json`。
 - 类型：`tsconfig.node.json`（main/preload）与 `tsconfig.web.json`（renderer）双侧。
 
 ## Agent Notes
 
-- 改动先 `npm run typecheck`；涉及原生模块再 `npm run rebuild:native:dual`。
+- 改动先 `npm run typecheck`；涉及原生模块再跑 `npm run test` 与 Electron 冒烟。
 - 跨进程通信只经 preload API；新增能力先理清 main/renderer 边界。
 - `AGENTS.md` 是索引，细节放这里。

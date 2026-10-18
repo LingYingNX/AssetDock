@@ -1,8 +1,8 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { moveEagleLibraryAssets, scanEagleLibrary } from '../src/main/services/eagle'
+import { copyEagleLibraryAssets, scanEagleLibrary } from '../src/main/services/eagle'
 
 describe('Eagle import', () => {
   it('uses only original files and retains its virtual folder hierarchy', async () => {
@@ -31,7 +31,7 @@ describe('Eagle import', () => {
     }
   })
 
-  it('moves original files into the current library and keeps one physical copy per asset', async () => {
+  it('copies original files into the current library and leaves the Eagle source intact', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'mediahub-eagle-move-'))
     const root = join(parent, '图.library')
     const target = join(parent, '素材')
@@ -49,15 +49,48 @@ describe('Eagle import', () => {
       await writeFile(join(second, 'second.jpg'), 'two')
 
       const eagle = await scanEagleLibrary(root)
-      const imported = await moveEagleLibraryAssets(root, target, eagle)
+      const imported = await copyEagleLibraryAssets(root, target, eagle)
       expect(imported).toMatchObject({ imported: 2, multiFolderAssets: 1 })
       expect(imported.entries.map((entry) => entry.relPath)).toEqual(['图/插画/人物/first.jpg', '图/插画/人物/second.jpg'])
 
-      await expect(access(join(first, 'first.jpg'))).rejects.toThrow()
-      await expect(access(join(second, 'second.jpg'))).rejects.toThrow()
+      await expect(access(join(first, 'first.jpg'))).resolves.toBeUndefined()
+      await expect(access(join(second, 'second.jpg'))).resolves.toBeUndefined()
       await expect(access(join(target, '图', '插画', '人物', 'first.jpg'))).resolves.toBeUndefined()
       await expect(access(join(target, '图', '插画', '人物', 'second.jpg'))).resolves.toBeUndefined()
       await expect(access(join(target, '图', '空目录'))).resolves.toBeUndefined()
+      await expect(access(join(target, '图', '插画', 'second.jpg'))).rejects.toThrow()
+    } finally {
+      await rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('removes copied targets when a later copy fails', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'mediahub-eagle-copy-fail-'))
+    const root = join(parent, '图.library')
+    const target = join(parent, '素材')
+    const first = join(root, 'images', 'A.info')
+    const second = join(root, 'images', 'B.info')
+    await mkdir(first, { recursive: true })
+    await mkdir(second, { recursive: true })
+    try {
+      await writeFile(join(root, 'metadata.json'), JSON.stringify({ folders: [{ id: 'folder', name: '插画', children: [] }] }))
+      await writeFile(join(first, 'metadata.json'), JSON.stringify({ id: 'A', name: 'first', ext: 'jpg', folders: ['folder'] }))
+      await writeFile(join(second, 'metadata.json'), JSON.stringify({ id: 'B', name: 'second', ext: 'jpg', folders: ['folder'] }))
+      await writeFile(join(first, 'first.jpg'), 'one')
+      await writeFile(join(second, 'second.jpg'), 'two')
+
+      const eagle = await scanEagleLibrary(root)
+      let calls = 0
+      const failingCopy = async (source: string, destination: string): Promise<void> => {
+        calls++
+        if (calls === 2) throw new Error('copy failed')
+        await copyFile(source, destination)
+      }
+
+      await expect(copyEagleLibraryAssets(root, target, eagle, undefined, failingCopy)).rejects.toThrow('copy failed')
+      await expect(access(join(first, 'first.jpg'))).resolves.toBeUndefined()
+      await expect(access(join(second, 'second.jpg'))).resolves.toBeUndefined()
+      await expect(access(join(target, '图', '插画', 'first.jpg'))).rejects.toThrow()
       await expect(access(join(target, '图', '插画', 'second.jpg'))).rejects.toThrow()
     } finally {
       await rm(parent, { recursive: true, force: true })

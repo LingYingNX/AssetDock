@@ -60,11 +60,6 @@ CREATE TABLE IF NOT EXISTS app_state (
 );
 `
 
-const SCHEMA_V2 = `
-ALTER TABLE assets ADD COLUMN codec TEXT;
-ALTER TABLE assets ADD COLUMN fps REAL;
-`
-
 const SCHEMA_V3 = `
 CREATE TABLE IF NOT EXISTS index_sources (
   id INTEGER PRIMARY KEY,
@@ -92,32 +87,42 @@ export function initDb(userDataDir: string): Database.Database {
   db = openSqlite(join(userDataDir, 'mediahub.db'))
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
-  // 每个版本步进独立事务,成功后才推进 user_version:
-  // 中断(进程被杀/断电)后重放是安全的——ALTER 先做幂等检查,CREATE 全部 IF NOT EXISTS
-  const version = (db.pragma('user_version', { simple: true }) as number) ?? 0
+  migrateSchema(db)
+  return db
+}
+
+/**
+ * 版本推进与 DDL 必须在同一事务里,否则“列已加、版本没写”会让下次启动重复 ALTER。
+ * ALTER 本身也做列级检查,兼容历史上已经出现过半截迁移的数据库。
+ */
+export function migrateSchema(d: Database.Database): void {
+  const version = (d.pragma('user_version', { simple: true }) as number) ?? 0
+  const columns = (t: string): string[] =>
+    (d.pragma(`table_info(${t})`) as { name: string }[]).map((c) => c.name)
   const step = (to: number, fn: () => void): void => {
     if (version >= to) return
-    db!.transaction(fn)()
-    db!.pragma(`user_version = ${to}`)
+    d.transaction(() => {
+      fn()
+      d.pragma(`user_version = ${to}`)
+    })()
   }
-  const columns = (t: string): string[] =>
-    (db!.pragma(`table_info(${t})`) as { name: string }[]).map((c) => c.name)
 
-  step(1, () => { db!.exec(SCHEMA_V1) })
+  step(1, () => { d.exec(SCHEMA_V1) })
   step(2, () => {
-    db!.exec(SCHEMA_V2)
+    const assetColumns = columns('assets')
+    if (!assetColumns.includes('codec')) d.exec('ALTER TABLE assets ADD COLUMN codec TEXT')
+    if (!assetColumns.includes('fps')) d.exec('ALTER TABLE assets ADD COLUMN fps REAL')
   })
   step(3, () => {
-    db!.exec(SCHEMA_V3)
+    d.exec(SCHEMA_V3)
     if (!columns('assets').includes('source_index_id')) {
-      db!.exec('ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE')
+      d.exec('ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE')
     }
   })
   step(4, () => {
-    if (!columns('assets').includes('folder_path')) db!.exec(SCHEMA_V4)
+    if (!columns('assets').includes('folder_path')) d.exec(SCHEMA_V4)
   })
-  step(5, () => { db!.exec(SCHEMA_V5) })
-  return db
+  step(5, () => { d.exec(SCHEMA_V5) })
 }
 
 export function getDb(): Database.Database {
@@ -129,7 +134,8 @@ export function getDb(): Database.Database {
 export function openMemoryDb(): Database.Database {
   const d = openSqlite(':memory:')
   d.exec(SCHEMA_V1)
-  d.exec(SCHEMA_V2)
+  d.exec('ALTER TABLE assets ADD COLUMN codec TEXT')
+  d.exec('ALTER TABLE assets ADD COLUMN fps REAL')
   d.exec(SCHEMA_V3)
   d.exec(SCHEMA_V4)
   d.exec(SCHEMA_V5)

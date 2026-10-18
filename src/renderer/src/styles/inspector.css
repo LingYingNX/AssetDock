@@ -2,7 +2,13 @@
 .inspector{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden;min-width:0;width:100%}
 /* 轨道归零时面板不可见:留着但它已经没有可点区域 */
 .layout.insp-hidden .inspector{visibility:hidden}
-.insp-scroll{flex:1;overflow-y:auto;padding:14px 16px 20px}
+/* 窄面板(DPI 缩放后 CSS 面板宽可跌到 ~150px)下内容不许横向溢出面板——
+   溢出会画到面板外叠在工作区上,看起来就是「检查器和页面叠加」。
+   overflow-x 兜底,insp-sec 内各层允许收缩到 0 再由内容自折行。 */
+.insp-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px 20px}
+.insp-scroll .insp-sec{min-width:0}
+.insp-scroll .dl dd{min-width:0;overflow-wrap:anywhere}
+.insp-scroll .fname b{max-width:100%}
 .insp-sec{margin-top:16px}
 .insp-sec:first-child{margin-top:0}
 /* 首块(名字+改名)是面板标题,不是又一条属性。压一条分隔线,让「这是什么素材」和
@@ -27,6 +33,12 @@
 /* 「待审」顶到右边:评分是质量、待审是流程,分处一行两端。原先由 TSX 的 inline
    style 承担,挪到这里 —— 视觉归属应该写在样式里。 */
 .flagrow .flagbtn{margin-left:auto}
+/* 窄面板下按钮不许被压扁(flex 默认收缩会把「待审」压到文字竖排塌陷,
+   实测 15px 宽):按钮/评分不收缩、不折行。行放不下时整行 wrap——
+   正常面板(≥268px)行宽 225–271px 从不触发,只有极窄面板才折到下一行。 */
+.flagrow{flex-wrap:wrap}
+.flagrow .rate{flex:none}
+.flagrow .flagbtn{flex:none;white-space:nowrap}
 .flagbtn{display:flex;align-items:center;gap:5px;height:var(--h-xs);padding:0 8px;border-radius:var(--r-sm);font-size:var(--fs-cap);color:var(--t3);border:1px solid var(--line)}
 .flagbtn:hover{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.08)}
 .flagbtn.on{color:var(--warn);border-color:rgba(232,163,61,.5);background:rgba(232,163,61,.13)}
@@ -39,7 +51,7 @@
 .tag .x:hover{opacity:1;color:var(--t1)}
 .tagin{display:flex;align-items:center;gap:6px;margin-top:8px;height:var(--h-sm);padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body)}
 .tagin:focus-within{border-color:var(--acc-line)}
-.tagin input{flex:1;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
+.tagin input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
 .tagin kbd{font-size:var(--fs-micro);padding:1px 4px}
 .sugg{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .sugg span{font-size:var(--fs-cap);color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:var(--r-pill);cursor:pointer}

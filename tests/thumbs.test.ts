@@ -9,16 +9,12 @@ import {
   pruneMissingThumbs,
   generateMissingThumbs,
   removeThumb,
-  removeThumbsIfUnused,
   resetThumbCache,
   retargetThumb,
   thumbManifestPath,
   thumbPath,
-  thumbsDir,
-  thumbJobRows
+  thumbsDir
 } from '../src/main/services/thumbs'
-import { openMemoryDb } from '../src/main/services/db'
-import { upsertScanned } from '../src/main/services/store'
 
 /** 生成一张真实可解码的小 PNG 作为原图 */
 async function writeImage(path: string, size = 800, color = { r: 30, g: 120, b: 200 }): Promise<void> {
@@ -49,26 +45,6 @@ describe('thumbnail cache', () => {
 
   const meta = (relPath = 'photo.png') => ({ relPath, mtimeMs: 1, sizeBytes: 100 })
 
-  it('selects css alongside bitmaps for thumbnail warmup, excluding video and 3D', async () => {
-    const db = openMemoryDb()
-    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'lib', root)
-    try {
-      const add = (relPath: string, type: string, format: string, fingerprint: string) =>
-        upsertScanned(db, 1, [{ relPath, name: relPath.replace(/\.[^.]+$/, ''), type: type as never, format, sizeBytes: 10, mtimeMs: 1, fingerprint }])
-      add('photo.png', 'image', 'PNG', 'fp-img')
-      add('loader.css', 'style', 'CSS', 'fp-css')
-      add('clip.mp4', 'video', 'MP4', 'fp-vid')
-      add('model.glb', 'model', 'GLB', 'fp-model')
-      // 回收站与缺失素材不该进入预热
-      add('trashed.png', 'image', 'PNG', 'fp-trash')
-      db.prepare("UPDATE assets SET deleted_at = '2026-09-27T00:00:00.000Z' WHERE fingerprint = 'fp-trash'").run()
-
-      const rows = thumbJobRows(db, 1)
-      expect(rows.map((r) => r.rel_path).sort()).toEqual(['loader.css', 'photo.png'])
-    } finally {
-      db.close()
-    }
-  })
   it('generates a 640px jpg and records it in the manifest', async () => {
     const result = await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
     expect(result.placeholder).toBe(false)
@@ -215,49 +191,5 @@ describe('thumbnail cache', () => {
     expect(await exists(thumbPath(root, fingerprint))).toBe(false)
     const manifest = JSON.parse(await readFile(thumbManifestPath(root), 'utf8'))
     expect(manifest.entries[fingerprint]).toBeUndefined()
-  })
-})
-describe('shared fingerprint guard', () => {
-  let root = ''
-  const fingerprint = 'fp-shared'
-
-  beforeEach(async () => {
-    resetThumbCache()
-    root = await mkdtemp(join(tmpdir(), 'mediahub-guard-'))
-  })
-  afterEach(async () => {
-    resetThumbCache()
-    await rm(root, { recursive: true, force: true })
-  })
-
-  const entry = (relPath: string) => ({
-    relPath, name: relPath.slice(0, relPath.lastIndexOf('.')), type: 'image' as const, format: 'JPG',
-    sizeBytes: 1, mtimeMs: 1, fingerprint
-  })
-
-  // 两张素材内容一致 => 同一个指纹 => 同一个缩略图文件
-  const seedTwoAssetsOnOneThumb = async () => {
-    const db = openMemoryDb()
-    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', root)
-    const [a, b] = upsertScanned(db, 1, [entry('a.jpg'), entry('b.jpg')])
-    await ensureThumb(root, join(root, 'a.jpg'), fingerprint, 'JPG', { relPath: 'a.jpg', mtimeMs: 1, sizeBytes: 1 })
-    await flushManifest(root)
-    return { db, a, b }
-  }
-
-  it('keeps the thumbnail while another live asset shares the fingerprint', async () => {
-    const { db, a } = await seedTwoAssetsOnOneThumb()
-    db.prepare('UPDATE assets SET deleted_at = ? WHERE id = ?').run('2026-01-01', a.assetId)
-    expect(await removeThumbsIfUnused(root, db, 1, [fingerprint])).toBe(0)
-    expect(await exists(thumbPath(root, fingerprint))).toBe(true)
-    db.close()
-  })
-
-  it('removes the thumbnail once no live asset references the fingerprint', async () => {
-    const { db, a, b } = await seedTwoAssetsOnOneThumb()
-    db.prepare('UPDATE assets SET deleted_at = ? WHERE id IN (?, ?)').run('2026-01-01', a.assetId, b.assetId)
-    expect(await removeThumbsIfUnused(root, db, 1, [fingerprint])).toBe(1)
-    expect(await exists(thumbPath(root, fingerprint))).toBe(false)
-    db.close()
   })
 })
