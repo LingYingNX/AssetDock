@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-30 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-22 -->
 
 # AGENTS.md — tests
 
@@ -17,18 +17,22 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | 文件 | 覆盖 |
 |------|------|
 | `scan.test.ts` / `ignore.test.ts` / `fingerprint.test.ts` | 扫描分批与进度、扩展名白名单与忽略规则、缓存指纹 |
+| `dbMigration.test.ts` / `libraryCreate.test.ts` | schema 迁移可重放、建库路径白名单/磁盘根拒绝/过期 |
 | `watch.test.ts` | chokidar 监听：`usePolling:false`、外部重命名后回调 |
 | `folders.test.ts` | 库内文件夹增删改移、素材移动、`exportLibraryAsset` 同名避让 |
+| `moveAssets.test.ts` | 批量移动成功子集落库，保留 id、标签和评分 |
 | `libraryConsistency.test.ts` | 同名相对路径在不同库间隔离、`realPathWithinRoot` 越界拦截、迁移 |
 | `store` 相关（`eagle` / `legacySourceMigration`） | Eagle 导入与旧库一次性迁移 |
 | `palette.test.ts` / `meta.test.ts` | k-means 主色、ffmpeg 文本解析（纯函数） |
-| `query.test.ts` / `folderDrag.test.ts` / `uiStore.test.ts` | 渲染层纯函数与 `rowToAsset` 的 URL 拼装 |
+| `query.test.ts` / `folderDrag.test.ts` / `uiStore.test.ts` | 渲染层纯函数、筛选/灯箱导航与 `rowToAsset` 的 URL 拼装 |
+| `emptyState.test.ts` / `filterBar.test.ts` / `duration.test.ts` / `modelUrl.test.ts` | 空态出口、标签菜单、时长进位、glTF 外部资源基准 URL |
 | `cssPreview.test.ts` | 预览 HTML 拼接：脚本剥离、CSP 注入、`</style>` 转义、由选择器反推骨架、同名 HTML 优先、内置骨架兜底 |
 | `cssThumb.test.ts` | CSS 缩略图分支：用 `vi.mock` 替掉离屏渲染器，断言「CSS 走渲染器而非 sharp」与失败回退占位图 |
 | `textAssets.test.ts` | 文本素材读写：越界路径拒绝、原子回写后 size/fingerprint 同步 |
 | `mime.test.ts` | `mimeForExtension` 的扩展名映射（含 CSS/HTML/TXT 与未知扩展名兜底） |
 | `clipboardFiles.test.ts` | 剪贴板路径的 PowerShell 数组转义（单引号双写，路径含单引号时不致整条命令失败） |
 | `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
+| `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
 
 ## Setup & environment
 

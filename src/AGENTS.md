@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-09-30 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-22 -->
 
 # AGENTS.md — src
 
@@ -11,7 +11,8 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | 段 | 入口 | 职责 |
 |----|------|------|
 | main | `src/main/index.ts` | 单实例锁、窗口创建、`media://` 协议注册、退出前 checkpoint 各库 |
-| main | `src/main/ipc.ts` | 全部 `ipcMain` handler；库作用域解析 `scopeFor()` 在此 |
+| main | `src/main/ipc.ts` | 薄注册壳：按域组装 handler，并导出 watcher/thumb 启动入口 |
+| main | `src/main/ipc/*` | `libraries` / `assets` / `context` / `watch` / `thumbs` 分域实现；`scopeFor()` 在 `context.ts` |
 | main | `src/main/events.ts` | 向渲染层推送；通道白名单同步在 `preload/index.ts` 的 `on:` 联合类型里，**加事件要两处都改**（当前：`library:scan` / `assets:changed` / `window:maximized` / `thumbs:progress`） |
 | preload | `src/preload/index.ts` | `contextBridge.exposeInMainWorld('windowApi', api)`；`index.d.ts` 声明 Window 类型 |
 | renderer | `src/renderer/src/App.tsx` | 启动引导、全局快捷键、Ctrl+滚轮列宽 |
@@ -26,6 +27,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `libraryDb.ts` | 每库 `.mediahub/library.db` 的建表与句柄；`mediaDir()` 给出该目录 |
 | `store.ts` | 资产/标签/库的读写与 upsert（`AssetRow`、`upsertScanned`） |
 | `libResolve.ts` | 库作用域解析：`isPathWithinRoot` / `realPathWithinRoot` / `libScopeDb` |
+| `libraryCreate.ts` | 建库路径白名单：只接受目录选择器近期返回的路径，并拒绝磁盘根与不存在目录 |
 | `scan.ts` | 递归扫描入库（并发 8，每 20 个回调进度）；`scanPaths` 供 Eagle 复用 |
 | `watch.ts` | chokidar 增量监听（`awaitWriteFinish` + 300ms 防抖，`usePolling:false`） |
 | `ignore.ts` | 扩展名白名单与忽略规则（扫描/监听共用，勿另写一份） |
@@ -44,7 +46,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 `src/shared/` 是跨进程共享的纯逻辑层（无 fs / 无 electron）：`types.ts` 共享类型、`cssPreview.ts` 纯字符串拼接（主进程截图与渲染层预览共用，保证两条路径视觉一致）。约定：**新文件若要被两侧同时引用，放 `src/shared/`，并确认它在两个 tsconfig 的 include 里**（当前两侧都已含 `src/shared/**/*.ts`）。
 
-渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs` / `showToast`）、`data/`（`dataset.ts` 演示快照 / `query.ts` 过滤与格式化 / `theme.ts` 主题 / `preview-cache.ts` 已解码预览 URL 集合，避免重挂载时二次淡入 / `folder-drag.ts` 拖拽规则 / `asset-drag.ts` 拖拽数据编解码）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。
+渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs` / `showToast`）、`data/`（纯视图逻辑：`query.ts`、`empty-state.ts`、`filter-menu.ts`、`model-url.ts`、主题、预览缓存、焦点/帧批处理/框选/视口、拖拽编解码）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。`dataset.ts` 只保留标签色与推荐标签，不再提供演示素材。
 
 ## Setup & environment
 
@@ -56,6 +58,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 - 类型检查：`npm run typecheck`（分 node/web 两侧，改类型边界后必跑）
 - 测试：`npm run test`；单文件 `npm run test -- tests/xxx.test.ts`
+- 构建：`npm run build`（main / preload / renderer 三段）
 - 开发：`npm run dev`（dev 下 9223 是调试桥，`tools/hhead.mjs` 包了一层）
 
 ## Code style & conventions
@@ -70,17 +73,18 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 ## Security & safety
 
 - `media://` 与所有文件操作先经 `realPathWithinRoot` 校验真实路径在库根内，再读；库外一律 403。
+- 建库只能消费 `dialog:pickFolder` 写入的短期白名单，并再次校验真实目录、拒绝磁盘根，见 `libraryCreate.ts`。
 - SQL 只用 `prepare` 参数绑定，不拼字符串。
 - `contextIsolation: true` / `nodeIntegration: false`；渲染层能力必须显式加进 preload 的 `api` 对象。
 - 外部链接经 `setWindowOpenHandler` 交给系统浏览器，不在应用内打开。
 
 ## Patterns to Follow
 
-- **加一个 IPC 能力**：`ipc.ts` 加 handler（含 `libraryId` 作用域解析）→ `preload/index.ts` 的 `api` 暴露 → `windowApi` 类型自动跟随 → 改完**重启 Electron**（HMR 不重载 preload）。
+- **加一个 IPC 能力**：在 `ipc/<domain>.ts` 加 handler（含 `libraryId` 作用域解析）→ `ipc.ts` 确认注册 → `preload/index.ts` 的 `api` 暴露；事件白名单改 `src/shared/types.ts` 的 `EventChannelMap` → 改完**重启 Electron**（HMR 不重载 preload）。
 - **加一个库内文件操作**：写进 `folders.ts`，复用 `libraryPath()` 做路径校验，不要在各 handler 里自己拼路径。
 - **加一个素材类型**（如已有 `.css`）：五处联动，缺一处就出现「能扫到但用不了」——
   1. `ignore.ts` 的 `EXT_WHITELIST` 加扩展名，并扩 `AssetKind` 联合类型；
-  2. `store.ts` 的 `AssetRow.type`、`renderer/src/data/types.ts` 的 `AssetType`/`AssetFormat` 跟随；
+  2. `src/shared/types.ts` 的 `AssetKind`/`AssetRow.type` 与 `renderer/src/data/types.ts` 的 `AssetType`/`AssetFormat` 跟随；
   3. `media.ts` 的 `MIME` 表加映射（漏了会被当 `application/octet-stream`，Chromium 只当下载）；
   4. 无位图的类型要绕开 sharp：`thumbs.ts` 的 `ensureThumb` 按 `format` 分支，并经 `thumbJobRows` 纳入预热；
   5. 渲染侧 `query.ts` 的 `matchFilters`/`infoRows`、`Card.tsx`、`FilterBar.tsx` 的格式项。
@@ -99,7 +103,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | 扩展名 → 类型/格式 | `detectKind` / `isIgnored` | `ignore.ts` | 返回 `{ type, format }` 或 `null`（不在白名单）。扫描与监听共用，**别在别处再写一份白名单** |
 | 扩展名 → MIME | `mimeForExtension` | `media.ts` | 未知扩展名兜底 `application/octet-stream`；别在协议 handler 里内联判断 |
 | 内容指纹 | `fingerprint(absPath, size, mtimeMs)` | `fingerprint.ts` | 只读前 64KB + size + mtime；改算法等于全库缓存失效 |
-| IPC 层库作用域解析 | `scopeFor` | `ipc.ts` | 模块私有；每个 handler 第一步就该调它取作用域 |
+| IPC 层库作用域解析 | `scopeFor` / `releaseScope` | `ipc/context.ts` | 每个 handler 取到 scope 后必须在 `finally` 释放；遗漏会让库句柄无法被驱逐 |
 | 素材行 upsert | `upsertScanned(d, libraryId, entries)` | `store.ts` | 返回逐条结果数组；保留 id/标签/评分/文件夹，只更新变化字段 |
 | 预览 HTML 拼接 | `buildPreviewHtml` / `stripScripts` / `shellFromCss` | `src/shared/cssPreview.ts` | 主进程截图与渲染层预览**必须共用这一份**，否则两条路径视觉漂移 |
 | 界面偏好持久化 | `persistUiPrefs` / `parseNav` | `renderer/src/store/ui.ts` | 模块私有函数；读取时逐字段校验、坏值回退默认 |
