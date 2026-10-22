@@ -63,8 +63,6 @@ export function FilterBar(): React.JSX.Element {
   const setView = useUI((s) => s.setView)
   const colw = useUI((s) => s.colw)
   const setColw = useUI((s) => s.setColw)
-  const inspHidden = useUI((s) => s.inspHidden)
-  const toggleInspector = useUI((s) => s.toggleInspector)
   const cbarOpen = useUI((s) => s.cbarOpen)
   const toggleCbar = useUI((s) => s.toggleCbar)
   const filters = useUI((s) => s.filters)
@@ -204,14 +202,6 @@ export function FilterBar(): React.JSX.Element {
           }}
         />
       </div>
-      <button
-        className={`tb-btn${inspHidden ? ' on' : ''}`}
-        id="inspToggle"
-        title="隐藏 / 显示右侧信息面板"
-        onClick={toggleInspector}
-      >
-        <Icon name="panel-r" />
-      </button>
     </div>
   )
 }

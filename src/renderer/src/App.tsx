@@ -156,8 +156,14 @@ export default function App(): React.JSX.Element {
         return
       }
       if (st.lightboxId) {
-        if (e.key === 'ArrowLeft') st.stepLightbox(-1)
-        if (e.key === 'ArrowRight') st.stepLightbox(1)
+        if (e.key === '[') {
+          e.preventDefault()
+          st.stepLightbox(-1)
+        }
+        if (e.key === ']') {
+          e.preventDefault()
+          st.stepLightbox(1)
+        }
         if (e.key === 'Enter') {
           const cur = st.assets.find((a) => a.id === st.lightboxId)
           if (cur) st.toggleFavorite(cur.id)

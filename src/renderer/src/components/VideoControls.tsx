@@ -10,7 +10,7 @@ export function formatTime(sec: number): string {
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  const mm = String(m).padStart(h > 0 ? 2 : 1, '0')
+  const mm = String(m).padStart(2, '0')
   const ss = String(s).padStart(2, '0')
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
@@ -51,15 +51,20 @@ export function useVideoPlayback(src: string) {
   const sync = useCallback((): void => {
     const v = ref.current
     if (!v) return
+    let buffered = 0
+    try {
+      const ranges = v.buffered
+      if (ranges.length > 0) buffered = ranges.end(ranges.length - 1)
+    } catch { /* 媒体流更新期间 TimeRanges 可能瞬时变化 */ }
     setSnap({
-      failed: false,
+      failed: !!v.error,
       playing: !v.paused && !v.ended,
       current: v.currentTime,
       duration: Number.isFinite(v.duration) ? v.duration : 0,
       volume: v.volume,
       muted: v.muted,
       rate: v.playbackRate,
-      buffered: v.buffered.length > 0 ? v.buffered.end(v.buffered.length - 1) : 0
+      buffered
     })
   }, [])
 
@@ -114,21 +119,25 @@ export function useVideoPlayback(src: string) {
     [sync]
   )
 
-  const handlers = {
-    autoPlay: true,
-    onLoadedMetadata: sync,
-    onDurationChange: sync,
-    onTimeUpdate: sync,
-    onProgress: sync,
-    onCanPlay: sync,
-    onPlay: sync,
-    onPause: sync,
-    onVolumeChange: sync,
-    onRateChange: sync,
-    onError: () => setSnap((s) => ({ ...s, failed: true }))
-  }
+  const stepBy = useCallback(
+    (seconds: number): void => {
+      const v = ref.current
+      if (!v || !Number.isFinite(seconds)) return
+      v.pause()
+      const duration = Number.isFinite(v.duration) ? v.duration : 0
+      v.currentTime = Math.max(0, Math.min(duration || v.currentTime + seconds, v.currentTime + seconds))
+      sync()
+    },
+    [sync]
+  )
 
-  return { ref, snap, toggle, seek, setVolume, toggleMute, setRate, handlers }
+  useEffect(() => {
+    sync()
+    const id = window.setInterval(sync, 200)
+    return () => window.clearInterval(id)
+  }, [src, sync])
+
+  return { ref, snap, toggle, seek, stepBy, setVolume, toggleMute, setRate }
 }
 
 export type VideoPlayback = ReturnType<typeof useVideoPlayback>
@@ -139,7 +148,15 @@ export type VideoPlayback = ReturnType<typeof useVideoPlayback>
  * 元素都没了,过渡无从播放。改成挂载与显形分离,关闭后留 140ms 播完淡出再卸载。
  * 不能只等 transitionend:reduced-motion 下过渡被全局移除,事件永不触发。
  */
-function Pop({ open, children }: { open: boolean; children: ReactNode }): React.JSX.Element | null {
+function Pop({
+  open,
+  children,
+  className
+}: {
+  open: boolean
+  children: ReactNode
+  className?: string
+}): React.JSX.Element | null {
   const [mounted, setMounted] = useState(open)
   const [shown, setShown] = useState(false)
 
@@ -162,7 +179,7 @@ function Pop({ open, children }: { open: boolean; children: ReactNode }): React.
 
   if (!mounted) return null
   return (
-    <div className={`pv-pop${shown ? ' show' : ''}`} role="group">
+    <div className={`pv-pop${shown ? ' show' : ''}${className ? ` ${className}` : ''}`} role="group">
       {children}
     </div>
   )
@@ -185,8 +202,10 @@ function Scrubber({
 }): React.JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [hoverTime, setHoverTime] = useState<number | null>(null)
   const pct = duration > 0 ? (current / duration) * 100 : 0
   const bufPct = duration > 0 ? Math.min(100, (buffered / duration) * 100) : 0
+  const hoverPct = hoverTime != null && duration > 0 ? (hoverTime / duration) * 100 : 0
 
   const seekAt = useCallback(
     (clientX: number): void => {
@@ -227,6 +246,14 @@ function Scrubber({
         setDragging(true)
         seekAt(e.clientX)
       }}
+      onPointerMove={(e) => {
+        const el = trackRef.current
+        if (!el || duration <= 0) return
+        const r = el.getBoundingClientRect()
+        const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+        setHoverTime(ratio * duration)
+      }}
+      onPointerLeave={() => setHoverTime(null)}
       onKeyDown={(e) => {
         if (e.key === 'ArrowLeft') onSeek(current - 5)
         if (e.key === 'ArrowRight') onSeek(current + 5)
@@ -235,17 +262,24 @@ function Scrubber({
       <span className="pv-scrub-buf" style={{ width: `${bufPct}%` }} />
       <span className="pv-scrub-fill" style={{ width: `${pct}%` }} />
       <span className="pv-scrub-knob" style={{ left: `${pct}%` }} />
+      {hoverTime != null ? (
+        <span className="pv-scrub-tip" style={{ left: `${hoverPct}%` }}>
+          {formatTime(hoverTime)}
+        </span>
+      ) : null}
     </div>
   )
 }
 
-/** 视频控制条:播放/进度/时长/音量/倍速 + 全屏(全屏对图片同样有效,故由外层给) */
+/** 视频控制条:播放/逐帧/时间码/进度/倍速/音量推子/全屏。 */
 export function VideoControls({
   v,
+  fps,
   fullscreen,
   onFullscreen
 }: {
   v: VideoPlayback
+  fps?: number
   fullscreen: boolean
   onFullscreen: () => void
 }): React.JSX.Element {
@@ -268,44 +302,52 @@ export function VideoControls({
   const volPct = (snap.muted ? 0 : snap.volume) * 100
 
   return (
-    <div className="pv-ctl" ref={rootRef}>
-      <button className="tb-btn" title={snap.playing ? '暂停 (空格)' : '播放 (空格)'} onClick={v.toggle}>
-        <Icon name={snap.playing ? 'pause' : 'play'} />
-      </button>
-      <span className="pv-time">{formatTime(snap.current)}</span>
-      <Scrubber current={snap.current} duration={snap.duration} buffered={snap.buffered} onSeek={v.seek} />
-      <span className="pv-time dim">{formatTime(snap.duration)}</span>
-
-      {/* 右侧竖排:音量与倍速叠成一列,紧挨全屏。
-          这里不放 flex:1 的占位元素——那会和进度条各吃一半剩余宽度,
-          进度条本该是视频的主控件,不该被一个空 span 分走空间。 */}
-      <div className="pv-rail">
-        {/* 音量:悬停展开滑杆,点击图标切换静音——与常见播放器一致 */}
-        <span className="pv-popwrap" onMouseEnter={() => setPop('vol')} onMouseLeave={() => setPop(null)}>
-          <button className="tb-btn" title={snap.muted ? '取消静音' : '静音'} onClick={v.toggleMute}>
-            <Icon name={snap.muted || snap.volume === 0 ? 'vol-x' : 'vol'} />
-          </button>
-          <Pop open={pop === 'vol'}>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(volPct)}
-              aria-label="音量"
-              style={{ background: `linear-gradient(90deg,var(--acc) ${volPct}%,var(--line2) ${volPct}%)` }}
-              onChange={(e) => v.setVolume(Number(e.target.value) / 100)}
-            />
-          </Pop>
+    <div className="pv-ctl pv-video-ctl" ref={rootRef}>
+      <div className="pv-transport">
+        <button
+          className="pv-play"
+          title={snap.playing ? '暂停 (空格)' : '播放 (空格)'}
+          aria-label={snap.playing ? '暂停' : '播放'}
+          onClick={v.toggle}
+        >
+          <Icon name={snap.playing ? 'pause' : 'play'} />
+        </button>
+        <button
+          className="pv-tool-btn"
+          title="上一帧 (←)"
+          aria-label="上一帧"
+          onClick={() => v.stepBy(-1 / (fps || 30))}
+        >
+          <Icon name="step-l" />
+        </button>
+        <button
+          className="pv-tool-btn"
+          title="下一帧 (→)"
+          aria-label="下一帧"
+          onClick={() => v.stepBy(1 / (fps || 30))}
+        >
+          <Icon name="step-r" />
+        </button>
+        <span className="pv-divider" />
+        <span className="pv-timecode" aria-label="播放时间">
+          <span className="current">{formatTime(snap.current)}</span>
+          <span className="sep">/</span>
+          <span>{formatTime(snap.duration)}</span>
         </span>
-        <span className="pv-popwrap">
+      </div>
+      <Scrubber current={snap.current} duration={snap.duration} buffered={snap.buffered} onSeek={v.seek} />
+
+      <div className="pv-tools">
+        <span className="pv-popwrap" onMouseEnter={() => setPop('rate')} onMouseLeave={() => setPop(null)}>
           <button
             className={`pv-rate${snap.rate !== 1 ? ' on' : ''}`}
             title="播放倍速"
-            onClick={() => setPop((p) => (p === 'rate' ? null : 'rate'))}
+            aria-label={`播放倍速，当前 ${snap.rate}x`}
+            onClick={() => setPop('rate')}
           >
-            {snap.rate}x
+            {snap.rate === 1 ? '1.0' : snap.rate}×
           </button>
-          <Pop open={pop === 'rate'}>
+          <Pop open={pop === 'rate'} className="pv-rate-pop">
             {RATES.map((r) => (
               <button
                 key={r}
@@ -315,16 +357,47 @@ export function VideoControls({
                   setPop(null)
                 }}
               >
-                {r}x
+                {r === 1 ? '1.0' : r}×
               </button>
             ))}
           </Pop>
         </span>
+        <span className="pv-popwrap" onMouseEnter={() => setPop('vol')} onMouseLeave={() => setPop(null)}>
+          <button
+            className="pv-tool-btn"
+            title="音量"
+            aria-label="音量"
+            onClick={() => setPop((p) => (p === 'vol' ? null : 'vol'))}
+          >
+            <Icon name={snap.muted || snap.volume === 0 ? 'vol-x' : 'vol'} />
+          </button>
+          <Pop open={pop === 'vol'} className="pv-volume-pop">
+            <span className="pv-vol-value">{Math.round(volPct)}%</span>
+            <div className="pv-vol-box">
+              <input
+                className="pv-vol-fader"
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(volPct)}
+                aria-label="音量"
+                onChange={(e) => v.setVolume(Number(e.target.value) / 100)}
+              />
+            </div>
+            <button className="pv-vol-mute" onClick={v.toggleMute}>
+              {snap.muted ? '取消静音' : '静音'}
+            </button>
+          </Pop>
+        </span>
+        <button
+          className="pv-tool-btn"
+          title={fullscreen ? '退出全屏 (F)' : '全屏 (F)'}
+          aria-label={fullscreen ? '退出全屏' : '全屏'}
+          onClick={onFullscreen}
+        >
+          <Icon name={fullscreen ? 'contract' : 'expand'} />
+        </button>
       </div>
-
-      <button className="tb-btn" title={fullscreen ? '退出全屏 (F)' : '全屏 (F)'} onClick={onFullscreen}>
-        <Icon name={fullscreen ? 'contract' : 'expand'} />
-      </button>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAllowedMediaReferrer, isValidThumbFingerprint, mimeForExtension, parseRangeHeader } from '../src/main/services/media'
+import { hostToLibId, isAllowedMediaReferrer, isValidThumbFingerprint, mimeForExtension, parseRangeHeader } from '../src/main/services/media'
 
 describe('isAllowedMediaReferrer (S0-1)', () => {
   it('allows the production file:// document', () => {
@@ -63,6 +63,19 @@ describe('isValidThumbFingerprint', () => {
     expect(isValidThumbFingerprint('../../Windows/file')).toBe(false)
     expect(isValidThumbFingerprint('fp')).toBe(false)
     expect(isValidThumbFingerprint('')).toBe(false)
+  })
+})
+
+describe('hostToLibId', () => {
+  it('accepts both raw and WHATWG-normalized numeric hosts', () => {
+    expect(hostToLibId('1')).toBe(1)
+    expect(hostToLibId('0.0.0.1')).toBe(1)
+    expect(hostToLibId('0.0.1.0')).toBe(256)
+  })
+
+  it('rejects non-IPv4 and out-of-range hosts', () => {
+    expect(Number.isNaN(hostToLibId('library'))).toBe(true)
+    expect(Number.isNaN(hostToLibId('0.0.0.256'))).toBe(true)
   })
 })
 

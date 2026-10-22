@@ -32,6 +32,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const clickCard = useUI((s) => s.clickCard)
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
+  const lightboxId = useUI((s) => s.lightboxId)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
@@ -178,13 +179,13 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : '图片'}缩略图:${a.name}`}
       >
         {a.type === 'model' && a.dbId == null ? (
-          inView ? (
+          inView && lightboxId !== a.id ? (
             <div className="c3d-wrap">
               <Cube3D cs="58px" />
             </div>
           ) : null
         ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
-          inView ? (
+          inView && lightboxId !== a.id ? (
             <div className="model-card-preview">
               <LazyViewer3D
                 url={a.originalUrl}
@@ -207,7 +208,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             draggable={false}
           />
         ) : a.dbId != null && isVideo ? (
-          inView ? (
+          inView && lightboxId !== a.id ? (
             <video
               ref={videoRef}
               /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
@@ -235,7 +236,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             draggable={false}
           />
         ) : a.previewUrl && isVideo ? (
-          inView ? (
+          inView && lightboxId !== a.id ? (
             <video
               ref={videoRef}
               src={`/@fs/${a.previewUrl}`}

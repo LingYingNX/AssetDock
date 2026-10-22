@@ -104,7 +104,7 @@ function checkpointAllLibraries(): void {
 // S0-1:去掉 bypassCSP——页面 CSP(index.html meta)已显式放行 media:,
 // 无需协议级豁免;保留 fetch 能力(connect-src media:)与流式播放。
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { stream: true, supportFetchAPI: true, bypassCSP: false } }
+  { scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: false } }
 ])
 
 function createWindow(): void {

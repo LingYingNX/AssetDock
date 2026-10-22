@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Asset, LibraryTab, NavKey } from '../data/types'
 import { TAGS } from '../data/dataset'
-import { DEFAULT_FILTERS, queryAssets, type Filters } from '../data/query'
+import { DEFAULT_FILTERS, queryAssets, queryLightboxAssets, type Filters } from '../data/query'
 import { optimisticFolderMove, rebaseFolderPath } from '../data/folder-drag'
 import { parsePalette } from '../data/safe-parse'
 
@@ -322,7 +322,7 @@ interface UIState {
   /* 灯箱 */
   lightboxId: string | null
   /**
-   * 灯箱全屏:仅在该窗口内铺满(收起顶部工具栏/信息栏/胶片带),不改系统窗口状态。
+   * 灯箱全屏:仅在该窗口内铺满,不改系统窗口状态。
    * 与 lightboxId 一样属瞬时视图态,不持久化——重启后带着全屏打开会让人失去方位感。
    */
   lightboxFullscreen: boolean
@@ -929,7 +929,16 @@ export const useUI = create<UIState>((set, get) => {
     setCssDirty: (v) => set({ cssDirty: v }),
     openLightbox: (id) =>
       // 同步 activeId:右侧已有的检查器渲染的就是它,这样灯箱里看的那张与检查器显示的始终一致
-      set({ lightboxId: id, activeId: id, focusedCardId: id, cssDirty: false, lightboxFullscreen: false, openMenu: null, ctxMenu: null }),
+      set((s) => ({
+        lightboxId: id,
+        activeId: id,
+        focusedCardId: id,
+        cssDirty: false,
+        // 从胶片带换片时保留全屏;从网格首次打开时仍从普通布局开始。
+        lightboxFullscreen: s.lightboxId ? s.lightboxFullscreen : false,
+        openMenu: null,
+        ctxMenu: null
+      })),
     closeLightbox: () => {
       // Esc / 关闭按钮 / 遮罩点击都经此处:未保存的 CSS 改动必须先确认
       if (get().cssDirty && !window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')) return
@@ -938,10 +947,7 @@ export const useUI = create<UIState>((set, get) => {
     stepLightbox: (dir) => {
       const { lightboxId, assets, nav, search, filters, stripColor } = get()
       if (get().cssDirty && !window.confirm('CSS 有未保存的修改,切换素材将丢弃这些改动。')) return
-      const scoped = queryAssets(assets, { nav, search, filters, stripColor })
-      const visible = scoped.some((asset) => asset.id === lightboxId)
-        ? scoped
-        : assets.filter((asset) => !asset.deletedAt)
+      const visible = queryLightboxAssets(assets, { nav, search, filters, stripColor }, lightboxId)
       if (visible.length === 0) return
       const idx = visible.findIndex((a) => a.id === lightboxId)
       if (idx < 0) return

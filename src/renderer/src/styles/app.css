@@ -36,11 +36,12 @@
 .tb-spacer{flex:1}
 .tb-btn{width:32px;height:var(--h-sm);border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}
-.win-ctrls{display:flex;margin-left:6px}
+.win-ctrls{display:flex;align-items:center;margin-left:6px}
 /* 高度 = 标题栏高度(--h-title),不是 --h-bar(42px,那是筛选条/标签页的高度):
    两者不再相等,用错就会在窗口上下边缘露出空隙。 */
 .win-ctrls .tb-btn{width:44px;height:var(--h-title);border-radius:0;color:var(--t2)}
 .win-ctrls .tb-btn:hover{background:var(--bg3);color:var(--t1)}
+.win-ctrls .tb-btn.on{background:var(--bg3);color:var(--t1)}
 .win-ctrls .close:hover{background:var(--danger-soft);color:var(--danger)}
 .tb-sep{width:1px;height:var(--ic-md);background:var(--line2);margin:0 4px}
 

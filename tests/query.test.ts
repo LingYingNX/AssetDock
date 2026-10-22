@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatResolution, infoRows, queryAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
+import { formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
 
 const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tag: 'all' }
@@ -55,5 +55,16 @@ describe('queryAssets', () => {
   it('reports the count and total size for the current result set', () => {
     const assets = [asset({ id: 'one', sizeBytes: 1024 }), asset({ id: 'two', sizeBytes: 2048 })]
     expect(statsOf(query(assets))).toEqual({ count: 2, size: '3 KB' })
+  })
+
+  it('keeps lightbox navigation in the current view and falls back when needed', () => {
+    const favorite = asset({ id: 'fav', favorite: true })
+    const normal = asset({ id: 'normal' })
+    const deleted = asset({ id: 'deleted', favorite: true, deletedAt: '2026-09-10T00:00' })
+    const assets = [favorite, normal, deleted]
+    const opts = { nav: 'fav' as const, search: '', filters, stripColor: null }
+
+    expect(queryLightboxAssets(assets, opts, favorite.id).map((item) => item.id)).toEqual(['fav'])
+    expect(queryLightboxAssets(assets, opts, normal.id).map((item) => item.id)).toEqual(['fav', 'normal'])
   })
 })

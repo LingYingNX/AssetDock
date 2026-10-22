@@ -184,6 +184,18 @@ export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
   return matched
 }
 
+/** 灯箱与胶片带共用的集合:当前视图命中时跟随筛选,否则回退到全库未删除素材。 */
+export function queryLightboxAssets(
+  assets: Asset[],
+  opts: QueryOptions,
+  lightboxId: string | null
+): Asset[] {
+  const scoped = queryAssets(assets, opts)
+  return scoped.some((asset) => asset.id === lightboxId)
+    ? scoped
+    : assets.filter((asset) => !asset.deletedAt)
+}
+
 export interface SidebarCounts {
   all: number
   recent: number

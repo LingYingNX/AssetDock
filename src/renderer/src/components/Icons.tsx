@@ -54,6 +54,8 @@ export function SvgDefs(): React.JSX.Element {
         <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
         <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5L8 5.5Z" fill="currentColor" stroke="none" /></symbol>
         <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-step-l" viewBox="0 0 24 24"><path d="M18 6v12" /><path d="m15 12-8-6v12l8-6Z" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-step-r" viewBox="0 0 24 24"><path d="M6 6v12" /><path d="m9 12 8-6v12l-8-6Z" fill="currentColor" stroke="none" /></symbol>
         <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 10v4h3l4 3.5v-11L7 10H4Z" /><path d="M15.5 9.5a4 4 0 0 1 0 5M18 7a7.5 7.5 0 0 1 0 10" /></symbol>
         <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></symbol>
         <symbol id="i-contract" viewBox="0 0 24 24"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /></symbol>

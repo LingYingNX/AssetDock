@@ -1,12 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
-import { queryAssets } from '../data/query'
+import { queryLightboxAssets } from '../data/query'
 import type { Asset } from '../data/types'
 import { REEL_WINDOW_THRESHOLD, scrollLeftForIndex, stripWindow } from '../data/strip-window'
+import { Icon } from './Icons'
 
-/** 胶片带的可用元素:视频/图片/模型都能给出一张缩略图,样式表(CSS)没有位图 */
+/** 位图走缓存缩略图,视频直接抽首帧,三维与样式表使用类型格。 */
 function stripSrc(a: Asset): string | null {
-  if (a.type === 'style') return null
+  if (a.type !== 'image' && a.type !== 'video') return null
+  if (a.type === 'video') {
+    return a.dbId != null ? (a.originalUrl ?? null) : (a.previewUrl ? `/@fs/${a.previewUrl}` : null)
+  }
   if (a.dbId != null) {
     // 灯箱用的是 media:// 的缩略图变体(&thumb=1 指向 640px JPEG 缓存)
     return a.previewUrl ?? null
@@ -14,11 +18,11 @@ function stripSrc(a: Asset): string | null {
   return a.previewUrl ? `/@fs/${a.previewUrl}` : null
 }
 
-const TYPE_MARK: Record<Asset['type'], string> = {
-  image: '',
-  video: '▶',
-  model: '◈',
-  style: '{}'
+const TYPE_ICON: Record<Asset['type'], string> = {
+  image: 'image',
+  video: 'play',
+  model: 'cube',
+  style: 'code'
 }
 
 /**
@@ -41,17 +45,16 @@ export function Filmstrip(): React.JSX.Element | null {
   const trackRef = useRef<HTMLDivElement>(null)
   const [scrollLeft, setScrollLeft] = useState(0)
   const [viewport, setViewport] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef<{ pointerId: number; startX: number; startLeft: number; moved: boolean } | null>(null)
+  const suppressClickRef = useRef(false)
 
   /* 与网格同口径:灯箱里翻的是「当前文件夹/当前筛选」这一串,而不是整个库。
      但右键从别处打开、或筛选条件刚变时,当前素材可能不在这一串里——
      那时退回「全库未删除」,免得胶片带上一个都不高亮、看着像坏了。 */
-  const scoped = useMemo(
-    () => queryAssets(assets, { nav, search, filters, stripColor }),
-    [assets, nav, search, filters, stripColor]
-  )
   const visible = useMemo(
-    () => (scoped.some((a) => a.id === lightboxId) ? scoped : assets.filter((a) => !a.deletedAt)),
-    [scoped, assets, lightboxId]
+    () => queryLightboxAssets(assets, { nav, search, filters, stripColor }, lightboxId),
+    [assets, nav, search, filters, stripColor, lightboxId]
   )
   const idx = visible.findIndex((a) => a.id === lightboxId)
   const windowed = visible.length > REEL_WINDOW_THRESHOLD
@@ -89,6 +92,18 @@ export function Filmstrip(): React.JSX.Element | null {
     })
   }, [idx, windowed, visible.length])
 
+  useEffect(() => {
+    const el = trackRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent): void => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      e.preventDefault()
+      el.scrollLeft += e.deltaY
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [lightboxId])
+
   if (!lightboxId || visible.length === 0) return null
 
   const win = windowed
@@ -96,54 +111,91 @@ export function Filmstrip(): React.JSX.Element | null {
     : { start: 0, end: visible.length, padLeft: 0, padRight: 0 }
   const slice = visible.slice(win.start, win.end)
 
-  const cur = visible[idx]
-
   return (
     <div className="pv-stripbar">
-      <div className="pv-stripmeta">
-        <span className="name-b" title={cur?.name}>{cur?.name ?? ''}</span>
-        <span className="sub">
-          {idx + 1} / {visible.length}
-        </span>
-      </div>
-      <div
-        className="pv-striptrack"
-        ref={trackRef}
-        role="listbox"
-        aria-label="素材胶片带"
-        onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
-      >
-        {win.padLeft > 0 ? <span className="pv-strip-pad" style={{ width: win.padLeft }} aria-hidden="true" /> : null}
-        {slice.map((a, i) => {
-          const real = win.start + i
-          const src = stripSrc(a)
-          const on = real === idx
-          return (
-            <button
-              key={a.id}
-              data-strip-index={real}
-              className={`pv-reel${on ? ' on' : ''}`}
-              role="option"
-              aria-selected={on}
-              aria-label={a.name}
-              title={a.name}
-              onClick={(e) => {
-                // 已在当前图时不重复打开:避免无谓地重建播放状态
-                if (on) return
-                e.stopPropagation()
-                openLightbox(a.id)
-              }}
-            >
-              {src ? (
-                <img src={src} alt="" draggable={false} />
-              ) : (
-                <span className="pv-reel-blank">{TYPE_MARK[a.type] || a.format}</span>
-              )}
-              {a.type === 'video' ? <span className="pv-reel-mark">▶</span> : null}
-            </button>
-          )
-        })}
-        {win.padRight > 0 ? <span className="pv-strip-pad" style={{ width: win.padRight }} aria-hidden="true" /> : null}
+      <div className="pv-striprail">
+        <div
+          className={`pv-striptrack${dragging ? ' dragging' : ''}`}
+          ref={trackRef}
+          role="listbox"
+          aria-label="素材胶片带"
+          onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startLeft: e.currentTarget.scrollLeft, moved: false }
+            setDragging(true)
+          }}
+          onPointerMove={(e) => {
+            const drag = dragRef.current
+            if (!drag) return
+            const dx = e.clientX - drag.startX
+            if (!drag.moved && Math.abs(dx) > 4) drag.moved = true
+            if (drag.moved) {
+              e.preventDefault()
+              if (!e.currentTarget.hasPointerCapture(drag.pointerId)) e.currentTarget.setPointerCapture(drag.pointerId)
+              e.currentTarget.scrollLeft = drag.startLeft - dx
+            }
+          }}
+          onPointerUp={(e) => {
+            const drag = dragRef.current
+            if (drag?.moved) {
+              suppressClickRef.current = true
+              window.setTimeout(() => { suppressClickRef.current = false }, 0)
+            }
+            dragRef.current = null
+            setDragging(false)
+            if (drag && e.currentTarget.hasPointerCapture(drag.pointerId)) e.currentTarget.releasePointerCapture(drag.pointerId)
+          }}
+          onPointerCancel={() => {
+            dragRef.current = null
+            setDragging(false)
+          }}
+        >
+          {win.padLeft > 0 ? <span className="pv-strip-pad" style={{ width: win.padLeft }} aria-hidden="true" /> : null}
+          {slice.map((a, i) => {
+            const real = win.start + i
+            const src = stripSrc(a)
+            const on = real === idx
+            return (
+              <button
+                key={a.id}
+                data-strip-index={real}
+                className={`pv-reel${on ? ' on' : ''}`}
+                role="option"
+                aria-selected={on}
+                aria-label={a.name}
+                title={a.name}
+                onClick={(e) => {
+                  if (suppressClickRef.current || on) return
+                  e.stopPropagation()
+                  openLightbox(a.id)
+                }}
+              >
+                {src && a.type === 'video' && !on ? (
+                  <video
+                    className="pv-reel-video"
+                    src={src}
+                    muted
+                    preload="metadata"
+                    onLoadedMetadata={(e) => {
+                      const video = e.currentTarget
+                      if (video.duration > 0) video.currentTime = Math.min(0.1, video.duration / 10)
+                    }}
+                  />
+                ) : src && a.type === 'image' ? (
+                  <img src={src} alt="" draggable={false} />
+                ) : (
+                  <span className={`pv-reel-fallback ${a.type}`}>
+                    <Icon name={TYPE_ICON[a.type]} />
+                    <span>{a.format}</span>
+                  </span>
+                )}
+                {src ? <span className="pv-reel-format">{a.format}</span> : null}
+              </button>
+            )
+          })}
+          {win.padRight > 0 ? <span className="pv-strip-pad" style={{ width: win.padRight }} aria-hidden="true" /> : null}
+        </div>
       </div>
     </div>
   )

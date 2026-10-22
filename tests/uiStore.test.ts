@@ -763,6 +763,26 @@ describe('selection membership index', () => {
 })
 
 describe('lightbox filtered navigation', () => {
+  it('keeps fullscreen when the filmstrip switches to another asset', async () => {
+    vi.stubGlobal('window', { windowApi: {}, confirm: () => true })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({ lightboxId: 'a1', lightboxFullscreen: true })
+
+    useUI.getState().openLightbox('a2')
+
+    expect(useUI.getState().lightboxFullscreen).toBe(true)
+  })
+
+  it('opens a lightbox in normal layout from the grid', async () => {
+    vi.stubGlobal('window', { windowApi: {}, confirm: () => true })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({ lightboxId: null, lightboxFullscreen: false })
+
+    useUI.getState().openLightbox('a1')
+
+    expect(useUI.getState().lightboxFullscreen).toBe(false)
+  })
+
   it('stays inside the current favorites view when stepping next', async () => {
     vi.stubGlobal('window', { windowApi: {}, confirm: () => true })
     const { useUI, rowToAsset } = await import('../src/renderer/src/store/ui')

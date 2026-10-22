@@ -15,6 +15,8 @@ const MIME: Record<string, string> = {
   '.css': 'text/css', '.html': 'text/html', '.htm': 'text/html', '.txt': 'text/plain'
 }
 
+const CORS_HEADERS = { 'access-control-allow-origin': '*' }
+
 /** 扩展名 → MIME;未知扩展名按二进制流处理(纯函数,便于测试) */
 export function mimeForExtension(ext: string): string {
   return MIME[ext.toLowerCase()] ?? 'application/octet-stream'
@@ -46,6 +48,17 @@ export function isValidThumbFingerprint(value: string): boolean {
   return /^[0-9a-f]{20}$/i.test(value)
 }
 
+/**
+ * media:// 的 host 是库 id。standard 模式下 WHATWG URL 会把纯数字 host
+ * 规范成 IPv4(media://1/ → 0.0.0.1),这里把两种形式都还原成库 id。
+ */
+export function hostToLibId(host: string): number {
+  if (/^\d+$/.test(host)) return Number(host)
+  const parts = host.split('.').map(Number)
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return NaN
+  return parts.reduce((acc, n) => acc * 256 + n, 0)
+}
+
 /** 只有位图能生成缩略图;PSD/SVG 交给占位图路径,视频仍走原文件首帧 */
 const THUMBABLE = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.psd'])
 
@@ -73,6 +86,7 @@ export function isAllowedMediaReferrer(referrer: string): boolean {
 
 function serveFile(path: string, type: string, immutable: boolean, size?: number): Response {
   const headers: Record<string, string> = {
+    ...CORS_HEADERS,
     'content-type': type,
     'accept-ranges': 'bytes',
     // 缩略图文件名即指纹,天然内容寻址;带指纹的原图 URL 同理
@@ -98,9 +112,10 @@ export function registerMediaProtocol(): void {
       if (!isAllowedMediaReferrer(request.referrer ?? '')) {
         return new Response('forbidden', { status: 403 })
       }
-      const u = new URL(request.url)
-      const libId = Number(u.hostname)
-      const rel = decodeURIComponent(u.pathname).replace(/^\//, '')
+      const parsed = /^media:\/\/([^/]+)\/([^?]*)(?:\?(.*))?$/.exec(request.url)
+      const libId = hostToLibId(parsed?.[1] ?? '')
+      const rel = decodeURIComponent(parsed?.[2] ?? '')
+      const params = new URLSearchParams(parsed?.[3] ?? '')
       const lib = registryLib(libId)
       if (!lib || !rel || rel.includes('..')) {
         return new Response('forbidden', { status: 403 })
@@ -114,8 +129,8 @@ export function registerMediaProtocol(): void {
       if (!st || !st.isFile()) return new Response('not found', { status: 404 })
 
       const ext = extname(realPath).toLowerCase()
-      const fingerprint = u.searchParams.get('v') ?? ''
-      const thumbRequested = u.searchParams.get('thumb') === '1'
+      const fingerprint = params.get('v') ?? ''
+      const thumbRequested = params.get('thumb') === '1'
 
       if (thumbRequested && !isValidThumbFingerprint(fingerprint)) {
         return new Response('forbidden', { status: 403 })
@@ -154,7 +169,7 @@ export function registerMediaProtocol(): void {
           })
           return new Response(inlinePlaceholderSvg(format), {
             status: 200,
-            headers: { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }
+            headers: { ...CORS_HEADERS, 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }
           })
         }
       }
@@ -183,6 +198,7 @@ export function registerMediaProtocol(): void {
         return new Response(Readable.toWeb(stream) as ReadableStream, {
           status: 206,
           headers: {
+            ...CORS_HEADERS,
             'content-type': type,
             'content-length': String(end - start + 1),
             'content-range': `bytes ${start}-${end}/${total}`,

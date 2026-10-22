@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
+import { formatResolution } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
 import type { ViewKey } from './Viewer3D'
 import { CssEditor } from './CssEditor'
-import { VideoControls, useVideoPlayback } from './VideoControls'
+import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
+
+let videoSessionSeq = 0
+let videoLoadSeq = 0
 
 /** 舞台媒体加载失败占位 */
 function MediaFallback(): React.JSX.Element {
@@ -16,6 +20,43 @@ function MediaFallback(): React.JSX.Element {
       <span>文件加载失败或已缺失</span>
     </div>
   )
+}
+
+/** 媒体元素由 effect 原生创建,避免 React 接管 video 时干扰 Chromium 解码管线。 */
+function VideoElement({ src, playback }: { src: string; playback: VideoPlayback }): React.JSX.Element {
+  const hostRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let video: HTMLVideoElement | null = null
+    let cancelled = false
+    const play = (): void => { void video?.play().catch(() => undefined) }
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      video = document.createElement('video')
+      video.preload = 'auto'
+      video.autoplay = true
+      host.appendChild(video)
+      playback.ref.current = video
+      video.addEventListener('canplay', play)
+      video.src = `${src}${src.includes('?') ? '&' : '?'}load=${++videoLoadSeq}`
+      play()
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      if (!video) return
+      video.removeEventListener('canplay', play)
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+      video.remove()
+      if (playback.ref.current === video) playback.ref.current = null
+    }
+  }, [src, playback.ref])
+
+  return <div ref={hostRef} className="pv-video-element" />
 }
 
 /** 图片查看:滚轮缩放(以光标为锚),双击重置 */
@@ -112,12 +153,16 @@ export function Lightbox(): React.JSX.Element | null {
   const [realView, setRealView] = useState<ViewKey>('auto')
   const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
+  const [realFailed, setRealFailed] = useState(false)
+  const [videoEpoch] = useState(() => ++videoSessionSeq)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
   const a = assets.find((x) => x.id === (lightboxId ?? lastId))
   const isVideo = a?.type === 'video'
-  const videoSrc = isVideo && a ? (a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`) : ''
+  const videoSrc = isVideo && a
+    ? (a.dbId != null ? `${a.originalUrl ?? ''}&lightbox=1&session=${videoEpoch}` : `/@fs/${a.previewUrl ?? ''}`)
+    : ''
   const playback = useVideoPlayback(videoSrc)
 
   /* 曝光持久化:打开灯箱时读应用状态(组件常驻挂载,不可依赖[]) */
@@ -164,9 +209,11 @@ export function Lightbox(): React.JSX.Element | null {
     setPaused(false)
     setWire(false)
     setRot(null)
-    setRealWire(false)
+    const current = useUI.getState().assets.find((asset) => asset.id === lightboxId)
+    setRealWire(current?.format === 'OBJ' || current?.format === 'FBX')
     setRealView('auto')
     setLoadPct(undefined)
+    setRealFailed(false)
     setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [lightboxId])
 
@@ -223,6 +270,17 @@ export function Lightbox(): React.JSX.Element | null {
         playback.toggle()
         return
       }
+      if (isVideo && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault()
+        const fps = a?.fps && a.fps > 0 ? a.fps : 30
+        playback.stepBy((e.key === 'ArrowLeft' ? -1 : 1) / fps)
+        return
+      }
+      if (isVideo && k === 'm') {
+        e.preventDefault()
+        playback.toggleMute()
+        return
+      }
       if (k === 'f') {
         e.preventDefault()
         toggleFullscreen()
@@ -231,7 +289,7 @@ export function Lightbox(): React.JSX.Element | null {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightboxId, isVideo, playback, toggleFullscreen])
+  }, [lightboxId, isVideo, a?.fps, playback, toggleFullscreen])
 
   /* 退场期间 lightboxId 已为 null,靠 mounted 撑着最后 220ms 的淡出 */
   if (!mounted) return null
@@ -242,6 +300,7 @@ export function Lightbox(): React.JSX.Element | null {
   const isModel = a.type === 'model'
   const isStyle = a.type === 'style'
   const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
+  const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
 
   /* 控制条动作(按真实/占位分流) */
   const onTurntable = (): void => {
@@ -302,15 +361,18 @@ export function Lightbox(): React.JSX.Element | null {
         if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('pv-stage')) closeLightbox()
       }}
     >
-      {/* 极简顶栏:只留关闭。翻片走胶片带,收藏/评分/导出交给右侧检查器与右键菜单 */}
+      {/* 顶栏只承担进出,中间完全留白,信息统一下沉到播放器底栏。 */}
       <div className="pv-top">
-        <span className="sp" />
-        <button className="tb-btn" title="关闭 (Esc)" onClick={closeLightbox}>
+        <button className="pv-corner-btn" title="返回 (Esc)" aria-label="返回" onClick={closeLightbox}>
+          <Icon name="arr-l" />
+        </button>
+        <span />
+        <button className="pv-corner-btn" title="关闭 (Esc)" aria-label="关闭" onClick={closeLightbox}>
           <Icon name="x" />
         </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo ? ' video-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -336,8 +398,13 @@ export function Lightbox(): React.JSX.Element | null {
                   view={realView}
                   exposure={exposure}
                   onProgress={setLoadPct}
+                  onLoaded={() => setRealFailed(false)}
+                  onError={() => {
+                    setRealFailed(true)
+                    setLoadPct(100)
+                  }}
                 />
-                {loadPct != null && loadPct < 100 && (
+                {!realFailed && loadPct != null && loadPct < 100 && (
                   <div className="pv-loading">
                     {loadPct === null ? '解析模型…' : `加载中 ${Math.round(loadPct)}%`}
                   </div>
@@ -396,16 +463,17 @@ export function Lightbox(): React.JSX.Element | null {
                   <span className="v3-env">环境 · 影棚</span>
                 </div>
               </div>
-            ) : a.dbId != null ? (
-              a.type === 'image' ? (
-                <MediaImg src={a.originalUrl ?? ''} name={a.name} />
-              ) : (
-                <video ref={playback.ref} src={a.originalUrl ?? ''} {...playback.handlers} />
-              )
             ) : a.type === 'image' ? (
-              <img src={`/@fs/${a.previewUrl}`} alt={a.name} />
+              <MediaImg
+                src={a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`}
+                name={a.name}
+              />
             ) : (
-              <video ref={playback.ref} src={`/@fs/${a.previewUrl}`} {...playback.handlers} />
+              <div className="pv-video-shell">
+                <div className="pv-video-surface">
+                  <VideoElement src={videoSrc} playback={playback} />
+                </div>
+              </div>
             )}
           </div>
           {isModel && (
@@ -427,13 +495,19 @@ export function Lightbox(): React.JSX.Element | null {
         )}
       </div>
 
-      {/* 控制条:全屏对任何素材都有效;其余按钮只在视频上出现 */}
       {!isStyle ? (
-        <div className="pv-ctlbar">
+        <div className="pv-dock">
+          <div className="pv-meta-row">
+            <div className="pv-meta-copy">
+              <strong title={a.name}>{a.name}</strong>
+              <span className="sep">·</span>
+              <span title={assetMeta}>{assetMeta}</span>
+            </div>
+          </div>
           {isVideo ? (
-            <VideoControls v={playback} fullscreen={fsNow} onFullscreen={toggleFullscreen} />
+            <VideoControls v={playback} fps={a.fps} fullscreen={fsNow} onFullscreen={toggleFullscreen} />
           ) : (
-            <div className="pv-ctl">
+            <div className="pv-ctl pv-generic-ctl">
               <span className="sp" />
               <button
                 className="tb-btn"

@@ -8,6 +8,8 @@ export function Titlebar(): React.JSX.Element {
   const openTab = useUI((s) => s.openTab)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
+  const inspHidden = useUI((s) => s.inspHidden)
+  const toggleInspector = useUI((s) => s.toggleInspector)
 
   // 只有下拉/齿轮这类浮层需要「点击标题栏其它区域关闭」,因此打开时暂停标题栏拖拽;
   // 偏好设置是带全屏遮罩的模态对话框,不依赖点击标题栏关闭,保持标题栏可拖拽。
@@ -69,6 +71,16 @@ export function Titlebar(): React.JSX.Element {
         onPointerDown={() => setOpenMenu(null)}
       />
       <div className="win-ctrls">
+        <span className="tb-sep" />
+        <button
+          className={`tb-btn${inspHidden ? '' : ' on'}`}
+          title={inspHidden ? '展开右侧信息面板' : '收起右侧信息面板'}
+          aria-label={inspHidden ? '展开右侧信息面板' : '收起右侧信息面板'}
+          aria-pressed={!inspHidden}
+          onClick={toggleInspector}
+        >
+          <Icon name="panel-r" />
+        </button>
         <button className="tb-btn" title="最小化" onClick={() => window.windowApi.minimize()}>
           <Icon name="minus" />
         </button>

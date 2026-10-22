@@ -93,12 +93,17 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
   onProgressRef.current = onProgress
   const [failed, setFailed] = useState(false)
 
+  useEffect(() => {
+    setFailed(false)
+  }, [url, format])
+
   /* 曝光:直改 toneMappingExposure,不重建 */
   useEffect(() => {
     if (rendererRef.current) rendererRef.current.toneMappingExposure = exposure
   }, [exposure])
 
   useEffect(() => {
+    if (failed) return
     const host = hostRef.current
     if (!host) return
     let disposed = false
@@ -109,6 +114,7 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     } catch {
+      onProgressRef.current?.(100)
       setFailed(true)
       onError?.()
       return
@@ -231,7 +237,8 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
       })
       .then((model) => {
         if (loadTimer) clearTimeout(loadTimer)
-        if (disposed || !model) return
+        if (disposed) return
+        if (!model) throw new Error('empty model')
         onProgressRef.current?.(100)
         group.add(model)
         const box = new THREE.Box3().setFromObject(model)
@@ -249,11 +256,13 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
       .catch(() => {
         if (loadTimer) clearTimeout(loadTimer)
         if (disposed) return
+        onProgressRef.current?.(100)
         setFailed(true)
         onError?.()
       })
     loadTimer = setTimeout(() => {
       if (disposed) return
+      onProgressRef.current?.(100)
       setFailed(true)
       onError?.()
     }, LOAD_TIMEOUT_MS)
@@ -304,7 +313,7 @@ export function Viewer3D({ url, format, turntable, wireframe, view, exposure = 1
       apiRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, format])
+  }, [url, format, failed])
 
   /* 控制属性同步 */
   useEffect(() => {
