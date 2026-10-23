@@ -302,11 +302,15 @@ describe('restoreUiPrefs', () => {
   }
 
   it('applies every stored preference', async () => {
-    const s = await load(JSON.stringify({ view: 'list', colw: 300, inspHidden: true, cbarOpen: true }))
+    const s = await load(
+      JSON.stringify({ view: 'list', colw: 300, inspHidden: true, cbarOpen: true, modelShade: 'render', modelHdr: 'sunset' })
+    )
     expect(s.view).toBe('list')
     expect(s.colw).toBe(300)
     expect(s.inspHidden).toBe(true)
     expect(s.cbarOpen).toBe(true)
+    expect(s.modelShade).toBe('render')
+    expect(s.modelHdr).toBe('sunset')
   })
 
   it('falls back to defaults when nothing is stored', async () => {
@@ -315,6 +319,8 @@ describe('restoreUiPrefs', () => {
     expect(s.colw).toBe(232)
     expect(s.inspHidden).toBe(false)
     expect(s.cbarOpen).toBe(false)
+    expect(s.modelShade).toBe('solid')
+    expect(s.modelHdr).toBe('forest')
   })
 
   it('ignores malformed JSON instead of throwing', async () => {
@@ -324,11 +330,15 @@ describe('restoreUiPrefs', () => {
   })
 
   it('rejects out-of-range and unknown values field by field', async () => {
-    const s = await load(JSON.stringify({ view: 'diagonal', colw: 9999, inspHidden: 'yes', cbarOpen: 1 }))
+    const s = await load(
+      JSON.stringify({ view: 'diagonal', colw: 9999, inspHidden: 'yes', cbarOpen: 1, modelShade: 'ghost', modelHdr: 'volcano' })
+    )
     expect(s.view).toBe('waterfall')
     expect(s.colw).toBe(320)
     expect(s.inspHidden).toBe(false)
     expect(s.cbarOpen).toBe(false)
+    expect(s.modelShade).toBe('solid')
+    expect(s.modelHdr).toBe('forest')
   })
 })
 

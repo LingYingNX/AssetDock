@@ -4,6 +4,8 @@ import { TAGS } from '../data/dataset'
 import { DEFAULT_FILTERS, queryAssets, queryLightboxAssets, type Filters } from '../data/query'
 import { optimisticFolderMove, rebaseFolderPath } from '../data/folder-drag'
 import { parsePalette } from '../data/safe-parse'
+import { DEFAULT_HDR, parseHdrPreset, type HdrId } from '../data/hdr-presets'
+import type { ModelShade } from '../components/Viewer3D'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -41,6 +43,9 @@ interface UiPrefs {
   nav: NavKey
   /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留 */
   collapsedFolders: string[]
+  /** 三维预览模式与 HDR 环境:跨重启保留 */
+  modelShade: ModelShade
+  modelHdr: HdrId
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -70,7 +75,9 @@ function persistUiPrefs(): void {
       inspHidden: s.inspHidden,
       cbarOpen: s.cbarOpen,
       nav: s.nav,
-      collapsedFolders: [...s.collapsedFolders]
+      collapsedFolders: [...s.collapsedFolders],
+      modelShade: s.modelShade,
+      modelHdr: s.modelHdr
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -127,7 +134,9 @@ export async function restoreUiPrefs(): Promise<void> {
         inspHidden: parsed.inspHidden === true,
         cbarOpen: parsed.cbarOpen === true,
         nav: parseNav(parsed.nav),
-        collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders)
+        collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders),
+        modelShade: parsed.modelShade === 'render' ? 'render' : 'solid',
+        modelHdr: parseHdrPreset(parsed.modelHdr)
       })
     } catch {
       /* 界面偏好损坏:保持默认 */
@@ -274,6 +283,11 @@ interface UIState {
   setColw: (n: number) => void
   inspHidden: boolean
   toggleInspector: () => void
+  /** 三维预览:实体/渲染模式与 HDR 环境 */
+  modelShade: ModelShade
+  setModelShade: (mode: ModelShade) => void
+  modelHdr: HdrId
+  setModelHdr: (id: HdrId) => void
 
   /* 素材数据(可变字段走 store,编辑经 IPC 落库) */
   assets: Asset[]
@@ -715,6 +729,16 @@ export const useUI = create<UIState>((set, get) => {
     inspHidden: false,
     toggleInspector: () => {
       set((s) => ({ inspHidden: !s.inspHidden }))
+      persistUiPrefs()
+    },
+    modelShade: 'solid',
+    setModelShade: (modelShade) => {
+      set({ modelShade })
+      persistUiPrefs()
+    },
+    modelHdr: DEFAULT_HDR,
+    setModelHdr: (modelHdr) => {
+      set({ modelHdr })
       persistUiPrefs()
     },
 

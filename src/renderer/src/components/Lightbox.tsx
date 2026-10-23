@@ -4,7 +4,7 @@ import { formatResolution } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
-import type { ViewKey } from './Viewer3D'
+import { HDR_PRESETS, hdrPreset } from '../data/hdr-presets'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
@@ -99,27 +99,16 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
   )
 }
 
-/** 视角预设条:5 个 64×38 玻璃小格 */
-const PRESETS: { title: string; rot: string; view: ViewKey }[] = [
-  { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)', view: 'auto' },
-  { title: '前视', rot: 'rotateX(-14deg) rotateY(0deg)', view: 'front' },
-  { title: '侧视', rot: 'rotateX(-14deg) rotateY(90deg)', view: 'side' },
-  { title: '顶视', rot: 'rotateX(62deg) rotateY(0deg)', view: 'top' },
-  { title: '背视', rot: 'rotateX(-14deg) rotateY(180deg)', view: 'back' }
-]
-
-const VIEW_ROT: Record<string, string> = {
-  front: 'rotateX(-24deg) rotateY(0deg)',
-  side: 'rotateX(-24deg) rotateY(90deg)',
-  top: 'rotateX(66deg) rotateY(0deg)'
-}
-
 export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
   const assets = useUI((s) => s.assets)
   const fullscreen = useUI((s) => s.lightboxFullscreen)
   const setFullscreen = useUI((s) => s.setLightboxFullscreen)
+  const modelShade = useUI((s) => s.modelShade)
+  const setModelShade = useUI((s) => s.setModelShade)
+  const modelHdr = useUI((s) => s.modelHdr)
+  const setModelHdr = useUI((s) => s.setModelHdr)
   const [shown, setShown] = useState(false)
   /* 关闭时 lightboxId 立刻变 null,但画面还要停留一拍播完淡出,所以:
      mounted 决定「在不在」,lastId 决定「退场期间画哪一张」。
@@ -140,21 +129,10 @@ export function Lightbox(): React.JSX.Element | null {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   )
 
-  /* 占位舞台(FBX/OBJ/演示模型)状态 */
-  const [paused, setPaused] = useState(false)
-  const [wire, setWire] = useState(false)
-  const [rot, setRot] = useState<string | null>(null)
-
-  /* 真实 3D(GLB/glTF)状态:reduced-motion 默认暂停转台 */
-  const [realTurn, setRealTurn] = useState(
-    () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-  const [realWire, setRealWire] = useState(false)
-  const [realView, setRealView] = useState<ViewKey>('auto')
-  const [exposure, setExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
   const [realFailed, setRealFailed] = useState(false)
   const [videoEpoch] = useState(() => ++videoSessionSeq)
+  const [hdrOpen, setHdrOpen] = useState(false)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
@@ -164,19 +142,6 @@ export function Lightbox(): React.JSX.Element | null {
     ? (a.dbId != null ? `${a.originalUrl ?? ''}&lightbox=1&session=${videoEpoch}` : `/@fs/${a.previewUrl ?? ''}`)
     : ''
   const playback = useVideoPlayback(videoSrc)
-
-  /* 曝光持久化:打开灯箱时读应用状态(组件常驻挂载,不可依赖[]) */
-  useEffect(() => {
-    void window.windowApi.state.get('viewerExposure').then((v) => {
-      const n = Number(v)
-      if (v != null && !Number.isNaN(n)) setExposure(Math.min(1.6, Math.max(0.4, n)))
-    })
-  }, [lightboxId])
-
-  const changeExposure = (v: number): void => {
-    setExposure(v)
-    void window.windowApi.state.set('viewerExposure', String(v))
-  }
 
   /* 入场与退场。打开:先挂载、下一帧置 shown 播淡入。
      关闭:先置 shown=false 播淡出,180ms 后再卸载——不能只等 transitionend,
@@ -206,15 +171,9 @@ export function Lightbox(): React.JSX.Element | null {
   }, [lightboxId, fullscreen])
 
   useEffect(() => {
-    setPaused(false)
-    setWire(false)
-    setRot(null)
-    const current = useUI.getState().assets.find((asset) => asset.id === lightboxId)
-    setRealWire(current?.format === 'OBJ' || current?.format === 'FBX')
-    setRealView('auto')
     setLoadPct(undefined)
     setRealFailed(false)
-    setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setHdrOpen(false)
   }, [lightboxId])
 
   /* 全屏 FLIP。position 不可过渡,所以整值切换必须靠反向补偿补出连续感:
@@ -301,59 +260,10 @@ export function Lightbox(): React.JSX.Element | null {
   const isStyle = a.type === 'style'
   const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
   const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
-
-  /* 控制条动作(按真实/占位分流) */
-  const onTurntable = (): void => {
-    if (realModel) {
-      setRealTurn((t) => !t)
-      if (!realTurn) setRealView('auto')
-    } else {
-      const next = !paused
-      setPaused(next)
-      if (!next) {
-        setRot(null)
-        setRealView('auto')
-      }
-    }
-  }
-  const onWireframe = (): void => (realModel ? setRealWire(!realWire) : setWire(!wire))
-  const onViewChip = (v: Exclude<ViewKey, 'auto' | 'back'>): void => {
-    if (realModel) {
-      setRealView(v)
-      setRealTurn(false)
-    } else {
-      setRot(VIEW_ROT[v])
-      setPaused(false)
-    }
-  }
-  const onPreset = (p: (typeof PRESETS)[number]): void => {
-    if (realModel) {
-      if (p.view === 'auto') {
-        setRealView('auto')
-        setRealTurn(true)
-      } else {
-        setRealView(p.view)
-        setRealTurn(false)
-      }
-    } else {
-      setRot(p.rot)
-      setPaused(false)
-    }
-  }
-
-  const stageClass = realModel ? '' : `pv3d${wire ? ' wf' : ''}${paused ? ' paused' : ''}`
-  const curPresetIndex = realModel
-    ? PRESETS.findIndex((p) => p.view === realView)
-    : rot
-      ? PRESETS.findIndex((p) => p.rot === rot)
-      : !paused
-        ? 0
-        : -1
-
   return (
     <div
       ref={rootRef}
-      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}`}
+      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}${isModel ? ' model' : ''}`}
       role="dialog"
       aria-modal={fsNow}
       aria-label="详情预览"
@@ -366,13 +276,9 @@ export function Lightbox(): React.JSX.Element | null {
         <button className="pv-corner-btn" title="返回 (Esc)" aria-label="返回" onClick={closeLightbox}>
           <Icon name="arr-l" />
         </button>
-        <span />
-        <button className="pv-corner-btn" title="关闭 (Esc)" aria-label="关闭" onClick={closeLightbox}>
-          <Icon name="x" />
-        </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo ? ' video-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel ? ' video-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -388,15 +294,17 @@ export function Lightbox(): React.JSX.Element | null {
             }}
           >
             {realModel ? (
-              <div className="pv3d" style={{ position: 'relative' }}>
-                <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
+                </div>
                 <LazyViewer3D
                   url={a.originalUrl ?? ''}
                   format={a.format as 'GLB' | 'FBX' | 'OBJ'}
-                  turntable={realTurn}
-                  wireframe={realWire}
-                  view={realView}
-                  exposure={exposure}
+                  shade={modelShade}
+                  hdr={modelHdr}
                   onProgress={setLoadPct}
                   onLoaded={() => setRealFailed(false)}
                   onError={() => {
@@ -409,58 +317,56 @@ export function Lightbox(): React.JSX.Element | null {
                     {loadPct === null ? '解析模型…' : `加载中 ${Math.round(loadPct)}%`}
                   </div>
                 )}
-                <div className="v3-bar">
-                  <button className={`v3-chip${realTurn && realView === 'auto' ? ' on' : ''}`} title="转台 开/暂停" onClick={onTurntable}>
-                    <Icon name="rotate-3d" />转台
-                  </button>
-                  <button className={`v3-chip${realWire ? ' on' : ''}`} onClick={onWireframe}>
-                    线框
-                  </button>
-                  <span className="vr" />
-                  <button className={`v3-chip${realView === 'front' ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
-                  <button className={`v3-chip${realView === 'side' ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
-                  <button className={`v3-chip${realView === 'top' ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
-                  <span className="vr" />
-                  <span className="v3-env">环境 · 影棚</span>
-                  <span className="vr" />
-                  <span className="zoomer" style={{ gap: 5 }} title="曝光 0.4–1.6">
-                    <Icon name="spark" />
-                    <input
-                      type="range"
-                      min={0.4}
-                      max={1.6}
-                      step={0.05}
-                      value={exposure}
-                      aria-label="影棚曝光"
-                      style={{ background: `linear-gradient(90deg,var(--acc) ${((exposure - 0.4) / 1.2) * 100}%,var(--line2) ${((exposure - 0.4) / 1.2) * 100}%)` }}
-                      onChange={(e) => changeExposure(Number(e.target.value))}
+                <div className="pv-model-tools">
+                  <div className="hdr-picker">
+                    <button
+                      className={`hdr-ball${hdrOpen ? ' open' : ''}`}
+                      style={{ backgroundImage: `url(${hdrPreset(modelHdr).thumbUrl})` }}
+                      aria-label={`HDR 环境：${hdrPreset(modelHdr).label}，点击展开环境球`}
+                      aria-expanded={hdrOpen}
+                      onClick={() => setHdrOpen((open) => !open)}
                     />
-                  </span>
-                </div>
-              </div>
-            ) : isModel ? (
-              <div className={stageClass}>
-                <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
-                <div className="c3d-wrap">
-                  <Cube3D cs="186px" transform={rot ?? undefined} />
+                    {hdrOpen && (
+                      <div className="hdr-row" aria-label="HDR 环境">
+                        {HDR_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            className={`hdr-option${preset.id === modelHdr ? ' on' : ''}`}
+                            style={{ backgroundImage: `url(${preset.thumbUrl})` }}
+                            title={preset.label}
+                            aria-label={preset.label}
+                            aria-pressed={preset.id === modelHdr}
+                            onClick={() => setModelHdr(preset.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="v3-bar">
                   <button
-                    className={`v3-chip${!paused && !rot ? ' on' : ''}`}
-                    title="转台 开/暂停"
-                    onClick={onTurntable}
+                    className={`v3-chip${modelShade === 'solid' ? ' on' : ''}`}
+                    onClick={() => setModelShade('solid')}
                   >
-                    <Icon name="rotate-3d" />转台
+                    实体模式
                   </button>
-                  <button className={`v3-chip${wire ? ' on' : ''}`} onClick={onWireframe}>
-                    线框
+                  <button
+                    className={`v3-chip${modelShade === 'render' ? ' on' : ''}`}
+                    onClick={() => setModelShade('render')}
+                  >
+                    渲染模型
                   </button>
-                  <span className="vr" />
-                  <button className={`v3-chip${rot === VIEW_ROT.front ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
-                  <button className={`v3-chip${rot === VIEW_ROT.side ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
-                  <button className={`v3-chip${rot === VIEW_ROT.top ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
-                  <span className="vr" />
-                  <span className="v3-env">环境 · 影棚</span>
+                </div>
+              </div>
+            ) : isModel ? (
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
+                </div>
+                <div className="c3d-wrap">
+                  <Cube3D cs="186px" />
                 </div>
               </div>
             ) : a.type === 'image' ? (
@@ -476,26 +382,12 @@ export function Lightbox(): React.JSX.Element | null {
               </div>
             )}
           </div>
-          {isModel && (
-            <div className="pv-strip" title="视角预设">
-              {PRESETS.map((p, i) => (
-                <div
-                  key={p.title}
-                  className={`fr${curPresetIndex === i ? ' cur' : ''}`}
-                  title={p.title}
-                  onClick={() => onPreset(p)}
-                >
-                  <div className="c3d-wrap"><Cube3D cs="20px" transform={p.rot} /></div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         </>
         )}
       </div>
 
-      {!isStyle ? (
+      {!isStyle && !isModel ? (
         <div className="pv-dock">
           <div className="pv-meta-row">
             <div className="pv-meta-copy">
@@ -506,18 +398,7 @@ export function Lightbox(): React.JSX.Element | null {
           </div>
           {isVideo ? (
             <VideoControls v={playback} fps={a.fps} fullscreen={fsNow} onFullscreen={toggleFullscreen} />
-          ) : (
-            <div className="pv-ctl pv-generic-ctl">
-              <span className="sp" />
-              <button
-                className="tb-btn"
-                title={fsNow ? '退出全屏 (F)' : '全屏 (F)'}
-                onClick={toggleFullscreen}
-              >
-                <Icon name={fsNow ? 'contract' : 'expand'} />
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
 
