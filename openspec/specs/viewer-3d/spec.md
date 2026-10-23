@@ -1,74 +1,38 @@
 ## Purpose
 
-定义 GLB/glTF 灯箱的真实渲染、交互控制、资源释放和曝光设置，保证三维素材能稳定预览，并在重启后保留用户最近一次调整的影棚曝光值。
+定义 GLB/glTF/FBX/OBJ 灯箱的真实渲染、交互控制、HDR 环境、材质呈现和资源释放，保证三维素材能稳定预览并检查真实材质。
 
 ## Requirements
 
 ### Requirement: GLB/glTF 真实渲染
-灯箱展示 GLB/glTF 素材 SHALL 用 three.js WebGL 渲染真实模型:经 GLTFLoader 从 media 协议流加载,支持 Draco 压缩;场景含影棚环境光(RoomEnvironment)与蓝调舞台背景,模型自动居中并按包围盒适配取景;加载中显示进度,解析/解码失败 SHALL 回退现有占位舞台并提示错误。
+灯箱展示库内三维素材 SHALL 用 three.js WebGL 渲染真实模型:GLB/glTF 经 GLTFLoader 和 Draco 加载,FBX 经 FBXLoader 加载,OBJ 经 OBJLoader 并按 mtllib 加载 MTL 与贴图;模型自动居中并按包围盒适配取景;加载失败 SHALL 回退占位舞台并提示错误。
 
 #### Scenario: 打开库内 GLB
 - **WHEN** 用户双击一个库内 GLB 素材打开灯箱
-- **THEN** 舞台渲染真实模型(可拖拽旋转/滚轮缩放),无 CSS 立方体
+- **THEN** 舞台渲染真实模型,可拖拽旋转和滚轮缩放,不显示 CSS 立方体
+
+#### Scenario: 打开库内 FBX 或 OBJ
+- **WHEN** 用户打开 FBX 或 OBJ 素材
+- **THEN** 舞台渲染真实几何体;OBJ 存在 MTL 时显示材质与贴图,缺失时显示实体 clay 预览
 
 #### Scenario: 坏文件回退
-- **WHEN** 加载损坏或不完整的 GLB
+- **WHEN** 模型文件损坏或外部材质不可读
 - **THEN** 显示错误提示与占位舞台,应用不崩溃
 
-### Requirement: 转台与线框
-转台 SHALL 默认开启(模型绕竖轴匀速自转),可暂停/继续;线框开关 SHALL 切换全部网格材质 wireframe;`prefers-reduced-motion: reduce` 时转台默认暂停。
-
-#### Scenario: 转台暂停继续
-- **WHEN** 用户点击「转台」再点击一次
-- **THEN** 自转停止后恢复,其余交互不受影响
-
-#### Scenario: 线框切换
-- **WHEN** 用户点击「线框」
-- **THEN** 模型切换线框显示,再次点击恢复实体
-
-### Requirement: 视角定格与预设
-前视/侧视/顶视 SHALL 将相机定格到对应正交向;舞台下方 5 格视角预设条(透视/前视/侧视/顶视/背视)点击定格并以蓝描边标示当前项;定格与转台互斥(定格即暂停自转)。
-
-#### Scenario: 顶视定格
-- **WHEN** 用户点击「顶视」或预设条顶视格
-- **THEN** 相机切换到顶视角,转台暂停,预设条该项蓝描边
-
 ### Requirement: 资源释放
-关闭灯箱或切换到非 3D 素材时 SHALL 释放 three.js 渲染器、几何体、纹理与事件监听,不残留 requestAnimationFrame 循环。释放 SHALL 覆盖材质持有的全部贴图(map、normalMap、roughnessMap、metalnessMap、emissiveMap、aoMap 等)以及场景环境贴图本身与 PMREM 生成器占用的渲染目标;释放完成后 SHALL 断开容器尺寸观察并使画布从容器移除。
+关闭灯箱、切换素材或切换 HDR SHALL 释放 three.js 渲染器、几何体、材质、材质贴图、HDR 环境贴图及其 PMREM 渲染目标,并断开尺寸观察和动画循环;不得残留旧模型或旧环境引用。
 
 #### Scenario: 关闭灯箱释放
-- **WHEN** 关闭 3D 灯箱后连续开关 10 次
+- **WHEN** 关闭三维灯箱后连续开关 10 次
 - **THEN** GPU 内存与帧循环次数回落,无明显泄漏增长
 
-#### Scenario: 材质贴图随模型释放
-- **WHEN** 打开一个带基础色贴图、法线贴图与金属粗糙度贴图的 GLB 后关闭灯箱
-- **THEN** 这些贴图与其所属材质一并被释放,重复开关同一素材不产生持续上升的 GPU 内存占用
-
 #### Scenario: 环境贴图与渲染目标释放
-- **WHEN** 用户关闭 3D 灯箱
-- **THEN** 场景环境贴图、生成它的渲染目标与 PMREM 生成器均被释放,画布从容器中移除且尺寸观察已断开
+- **WHEN** 用户切换 HDR 或关闭灯箱
+- **THEN** 旧 HDR 贴图、PMREM 目标和材质引用被释放,画布与尺寸观察被清理
 
-### Requirement: 加载进度与曝光
-灯箱 3D 加载 SHALL 显示进度指示(media 流按 content-length 报百分比,解析阶段显示旋转指示),完成后淡入模型;控制条 SHALL 在「环境 · 影棚」旁提供曝光滑杆(默认 1.0,范围 0.4–1.6),拖动实时调节 renderer 曝光且不重建渲染器/场景;曝光值变更时 SHALL 写入应用状态,下次打开 3D 灯箱 SHALL 恢复上次曝光值(全局记忆,不区分素材)。
-
-#### Scenario: 大模型加载进度
-- **WHEN** 打开 30MB+ 的 GLB
-- **THEN** 加载期间舞台显示百分比进度,完成后模型淡入
-
-#### Scenario: 曝光调节
-- **WHEN** 浅色模型过曝,用户把曝光滑杆调低
-- **THEN** 模型亮度实时降低,渲染器与转台状态不受影响
-
-#### Scenario: 曝光重启保留
-- **WHEN** 调整曝光后完全退出并重启应用,再打开任一 GLB 灯箱
-- **THEN** 曝光为上次设定值
-
-### Requirement: 曝光持久化
-影棚曝光值变更时 SHALL 写入应用状态;下次打开 3D 灯箱 SHALL 恢复上次曝光值(全局记忆,不区分素材)。
-
-#### Scenario: 曝光重启保留
-- **WHEN** 调整曝光后完全退出并重启应用,再打开任一 GLB 灯箱
-- **THEN** 曝光为上次设定值
+#### Scenario: 材质贴图随模型释放
+- **WHEN** 打开带基础色、法线或金属粗糙度贴图的模型后关闭灯箱
+- **THEN** 这些贴图与其所属材质一并被释放,重复开关不持续增加 GPU 占用
 
 ### Requirement: 外部资源与多格式回退
 
@@ -83,3 +47,48 @@ GLB、glTF、FBX 和 OBJ 真实预览 SHALL 以原文件所在目录为基准解
 
 - **WHEN** 外部资源缺失或模型损坏
 - **THEN** 舞台显示占位模型和错误提示
+
+### Requirement: 实体模式与渲染模型
+三维舞台 SHALL 提供「实体模式」和「渲染模型」两个互斥模式,默认实体模式。实体模式 SHALL 用不透明 clay 材质显示几何;渲染模型模式 SHALL 使用模型源材质与贴图;模式选择 SHALL 持久化。
+
+#### Scenario: 默认实体模式
+- **WHEN** 用户首次打开任意三维模型
+- **THEN** 模型以不透明实体 clay 显示,不继承源材质的 alpha 透明
+
+#### Scenario: 切换渲染模型
+- **WHEN** 用户点击「渲染模型」
+- **THEN** 模型切换为源材质与贴图,模型贴图正常显示
+
+#### Scenario: 渲染模式默认不透明
+- **WHEN** 源模型材质带 `transparent=true` 且 `opacity=1`
+- **THEN** 若源材质没有实际透明信息,渲染模式按不透明显示
+
+### Requirement: HDR 环境选择器
+模型预览右上角 SHALL 提供一个圆形 HDR 环境球。点击环境球 SHALL 展开一排 8 个环境球,分别对应 `city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset` 的 Blender 官方 CC0 1K EXR,默认 `forest`。点击任一小球 SHALL 切换当前环境。当前 HDR SHALL 同时用于 GLB/glTF/FBX/OBJ 的环境光照、材质反射和场景背景。
+
+#### Scenario: 显示 HDR 环境球
+- **WHEN** 用户打开任意三维素材
+- **THEN** 右上角显示一个代表当前环境的圆形球,点击后展开一排可选的 HDR 环境球
+
+#### Scenario: 使用 Blender 默认森林
+- **WHEN** 用户首次打开三维模型
+- **THEN** HDR 环境为 `forest`,与 Blender 默认世界预览一致
+
+#### Scenario: 点击切换 HDR
+- **WHEN** 用户展开环境球并点击另一个环境球
+- **THEN** 场景背景、环境光照、材质反射和环境球缩略图同步更新,旧环境贴图与 PMREM 目标被释放
+
+#### Scenario: HDR 出现在场景背景
+- **WHEN** 用户选择任意 HDR 环境
+- **THEN** 模型后方显示该 HDR 的球面背景,不再只显示在模型材质的反射中
+
+#### Scenario: HDR 选择保留
+- **WHEN** 用户选择 HDR 后重启应用
+- **THEN** 下次打开三维模型仍使用上次选择的 HDR
+
+### Requirement: 加载进度
+三维加载 SHALL 按 media 流内容长度显示百分比,解析阶段显示进度提示,完成后隐藏加载提示并显示模型。
+
+#### Scenario: 大模型加载进度
+- **WHEN** 用户打开 30MB 以上的 FBX 或 GLB
+- **THEN** 舞台显示加载百分比,完成后提示消失且模型可见
