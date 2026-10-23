@@ -4,22 +4,28 @@
 
 现状见 `proposal.md` - Why。实现层面的约束：
 
-- `Viewer3D.tsx` 已是实体/渲染双模式：渲染模式从 `originalMaterials` 恢复源材质；环境光固定为 `RoomEnvironment` 经 `PMREMGenerator` 烘焙，卸载时释放 `envRT` / `pmrem`。
+- `Viewer3D.tsx` 已是实体/渲染双模式：渲染模式从 `originalMaterials` 恢复源材质；HDR 经 `PMREMGenerator` 烘焙后写入 `scene.environment`，同一张 EXR 又写入 `scene.background`。
+- 当前渲染器使用 `ACESFilmicToneMapping`、默认曝光 1、`environmentIntensity=1.35`，并额外添加环境光和一主一辅两盏方向光；这与 Blender 参考的单一环境照明明显不同。
 - 材质枚举与释放已有可用骨架：`MATERIAL_TEXTURE_SLOTS` 按槽位名遍历贴图，卸载时用 `seenMaterials` 去重释放。
-- 三维渲染器由 `LazyViewer3D` 懒加载，`Lightbox.tsx` 持有模式状态（当前是组件内 `useState`，切换素材即重置）。
+- 三维渲染器由 `LazyViewer3D` 懒加载，`Lightbox.tsx` 从 `uiPrefs` 读取并持久化实体/渲染模式与当前 HDR。
 - 界面偏好统一走 `store/ui.ts` 的 `UI_PREFS_KEY`（`uiPrefs`）整体读写，字段逐项校验。
 - 已安装 `three`（含 `examples/jsm/loaders/EXRLoader.js`），不新增 npm 依赖。
 - Blender 官方世界 HDR 在 `release/datafiles/studiolights/world/` 下，共 8 个 1K EXR（`city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset`），CC0；`/raw/` 直链只返回约 131 字节的 LFS 指针，必须走 `/media/branch/main/`，单文件约 98–553 KB，总计约 1.9 MB。
+- Blender 5.2 当前视口基准为 `AgX`、曝光 0、`Studio` 照明、`Default` studio light、主题深灰背景，场景灯和 Scene World 均关闭。
+- Blender 的 `Default` studio light 是 `basic.sl` 中定义的四灯参数，不依赖 EXR 背景；面板参考值包括旋转、强度、世界不透明度和模糊。
 
 ## Goals / Non-Goals
 
 **Goals:**
 - 渲染模式默认不透明，源文件里 `transparent=true` 且实际全不透明的材质不再显示成幽灵模型。
+- 两种模式都以 Blender 视口为基准：`AgX`、曝光 0、主题深灰背景和模式互斥的照明栈。
 - 内置 Blender 同款 8 个 HDR 环境，可切换、可持久化，切换即刷新反射与光照。
+- 右上角材质球复刻 Blender Material Preview 的环境设置弹层，箭头展开，四项控制即时生效并持久化。
 - HDR 切换不重建 `WebGLRenderer`，切换时释放旧环境贴图与 PMREM 目标。
 
 **Non-Goals:**
 - 不实现 Blender 节点编辑器、纹理绘制、UV 编辑或材质烘焙。
+- 不追求 EEVEE/Cycles 的逐像素一致，只对齐 Blender 视口的色彩管理、照明层级、背景和常用环境参数。
 - 不引入 `three` 之外的渲染/加载依赖，不做 HDR 分辨率切换（只用 1K）。
 - 不改动主进程 IPC、媒体协议与素材库结构。
 
@@ -27,13 +33,13 @@
 
 ### 1. HDR 资产随包内置，取 Blender 官方 1K EXR
 
-把 8 个 EXR 落到 `src/renderer/public/hdri/`，附 `LICENSE.txt`（CC0，注明来源与 Poly Haven 原始作者）。用 `EXRLoader` 加载后交给 `PMREMGenerator.fromEquirectangular` 烘焙，`scene.environment` 使用烘焙结果。
+把 8 个 EXR 落到 `src/renderer/public/hdri/`，附 `LICENSE.txt`（CC0，注明来源与 Poly Haven 原始作者）。用 `EXRLoader` 加载后交给 `PMREMGenerator.fromEquirectangular` 烘焙，默认只把烘焙结果用于 `scene.environment`。
 
 - 备选：运行时从网络下载 —— 否决，桌面应用要能离线工作。
 - 备选：继续用程序化 `RoomEnvironment` —— 否决，与 Blender 默认世界不一致，无法满足用户“一比一复刻”的要求。
 - 备选：`/raw/` 直链脚本化下载 —— 否决，返回 LFS 指针而非 EXR，拿不到真实数据。
 
-全部文件合计约 1.9 MB，直接进仓可接受。加载成功后同一张 EXR 同时赋给 `scene.environment` 的 PMREM 结果与 `scene.background`，让模型背后的世界环境可见，而不是只参与材质反射。
+全部文件合计约 1.9 MB，直接进仓可接受。默认 World 不透明度为 0，因此舞台显示深灰主题背景和地面网格；只有用户提高世界不透明度时，才显示 HDR 背景。这样环境照明与背景可见度分离，和 Blender 的 `Scene World`、World Opacity 行为一致。
 
 HDR 选择器需要球形缩略图，但浏览器 `<img>` 不能直接显示 EXR。实现时用一次性离线渲染生成 8 张同尺寸 PNG 球形缩略图，放进 `public/hdri/thumbs/`；运行时只加载 PNG 和当前 EXR，不额外创建 8 个 WebGL 上下文。大图与缩略图沿用同一套球面映射和中性照明，避免缩略图与实际环境效果不一致。
 
@@ -66,13 +72,53 @@ FBX/OBJ 常导出 `MeshPhongMaterial` / `MeshLambertMaterial`，没有 metalness
 
 归一化结果不写回模型文件，随预览卸载丢弃；源材质自身的真实透明信息继续保留。
 
-### 6. 持久化只覆盖模式与 HDR
+### 6. 持久化覆盖模式、HDR 与四项环境参数
 
-`uiPrefs` 增加两个字段：`modelShade: 'solid' | 'render'`（默认 `solid`）与 `modelHdr: HdrPreset`（默认 `forest`），沿用现有逐项校验与整体写入逻辑。材质状态只属于当前加载实例，换片时重新归一化。
+`uiPrefs` 保留 `modelShade: 'solid' | 'render'`（默认 `solid`）与 `modelHdr: HdrPreset`（默认 `forest`），新增：
+
+- `modelHdrRotation: number`，角度，默认 `0`，范围 `0..360`
+- `modelHdrStrength: number`，默认 `1`，范围 `0..10`
+- `modelHdrOpacity: number`，默认 `0`，范围 `0..1`
+- `modelHdrBlur: number`，默认 `0.5`，范围 `0..1`
+
+所有字段沿用现有逐项校验与整体写入逻辑；缺失或非法值回退默认。材质状态只属于当前加载实例，换片时重新归一化。
 
 ### 7. 浮层布局：舞台全幅，控件覆盖在画面内部
 
-三维素材的 `pv-body` 去掉固定 16:9 与独立顶栏占位，舞台从顶部延伸到胶片带；返回按钮、模型名与格式、HDR 环境球和模式按钮全部绝对定位覆盖在舞台内部。右上角 HDR 默认显示一个直径 68px 的圆形环境球，不显示文字；点击后在下方展开一排 8 个圆形缩略球，点击任一项切换环境。底部只保留实体/渲染模式按钮。
+三维素材的 `pv-body` 去掉固定 16:9 与独立顶栏占位，舞台从顶部延伸到胶片带；返回按钮、模型名与格式、材质球、环境面板和模式按钮全部绝对定位覆盖在舞台内部。
+
+右上角折叠态保留当前 HDR 缩略球，并在球旁提供一个 native-looking 小箭头。点击箭头展开 Blender Material Preview 风格的紧凑深色面板，面板固定在球下方右侧，不超出舞台边界。
+
+面板结构固定为：
+
+1. 顶部环境预览区，中央显示当前 HDR 球形缩略图。
+2. `旋转` 行，数值带度数符号。
+3. `强度` 行，三位小数。
+4. `世界不透明度` 行，三位小数。
+5. `模糊` 行，两位小数。
+
+面板采用 Blender 的深灰实色表面、紧凑行高、蓝色数值高亮和方形小圆角，不使用当前玻璃模糊配方。点击预览球可展开现有 8 个 HDR 缩略球；点击其他 HDR 后更新预览球与照明，但面板默认保持与参考图相同的单球布局。点击面板外部或按 Esc 关闭面板，不关闭灯箱。
+
+### 8. 色彩管理与照明改为 Blender 视口基准
+
+`WebGLRenderer` 改用 `AgXToneMapping`。Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`，不在基准外再乘曝光增益。渲染模型模式中 HDR 环境是唯一主光源；实体模式中四灯 Studio rig 是唯一主光源。两种模式都移除 `AmbientLight`、主方向光和补方向光。
+
+实体模式不再依赖 HDR 或 Studio 环境贴图来“照亮” clay。使用 Blender `basic.sl` 的 `Default` studio light 四灯参数建立视空间方向光 rig；默认 clay 颜色取中性灰，保留高光和轮廓，但不得把材质推到纯白。
+
+渲染模式使用同一套色彩管理，并继续使用模型源材质。HDR 只提供环境光照、反射和可选背景，避免与场景灯重复叠加。
+
+### 9. 世界参数映射
+
+- 旋转：旋转环境贴图，使用 `scene.environmentRotation` 与背景旋转同步，不旋转模型和相机。
+- 强度：映射到 `scene.environmentIntensity`，默认 1，不再硬编码 1.35。
+- 世界不透明度：0 时完全隐藏 HDR 背景并显示主题背景；大于 0 时按透明度混合 HDR 背景。
+- 模糊：映射到背景 shader 的多点采样半径；世界不透明度为 0 时不渲染背景层。
+- 背景默认值：深灰主题背景加世界空间中的 Blender 风格三维地面网格。网格跨度为模型包围盒对角线的 24 倍，随相机旋转、缩放和透视变化，不得使用固定 CSS 背景或屏幕空间贴图；网格不参与模型包围盒计算。
+- 世界坐标：模型 SHALL 保留源文件中的原始世界坐标，不得为适配取景而按包围盒中心平移。默认地面网格固定在 `(0,0,0)` 世界原点并覆盖整个视口；相机的水平环绕中心固定在世界原点，只在垂直方向对齐模型包围盒中心，不移动模型。
+
+### 10. Blender 面板不是材质编辑面板
+
+该面板只控制环境，不修改模型材质、贴图、UV 或源文件。现有「实体模式/渲染模型」按钮仍负责材质路径切换；材质球只负责环境预览和 World 参数。
 
 ## Risks / Trade-offs
 
@@ -81,9 +127,13 @@ FBX/OBJ 常导出 `MeshPhongMaterial` / `MeshLambertMaterial`，没有 metalness
 - [首次打开需解码 540 KB EXR 并烘焙 PMREM，可能看到短时旧环境] → 先挂 `RoomEnvironment` 兜底，烘焙完成后再替换，不阻塞模型显示。
 - [材质归一化可能改变源文件的高光表现] → 归一化只用于预览；不写回文件；实体模式仍提供 clay 检查。
 - [卸载时重复释放同一张贴图] → 沿用现有 `seenMaterials` / 贴图槽遍历的去重释放，新增的转换材质与 HDR 纹理一并纳入同一释放路径。
+- [Blender Studio 灯不是 Three.js 原生格式] → 按 `basic.sl` 的四灯方向、颜色和柔和度转成等价 lighting rig，并以截图和像素统计验收；不承诺逐像素一致。
+- [世界不透明度需要和主题背景混合] → 将 HDR 背景作为独立透明层处理，避免把不透明度偷换成亮度。
+- [新面板增加 4 个持久化字段] → 统一走 `uiPrefs` 校验和默认值，损坏数据不影响模型预览启动。
 
 ## Migration Plan
 
 - 无数据迁移。旧 `viewerExposure` 键不再读取，残留值被忽略，不需要清理脚本。
-- `uiPrefs` 新增字段对老用户缺失时走默认值（实体模式、`forest`），无需写回迁移。
-- 回滚方式：删除 `public/hdri/` 与新增字段，恢复 `RoomEnvironment` 单环境实现即可，无持久化污染。
+- `uiPrefs` 新增字段对老用户缺失时走默认值（实体模式、`forest`、旋转 0、强度 1、世界不透明度 0、模糊 0.5），无需写回迁移。
+- 旧用户已保存的 `modelHdr` 继续生效，只是默认背景从 HDR 改为主题背景。
+- 回滚方式：删除新增环境字段与面板代码，恢复 HDR 背景和原有 entry；不改模型源文件或数据库。

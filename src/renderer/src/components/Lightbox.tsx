@@ -4,7 +4,7 @@ import { formatResolution } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
-import { HDR_PRESETS, hdrPreset } from '../data/hdr-presets'
+import { ModelEnvironmentPanel } from './ModelEnvironmentPanel'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
@@ -109,6 +109,14 @@ export function Lightbox(): React.JSX.Element | null {
   const setModelShade = useUI((s) => s.setModelShade)
   const modelHdr = useUI((s) => s.modelHdr)
   const setModelHdr = useUI((s) => s.setModelHdr)
+  const modelHdrRotation = useUI((s) => s.modelHdrRotation)
+  const setModelHdrRotation = useUI((s) => s.setModelHdrRotation)
+  const modelHdrStrength = useUI((s) => s.modelHdrStrength)
+  const setModelHdrStrength = useUI((s) => s.setModelHdrStrength)
+  const modelHdrOpacity = useUI((s) => s.modelHdrOpacity)
+  const setModelHdrOpacity = useUI((s) => s.setModelHdrOpacity)
+  const modelHdrBlur = useUI((s) => s.modelHdrBlur)
+  const setModelHdrBlur = useUI((s) => s.setModelHdrBlur)
   const [shown, setShown] = useState(false)
   /* 关闭时 lightboxId 立刻变 null,但画面还要停留一拍播完淡出,所以:
      mounted 决定「在不在」,lastId 决定「退场期间画哪一张」。
@@ -132,7 +140,6 @@ export function Lightbox(): React.JSX.Element | null {
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
   const [realFailed, setRealFailed] = useState(false)
   const [videoEpoch] = useState(() => ++videoSessionSeq)
-  const [hdrOpen, setHdrOpen] = useState(false)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
@@ -173,7 +180,6 @@ export function Lightbox(): React.JSX.Element | null {
   useEffect(() => {
     setLoadPct(undefined)
     setRealFailed(false)
-    setHdrOpen(false)
   }, [lightboxId])
 
   /* 全屏 FLIP。position 不可过渡,所以整值切换必须靠反向补偿补出连续感:
@@ -260,6 +266,12 @@ export function Lightbox(): React.JSX.Element | null {
   const isStyle = a.type === 'style'
   const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
   const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
+  const hdrSettings = {
+    rotation: modelHdrRotation,
+    strength: modelHdrStrength,
+    opacity: modelHdrOpacity,
+    blur: modelHdrBlur
+  }
   return (
     <div
       ref={rootRef}
@@ -305,6 +317,7 @@ export function Lightbox(): React.JSX.Element | null {
                   format={a.format as 'GLB' | 'FBX' | 'OBJ'}
                   shade={modelShade}
                   hdr={modelHdr}
+                  hdrSettings={hdrSettings}
                   onProgress={setLoadPct}
                   onLoaded={() => setRealFailed(false)}
                   onError={() => {
@@ -318,30 +331,19 @@ export function Lightbox(): React.JSX.Element | null {
                   </div>
                 )}
                 <div className="pv-model-tools">
-                  <div className="hdr-picker">
-                    <button
-                      className={`hdr-ball${hdrOpen ? ' open' : ''}`}
-                      style={{ backgroundImage: `url(${hdrPreset(modelHdr).thumbUrl})` }}
-                      aria-label={`HDR 环境：${hdrPreset(modelHdr).label}，点击展开环境球`}
-                      aria-expanded={hdrOpen}
-                      onClick={() => setHdrOpen((open) => !open)}
-                    />
-                    {hdrOpen && (
-                      <div className="hdr-row" aria-label="HDR 环境">
-                        {HDR_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            className={`hdr-option${preset.id === modelHdr ? ' on' : ''}`}
-                            style={{ backgroundImage: `url(${preset.thumbUrl})` }}
-                            title={preset.label}
-                            aria-label={preset.label}
-                            aria-pressed={preset.id === modelHdr}
-                            onClick={() => setModelHdr(preset.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <ModelEnvironmentPanel
+                    resetKey={lightboxId}
+                    hdr={modelHdr}
+                    rotation={modelHdrRotation}
+                    strength={modelHdrStrength}
+                    opacity={modelHdrOpacity}
+                    blur={modelHdrBlur}
+                    onHdr={setModelHdr}
+                    onRotation={setModelHdrRotation}
+                    onStrength={setModelHdrStrength}
+                    onOpacity={setModelHdrOpacity}
+                    onBlur={setModelHdrBlur}
+                  />
                 </div>
                 <div className="v3-bar">
                   <button

@@ -9,7 +9,7 @@ import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
-import { DEFAULT_HDR } from '../data/hdr-presets'
+import { DEFAULT_HDR, DEFAULT_HDR_SETTINGS } from '../data/hdr-presets'
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -193,6 +193,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
                 format={a.format as 'GLB' | 'FBX' | 'OBJ'}
                 shade="render"
                 hdr={DEFAULT_HDR}
+                hdrSettings={DEFAULT_HDR_SETTINGS}
                 onError={() => setModelFailed(true)}
               />
             </div>

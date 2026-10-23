@@ -4,7 +4,13 @@ import { TAGS } from '../data/dataset'
 import { DEFAULT_FILTERS, queryAssets, queryLightboxAssets, type Filters } from '../data/query'
 import { optimisticFolderMove, rebaseFolderPath } from '../data/folder-drag'
 import { parsePalette } from '../data/safe-parse'
-import { DEFAULT_HDR, parseHdrPreset, type HdrId } from '../data/hdr-presets'
+import {
+  DEFAULT_HDR,
+  DEFAULT_HDR_SETTINGS,
+  parseHdrPreset,
+  parseHdrSettings,
+  type HdrId
+} from '../data/hdr-presets'
 import type { ModelShade } from '../components/Viewer3D'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
@@ -46,6 +52,10 @@ interface UiPrefs {
   /** 三维预览模式与 HDR 环境:跨重启保留 */
   modelShade: ModelShade
   modelHdr: HdrId
+  modelHdrRotation: number
+  modelHdrStrength: number
+  modelHdrOpacity: number
+  modelHdrBlur: number
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -77,7 +87,11 @@ function persistUiPrefs(): void {
       nav: s.nav,
       collapsedFolders: [...s.collapsedFolders],
       modelShade: s.modelShade,
-      modelHdr: s.modelHdr
+      modelHdr: s.modelHdr,
+      modelHdrRotation: s.modelHdrRotation,
+      modelHdrStrength: s.modelHdrStrength,
+      modelHdrOpacity: s.modelHdrOpacity,
+      modelHdrBlur: s.modelHdrBlur
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -85,6 +99,12 @@ function persistUiPrefs(): void {
 
 /** S2-9:setColw 高频调用,落库走防抖 */
 let colwPersistTimer: ReturnType<typeof setTimeout> | null = null
+let hdrPersistTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleHdrPersist(): void {
+  if (hdrPersistTimer) clearTimeout(hdrPersistTimer)
+  hdrPersistTimer = setTimeout(persistUiPrefs, 120)
+}
 
 /** 单键读取:异常或缺失都收敛成 null(等价于"没存过",沿用原有回退语义) */
 type StateRead = { value: string | null; failed: boolean }
@@ -128,6 +148,7 @@ export async function restoreUiPrefs(): Promise<void> {
       const view: ViewMode =
         parsed.view === 'grid' || parsed.view === 'list' || parsed.view === 'waterfall' ? parsed.view : 'waterfall'
       const colw = Number(parsed.colw)
+      const hdr = parseHdrSettings(parsed as Record<string, unknown>)
       useUI.setState({
         view,
         colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
@@ -136,7 +157,11 @@ export async function restoreUiPrefs(): Promise<void> {
         nav: parseNav(parsed.nav),
         collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders),
         modelShade: parsed.modelShade === 'render' ? 'render' : 'solid',
-        modelHdr: parseHdrPreset(parsed.modelHdr)
+        modelHdr: parseHdrPreset(parsed.modelHdr),
+        modelHdrRotation: hdr.rotation,
+        modelHdrStrength: hdr.strength,
+        modelHdrOpacity: hdr.opacity,
+        modelHdrBlur: hdr.blur
       })
     } catch {
       /* 界面偏好损坏:保持默认 */
@@ -288,6 +313,14 @@ interface UIState {
   setModelShade: (mode: ModelShade) => void
   modelHdr: HdrId
   setModelHdr: (id: HdrId) => void
+  modelHdrRotation: number
+  setModelHdrRotation: (value: number) => void
+  modelHdrStrength: number
+  setModelHdrStrength: (value: number) => void
+  modelHdrOpacity: number
+  setModelHdrOpacity: (value: number) => void
+  modelHdrBlur: number
+  setModelHdrBlur: (value: number) => void
 
   /* 素材数据(可变字段走 store,编辑经 IPC 落库) */
   assets: Asset[]
@@ -740,6 +773,26 @@ export const useUI = create<UIState>((set, get) => {
     setModelHdr: (modelHdr) => {
       set({ modelHdr })
       persistUiPrefs()
+    },
+    modelHdrRotation: DEFAULT_HDR_SETTINGS.rotation,
+    setModelHdrRotation: (modelHdrRotation) => {
+      set({ modelHdrRotation })
+      scheduleHdrPersist()
+    },
+    modelHdrStrength: DEFAULT_HDR_SETTINGS.strength,
+    setModelHdrStrength: (modelHdrStrength) => {
+      set({ modelHdrStrength })
+      scheduleHdrPersist()
+    },
+    modelHdrOpacity: DEFAULT_HDR_SETTINGS.opacity,
+    setModelHdrOpacity: (modelHdrOpacity) => {
+      set({ modelHdrOpacity })
+      scheduleHdrPersist()
+    },
+    modelHdrBlur: DEFAULT_HDR_SETTINGS.blur,
+    setModelHdrBlur: (modelHdrBlur) => {
+      set({ modelHdrBlur })
+      scheduleHdrPersist()
     },
 
     assets: [],

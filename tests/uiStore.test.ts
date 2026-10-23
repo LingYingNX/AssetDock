@@ -303,7 +303,18 @@ describe('restoreUiPrefs', () => {
 
   it('applies every stored preference', async () => {
     const s = await load(
-      JSON.stringify({ view: 'list', colw: 300, inspHidden: true, cbarOpen: true, modelShade: 'render', modelHdr: 'sunset' })
+      JSON.stringify({
+        view: 'list',
+        colw: 300,
+        inspHidden: true,
+        cbarOpen: true,
+        modelShade: 'render',
+        modelHdr: 'sunset',
+        modelHdrRotation: 45,
+        modelHdrStrength: 2,
+        modelHdrOpacity: 0.3,
+        modelHdrBlur: 0.8
+      })
     )
     expect(s.view).toBe('list')
     expect(s.colw).toBe(300)
@@ -311,6 +322,10 @@ describe('restoreUiPrefs', () => {
     expect(s.cbarOpen).toBe(true)
     expect(s.modelShade).toBe('render')
     expect(s.modelHdr).toBe('sunset')
+    expect(s.modelHdrRotation).toBe(45)
+    expect(s.modelHdrStrength).toBe(2)
+    expect(s.modelHdrOpacity).toBe(0.3)
+    expect(s.modelHdrBlur).toBe(0.8)
   })
 
   it('falls back to defaults when nothing is stored', async () => {
@@ -321,6 +336,10 @@ describe('restoreUiPrefs', () => {
     expect(s.cbarOpen).toBe(false)
     expect(s.modelShade).toBe('solid')
     expect(s.modelHdr).toBe('forest')
+    expect(s.modelHdrRotation).toBe(0)
+    expect(s.modelHdrStrength).toBe(1)
+    expect(s.modelHdrOpacity).toBe(0)
+    expect(s.modelHdrBlur).toBe(0.5)
   })
 
   it('ignores malformed JSON instead of throwing', async () => {
@@ -331,7 +350,18 @@ describe('restoreUiPrefs', () => {
 
   it('rejects out-of-range and unknown values field by field', async () => {
     const s = await load(
-      JSON.stringify({ view: 'diagonal', colw: 9999, inspHidden: 'yes', cbarOpen: 1, modelShade: 'ghost', modelHdr: 'volcano' })
+      JSON.stringify({
+        view: 'diagonal',
+        colw: 9999,
+        inspHidden: 'yes',
+        cbarOpen: 1,
+        modelShade: 'ghost',
+        modelHdr: 'volcano',
+        modelHdrRotation: 999,
+        modelHdrStrength: -1,
+        modelHdrOpacity: 'half',
+        modelHdrBlur: 2
+      })
     )
     expect(s.view).toBe('waterfall')
     expect(s.colw).toBe(320)
@@ -339,6 +369,10 @@ describe('restoreUiPrefs', () => {
     expect(s.cbarOpen).toBe(false)
     expect(s.modelShade).toBe('solid')
     expect(s.modelHdr).toBe('forest')
+    expect(s.modelHdrRotation).toBe(0)
+    expect(s.modelHdrStrength).toBe(1)
+    expect(s.modelHdrOpacity).toBe(0)
+    expect(s.modelHdrBlur).toBe(0.5)
   })
 })
 

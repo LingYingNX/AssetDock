@@ -16,6 +16,13 @@ export interface HdrPreset {
   thumbUrl: string
 }
 
+export interface HdrSettings {
+  rotation: number
+  strength: number
+  opacity: number
+  blur: number
+}
+
 export const HDR_PRESETS: readonly HdrPreset[] = [
   { id: 'city', label: '城市', url: 'hdri/city.exr', thumbUrl: 'hdri/thumbs/city.png' },
   { id: 'courtyard', label: '庭院', url: 'hdri/courtyard.exr', thumbUrl: 'hdri/thumbs/courtyard.png' },
@@ -30,8 +37,29 @@ export const HDR_PRESETS: readonly HdrPreset[] = [
 /** Blender 默认世界预览环境。 */
 export const DEFAULT_HDR: HdrId = 'forest'
 
+export const DEFAULT_HDR_SETTINGS: Readonly<HdrSettings> = {
+  rotation: 0,
+  strength: 1,
+  opacity: 0,
+  blur: 0.5
+}
+
 export function parseHdrPreset(value: unknown): HdrId {
   return HDR_PRESETS.some((p) => p.id === value) ? (value as HdrId) : DEFAULT_HDR
+}
+
+function parseRange(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) && n >= min && n <= max ? n : fallback
+}
+
+export function parseHdrSettings(value: Record<string, unknown>): HdrSettings {
+  return {
+    rotation: parseRange(value.modelHdrRotation, DEFAULT_HDR_SETTINGS.rotation, 0, 360),
+    strength: parseRange(value.modelHdrStrength, DEFAULT_HDR_SETTINGS.strength, 0, 10),
+    opacity: parseRange(value.modelHdrOpacity, DEFAULT_HDR_SETTINGS.opacity, 0, 1),
+    blur: parseRange(value.modelHdrBlur, DEFAULT_HDR_SETTINGS.blur, 0, 1)
+  }
 }
 
 export function hdrPreset(id: HdrId): HdrPreset {

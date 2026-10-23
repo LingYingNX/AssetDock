@@ -9,7 +9,16 @@ import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { modelBaseUrl, objMaterialUrls } from '../data/model-url'
-import { hdrPreset, type HdrId } from '../data/hdr-presets'
+import { hdrPreset, type HdrId, type HdrSettings } from '../data/hdr-presets'
+import {
+  MODEL_OUTPUT_COLOR_SPACE,
+  MODEL_STUDIO_LIGHTS,
+  MODEL_TONE_MAPPING,
+  MODEL_TONE_MAPPING_EXPOSURE,
+  MODEL_TONE_MAPPING_NAME,
+  MODEL_VIEW_GRID_DIVISIONS,
+  MODEL_VIEW_GRID_SPAN
+} from '../data/model-renderer'
 import {
   MATERIAL_TEXTURE_SLOTS,
   normalizeEmissive,
@@ -26,6 +35,7 @@ export interface Viewer3DProps {
   format: Extract<AssetFormat, 'GLB' | 'FBX' | 'OBJ'>
   shade: ModelShade
   hdr: HdrId
+  hdrSettings: HdrSettings
   /** 加载进度:0–99 字节流 / null 解析中 / 100 完成 */
   onProgress?: (pct: number | null) => void
   onError?: () => void
@@ -35,6 +45,7 @@ export interface Viewer3DProps {
 interface ViewerApi {
   applyShade: (mode: ModelShade) => void
   applyHdr: (id: HdrId) => void
+  applyHdrSettings: (settings: HdrSettings) => void
 }
 
 /** dev 泄漏断言计数器 */
@@ -52,11 +63,77 @@ declare global {
       materials?: number
       transparent?: number
       middlePan?: boolean
+      toneMapping?: string
+      toneMappingExposure?: number
+      lights?: number
+      hdrSettings?: HdrSettings
+      backgroundOpacity?: number
+      backgroundBlur?: number
+      grid3d?: boolean
+      gridSpan?: number
+      bounds?: { min: [number, number, number]; max: [number, number, number] }
       camera?: [number, number, number]
       target?: [number, number, number]
     }
   }
 }
+
+const ENV_BACKGROUND_VERTEX = `
+  varying vec2 vNdc;
+
+  void main() {
+    vNdc = position.xy;
+    gl_Position = vec4(position.xy, 1.0, 1.0);
+  }
+`
+
+const ENV_BACKGROUND_FRAGMENT = `
+  uniform sampler2D envMap;
+  uniform float rotation;
+  uniform float opacity;
+  uniform float blur;
+  uniform mat4 inverseProjection;
+  uniform mat4 cameraWorld;
+  varying vec2 vNdc;
+
+  const float INV_ATAN = 0.15915494309189535;
+  const float INV_ASIN = 0.3183098861837907;
+
+  vec2 dirToUv(vec3 dir) {
+    float u = atan(dir.z, dir.x) * INV_ATAN + 0.5 + rotation;
+    float v = asin(clamp(dir.y, -1.0, 1.0)) * INV_ASIN + 0.5;
+    return vec2(u, clamp(v, 0.0, 1.0));
+  }
+
+  vec3 sampleEnv(vec2 uv) {
+    return texture2D(envMap, vec2(fract(uv.x), clamp(uv.y, 0.0, 1.0))).rgb;
+  }
+
+  void main() {
+    vec4 view = inverseProjection * vec4(vNdc, 1.0, 1.0);
+    vec3 dirView = normalize(view.xyz / view.w);
+    vec3 dir = normalize((cameraWorld * vec4(dirView, 0.0)).xyz);
+    vec2 uv = dirToUv(dir);
+    vec3 color;
+    if (blur > 0.0001) {
+      float r = blur * 0.018;
+      color = sampleEnv(uv) * 0.20;
+      color += sampleEnv(uv + vec2( r, 0.0)) * 0.12;
+      color += sampleEnv(uv + vec2(-r, 0.0)) * 0.12;
+      color += sampleEnv(uv + vec2(0.0,  r)) * 0.12;
+      color += sampleEnv(uv + vec2(0.0, -r)) * 0.12;
+      color += sampleEnv(uv + vec2( r,  r)) * 0.08;
+      color += sampleEnv(uv + vec2(-r,  r)) * 0.08;
+      color += sampleEnv(uv + vec2( r, -r)) * 0.08;
+      color += sampleEnv(uv + vec2(-r, -r)) * 0.08;
+    } else {
+      color = sampleEnv(uv);
+    }
+    gl_FragColor = vec4(color, opacity);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
 
 /** 中文 3ds Max 导出的 OBJ/MTL 常为 GBK,UTF-8 出现替换字符时回退。 */
 function decodeModelText(buf: ArrayBuffer): string {
@@ -95,6 +172,7 @@ export function Viewer3D({
   format,
   shade,
   hdr,
+  hdrSettings,
   onProgress,
   onError,
   onLoaded
@@ -102,7 +180,9 @@ export function Viewer3D({
   const hostRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<ViewerApi | null>(null)
   const onProgressRef = useRef(onProgress)
+  const hdrSettingsRef = useRef(hdrSettings)
   onProgressRef.current = onProgress
+  hdrSettingsRef.current = hdrSettings
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -122,6 +202,9 @@ export function Viewer3D({
     window.__threeStats.background = 'none'
     window.__threeStats.envSwitches = 0
     window.__threeStats.envDisposals = 0
+    window.__threeStats.toneMapping = MODEL_TONE_MAPPING_NAME
+    window.__threeStats.toneMappingExposure = MODEL_TONE_MAPPING_EXPOSURE
+    window.__threeStats.lights = 0
 
     let renderer: THREE.WebGLRenderer
     try {
@@ -133,13 +216,18 @@ export function Viewer3D({
       return
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.outputColorSpace = MODEL_OUTPUT_COLOR_SPACE
+    renderer.toneMapping = MODEL_TONE_MAPPING
+    renderer.toneMappingExposure = MODEL_TONE_MAPPING_EXPOSURE
+    renderer.autoClear = false
+    renderer.setClearColor(0x000000, 0)
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
     renderer.domElement.style.outline = 'none'
     host.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
+    const backgroundScene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -149,14 +237,73 @@ export function Viewer3D({
     controls.mouseButtons.RIGHT = THREE.MOUSE.PAN
     window.__threeStats!.middlePan = controls.mouseButtons.MIDDLE === THREE.MOUSE.PAN
 
+    const backgroundMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        envMap: { value: null },
+        rotation: { value: 0 },
+        opacity: { value: 0 },
+        blur: { value: hdrSettingsRef.current.blur },
+        inverseProjection: { value: camera.projectionMatrixInverse },
+        cameraWorld: { value: camera.matrixWorld }
+      },
+      vertexShader: ENV_BACKGROUND_VERTEX,
+      fragmentShader: ENV_BACKGROUND_FRAGMENT,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    })
+    const backgroundGeometry = new THREE.PlaneGeometry(2, 2)
+    const background = new THREE.Mesh(backgroundGeometry, backgroundMaterial)
+    background.frustumCulled = false
+    background.renderOrder = -1000
+    background.visible = false
+    backgroundScene.add(background)
+
     const pmrem = new THREE.PMREMGenerator(renderer)
-    /* RoomEnvironment 只做首帧与加载失败兜底,成功后由 HDR 替换并释放。 */
-    let envRT: THREE.WebGLRenderTarget | null = pmrem.fromScene(new RoomEnvironment(), 0.04)
+    const roomEnvironment = new RoomEnvironment()
+    const studioRT = pmrem.fromScene(roomEnvironment, 0.04)
+    roomEnvironment.dispose()
+    let hdrRT: THREE.WebGLRenderTarget | null = null
     let hdrTexture: THREE.Texture | null = null
     let envToken = 0
     let currentHdr: HdrId | null = null
-    scene.environment = envRT.texture
-    scene.environmentIntensity = 1.35
+    let currentShade = shade
+
+    const studioRig = new THREE.Group()
+    const studioLights = MODEL_STUDIO_LIGHTS.map((spec) => {
+      const target = new THREE.Object3D()
+      studioRig.add(target)
+      const light = new THREE.DirectionalLight(
+        new THREE.Color(...spec.color),
+        spec.intensity
+      )
+      light.position.fromArray(spec.direction).normalize().multiplyScalar(10)
+      light.target = target
+      studioRig.add(light)
+      return light
+    })
+    scene.add(studioRig)
+
+    const applyLighting = (): void => {
+      const solid = currentShade === 'solid'
+      studioRig.visible = solid
+      scene.environment = solid ? null : (hdrRT?.texture ?? studioRT.texture)
+      scene.environmentIntensity = hdrSettingsRef.current.strength
+      window.__threeStats!.lights = solid ? studioLights.length : 0
+    }
+    const applyHdrSettings = (settings: HdrSettings): void => {
+      scene.environmentRotation.set(0, -THREE.MathUtils.degToRad(settings.rotation), 0)
+      scene.environmentIntensity = settings.strength
+      backgroundMaterial.uniforms.rotation.value = -settings.rotation / 360
+      backgroundMaterial.uniforms.opacity.value = settings.opacity
+      backgroundMaterial.uniforms.blur.value = settings.blur
+      const showBackground = currentShade === 'render' && hdrTexture !== null && settings.opacity > 0
+      background.visible = showBackground
+      window.__threeStats!.hdrSettings = { ...settings }
+      window.__threeStats!.backgroundOpacity = settings.opacity
+      window.__threeStats!.backgroundBlur = settings.blur
+      window.__threeStats!.background = showBackground ? (currentHdr ?? 'loading') : 'theme'
+    }
     const applyHdr = (id: HdrId): void => {
       if (currentHdr === id) return
       const token = ++envToken
@@ -169,6 +316,7 @@ export function Viewer3D({
             return
           }
           tex.mapping = THREE.EquirectangularReflectionMapping
+          tex.wrapS = THREE.RepeatWrapping
           let rt: THREE.WebGLRenderTarget
           try {
             rt = pmrem.fromEquirectangular(tex)
@@ -182,18 +330,18 @@ export function Viewer3D({
             tex.dispose()
             return
           }
-          scene.environment = rt.texture
-          scene.background = tex
-          if (envRT) {
-            envRT.dispose()
+          hdrRT?.dispose()
+          if (hdrRT) {
             window.__threeStats!.envDisposals = (window.__threeStats!.envDisposals ?? 0) + 1
           }
-          envRT = rt
+          hdrRT = rt
           hdrTexture?.dispose()
           hdrTexture = tex
           currentHdr = id
+          backgroundMaterial.uniforms.envMap.value = tex
+          if (currentShade === 'render') scene.environment = rt.texture
+          applyHdrSettings(hdrSettingsRef.current)
           window.__threeStats!.env = id
-          window.__threeStats!.background = id
           window.__threeStats!.envSwitches = (window.__threeStats!.envSwitches ?? 0) + 1
         },
         undefined,
@@ -203,20 +351,67 @@ export function Viewer3D({
       )
     }
     applyHdr(hdr)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.12))
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.55)
-    keyLight.position.set(3, 5, 4)
-    scene.add(keyLight)
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.18)
-    fillLight.position.set(-4, 2, -3)
-    scene.add(fillLight)
+    applyLighting()
+    applyHdrSettings(hdrSettingsRef.current)
 
     const group = new THREE.Group()
     scene.add(group)
+    let groundGrid: THREE.GridHelper | null = null
+    let groundAxes: THREE.LineSegments | null = null
+    const disposeGround = (): void => {
+      if (groundGrid) {
+        groundGrid.geometry.dispose()
+        const mats = Array.isArray(groundGrid.material) ? groundGrid.material : [groundGrid.material]
+        for (const material of mats) material.dispose()
+        groundGrid.removeFromParent()
+        groundGrid = null
+      }
+      if (groundAxes) {
+        groundAxes.geometry.dispose()
+        const material = groundAxes.material as THREE.Material
+        material.dispose()
+        groundAxes.removeFromParent()
+        groundAxes = null
+      }
+    }
+    const addGround = (modelSize: number): void => {
+      disposeGround()
+      const span = Math.max(modelSize * MODEL_VIEW_GRID_SPAN, 1)
+      groundGrid = new THREE.GridHelper(span, MODEL_VIEW_GRID_DIVISIONS, 0x697562, 0x44464c)
+      groundGrid.position.set(0, 0, 0)
+      groundGrid.renderOrder = -2
+      const gridMaterials = Array.isArray(groundGrid.material) ? groundGrid.material : [groundGrid.material]
+      for (const material of gridMaterials) {
+        material.transparent = true
+        material.opacity = 0.55
+        material.depthWrite = false
+      }
+      scene.add(groundGrid)
+
+      const half = span / 2
+      const axisGeometry = new THREE.BufferGeometry()
+      axisGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+        -half, 0, 0, half, 0, 0,
+        0, 0, -half, 0, 0, half
+      ], 3))
+      axisGeometry.setAttribute('color', new THREE.Float32BufferAttribute([
+        0.60, 0.26, 0.26, 0.60, 0.26, 0.26,
+        0.38, 0.58, 0.28, 0.38, 0.58, 0.28
+      ], 3))
+      groundAxes = new THREE.LineSegments(
+        axisGeometry,
+        new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.48, depthWrite: false })
+      )
+      groundAxes.position.set(0, 0.001, 0)
+      groundAxes.renderOrder = -1
+      scene.add(groundAxes)
+      window.__threeStats!.grid3d = true
+      window.__threeStats!.gridSpan = span
+    }
     const solidMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7b8491,
-      roughness: 0.8,
-      metalness: 0.02
+      color: 0x56595c,
+      roughness: 0.82,
+      metalness: 0
     })
     const originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
     const rememberMaterials = (model: THREE.Object3D): void => {
@@ -225,7 +420,6 @@ export function Viewer3D({
         if (mesh.isMesh) originalMaterials.set(mesh, mesh.material)
       })
     }
-    let currentShade = shade
     const applyShade = (mode: ModelShade): void => {
       currentShade = mode
       group.traverse((o) => {
@@ -235,12 +429,15 @@ export function Viewer3D({
           ? solidMaterial
           : (originalMaterials.get(mesh) ?? mesh.material)
       })
+      applyLighting()
+      applyHdrSettings(hdrSettingsRef.current)
       window.__threeStats!.shade = mode
     }
 
     apiRef.current = {
       applyShade,
-      applyHdr
+      applyHdr,
+      applyHdrSettings
     }
     applyShade(currentShade)
 
@@ -321,13 +518,17 @@ export function Viewer3D({
         const box = new THREE.Box3().setFromObject(model)
         const size = box.getSize(new THREE.Vector3()).length() || 1
         const center = box.getCenter(new THREE.Vector3())
-        model.position.sub(center)
+        window.__threeStats!.bounds = {
+          min: box.min.toArray() as [number, number, number],
+          max: box.max.toArray() as [number, number, number]
+        }
+        addGround(size)
         const dist = size * 1.6
         camera.near = Math.max(size / 200, 0.01)
         camera.far = size * 30
         camera.updateProjectionMatrix()
-        camera.position.set(0, dist * 0.35, dist)
-        controls.target.set(0, 0, 0)
+        camera.position.set(0, center.y + dist * 0.35, dist)
+        controls.target.set(0, center.y, 0)
         controls.update()
         /* 材质归一:统一成 PBR,并清掉源文件把全不透明材质误标为透明的标记。 */
         const converted = new Map<THREE.Material, THREE.Material>()
@@ -383,6 +584,12 @@ export function Viewer3D({
     const loop = (): void => {
       raf = requestAnimationFrame(loop)
       controls.update()
+      studioRig.position.copy(camera.position)
+      studioRig.quaternion.copy(camera.quaternion)
+      backgroundMaterial.uniforms.inverseProjection.value = camera.projectionMatrixInverse
+      backgroundMaterial.uniforms.cameraWorld.value = camera.matrixWorld
+      renderer.clear(true, true, true)
+      if (background.visible) renderer.render(backgroundScene, camera)
       renderer.render(scene, camera)
       if (import.meta.env.DEV) {
         window.__threeStats!.camera = camera.position.toArray() as [number, number, number]
@@ -399,8 +606,12 @@ export function Viewer3D({
       controls.dispose()
       /* 环境贴图与 PMREM 渲染目标:场景先摘掉引用再释放,别让 scene 继续持有一张已释放的贴图 */
       scene.environment = null
-      scene.background = null
-      envRT?.dispose()
+      disposeGround()
+      backgroundMaterial.uniforms.envMap.value = null
+      backgroundGeometry.dispose()
+      backgroundMaterial.dispose()
+      studioRT.dispose()
+      hdrRT?.dispose()
       hdrTexture?.dispose()
       pmrem.dispose()
       draco.dispose()
@@ -443,6 +654,10 @@ export function Viewer3D({
     apiRef.current?.applyHdr(hdr)
   }, [hdr])
 
+  useEffect(() => {
+    apiRef.current?.applyHdrSettings(hdrSettings)
+  }, [hdrSettings])
+
   if (failed) {
     return (
       <div className="empty" style={{ minHeight: 240 }}>
@@ -450,5 +665,5 @@ export function Viewer3D({
       </div>
     )
   }
-  return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />
+  return <div ref={hostRef} className="pv3d-canvas" />
 }

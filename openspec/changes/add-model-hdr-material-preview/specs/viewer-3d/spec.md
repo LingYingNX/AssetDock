@@ -67,28 +67,54 @@
 - **WHEN** 源模型材质带 `transparent=true` 且 `opacity=1`
 - **THEN** 若源材质没有实际透明信息,渲染模式按不透明显示
 
-### Requirement: HDR 环境选择器
-模型预览右上角 SHALL 提供一个圆形 HDR 环境球。点击环境球 SHALL 展开一排 8 个环境球,分别对应 `city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset` 的 Blender 官方 CC0 1K EXR,默认 `forest`。点击任一小球 SHALL 切换当前环境。当前 HDR SHALL 同时用于 GLB/glTF/FBX/OBJ 的环境光照、材质反射和场景背景。
+### Requirement: Blender 视口照明基线
+三维预览 SHALL 使用 `AgXToneMapping`,Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`。渲染模型模式 SHALL 只使用 HDR 环境光照,不得叠加场景灯;实体模式 SHALL 只使用 `basic.sl` 四灯 Studio rig,不得叠加 HDR 或 Studio 环境贴图。默认背景 SHALL 为深灰主题背景与真实三维地面网格,不得直接显示 HDR 全景背景。
 
-#### Scenario: 显示 HDR 环境球
+#### Scenario: 默认不叠加额外灯光
 - **WHEN** 用户打开任意三维素材
-- **THEN** 右上角显示一个代表当前环境的圆形球,点击后展开一排可选的 HDR 环境球
+- **THEN** 实体模式只启用四盏 Studio 灯,渲染模型模式场景灯数量为 0,且两种模式都没有额外 AmbientLight
 
-#### Scenario: 使用 Blender 默认森林
+#### Scenario: 高光保留细节
+- **WHEN** 用户切换实体模式或渲染模型模式
+- **THEN** 白色高光仍保留表面轮廓和转折,不出现整片纯白或看不到细节的过曝区域
+
+#### Scenario: 三维网格跟随视角
+- **WHEN** 用户旋转、缩放或平移相机
+- **THEN** 地面网格按真实三维透视同步变化,不得像固定 CSS 背景一样停留在屏幕平面
+
+#### Scenario: 保留模型世界原点
+- **WHEN** 用户打开在 Blender 中位于世界原点的模型
+- **THEN** 模型保持在原始世界坐标,地面网格固定在原点并覆盖视口,相机的水平环绕中心也保持在世界原点
+
+### Requirement: HDR 环境参数
+环境设置 SHALL 提供旋转、强度、世界不透明度和模糊四项控制,并即时影响当前模型。旋转 SHALL 只旋转环境,不旋转模型和相机;世界不透明度为 `0` 时 SHALL 完全隐藏 HDR 背景并显示主题背景。四项值与当前 HDR SHALL 跨重启保留。
+
+#### Scenario: 调整环境参数
+- **WHEN** 用户拖动旋转、强度、世界不透明度或模糊
+- **THEN** 环境光照、反射或背景实时变化,模型和相机方向不移动
+
+#### Scenario: 默认世界不可见
+- **WHEN** 用户首次打开模型
+- **THEN** 世界不透明度为 `0.000`,背景为深灰主题背景与网格,HDR 仍参与环境光照
+
+#### Scenario: 显示 HDR 背景
+- **WHEN** 用户把世界不透明度提高到大于 `0`
+- **THEN** HDR 背景按该不透明度显示,模糊值同步生效
+
+#### Scenario: 环境参数保留
+- **WHEN** 用户修改四项参数后重启应用
+- **THEN** 下次打开模型恢复上次的 HDR、旋转、强度、世界不透明度和模糊值
+
+### Requirement: HDR 环境预设
+材质球面板 SHALL 保留 8 个 Blender 官方 CC0 1K EXR 环境:`city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset`,默认 `forest`。点击面板顶部预览球 SHALL 展开这些预设,选择后更新环境光照、反射和预览球。
+
+#### Scenario: 切换 HDR 预设
+- **WHEN** 用户展开预览球并选择另一个 HDR
+- **THEN** 当前环境与预览球更新,旧环境贴图和 PMREM 目标被释放
+
+#### Scenario: 默认森林环境
 - **WHEN** 用户首次打开三维模型
-- **THEN** HDR 环境为 `forest`,与 Blender 默认世界预览一致
-
-#### Scenario: 点击切换 HDR
-- **WHEN** 用户展开环境球并点击另一个环境球
-- **THEN** 场景背景、环境光照、材质反射和环境球缩略图同步更新,旧环境贴图与 PMREM 目标被释放
-
-#### Scenario: HDR 出现在场景背景
-- **WHEN** 用户选择任意 HDR 环境
-- **THEN** 模型后方显示该 HDR 的球面背景,不再只显示在模型材质的反射中
-
-#### Scenario: HDR 选择保留
-- **WHEN** 用户选择 HDR 后重启应用
-- **THEN** 下次打开三维模型仍使用上次选择的 HDR
+- **THEN** 当前 HDR 为 `forest`,背景仍保持主题背景,世界不透明度为 `0`
 
 ### Requirement: 加载进度
 三维加载 SHALL 按 media 流内容长度显示百分比,解析阶段显示进度提示,完成后隐藏加载提示并显示模型。

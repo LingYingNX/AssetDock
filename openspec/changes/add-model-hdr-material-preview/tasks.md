@@ -22,7 +22,7 @@
 ## 4. Lightbox 布局与浮层面板
 
 - [x] 4.1 三维素材舞台改为全幅（去 16:9 与独立顶栏占位），返回按钮、名称/格式、HDR 入口、模式按钮覆盖在舞台内部；验证方式：无头截图对比，舞台矩形与 `.pv` 内容区重合，左右无空白栏
-- [x] 4.2 右上角放一个圆形 HDR 环境球，点击展开一排 8 个环境球，点击任一球切换环境；验证方式：无头展开后存在 8 个选项，点击后 `__threeStats.env` 与 `__threeStats.background` 同步变化
+- [x] 4.2 右上角放一个圆形 HDR 环境球，点击展开一排 8 个环境球，点击任一球切换环境；验证方式：无头展开后存在 8 个选项，点击后 `__threeStats.env` 与 `__threeStats.background` 同步变化（该交互已被 7.1–7.3 取代）
 - [x] 4.4 `uiPrefs` 增加 `modelShade`、`modelHdr` 并接入读取/写入；验证方式：扩展 `tests/uiStore.test.ts` 覆盖两字段默认值与非法值回退，重启后恢复上次 HDR 与模式
 
 ## 5. 集成验证与文档
@@ -31,7 +31,30 @@
 - [x] 5.2 无头验证 FBX / GLB / OBJ 三种格式双模式 + HDR 切换，记录到本 change 的验证小节；验证方式：三种格式各出一条断言输出
 - [x] 5.3 同步主规格（`openspec/specs/viewer-3d`、`openspec/specs/lightbox`）并清理 `Viewer3D.tsx` 中本 change 的临时探针与调试输出；验证方式：`openspec validate add-model-hdr-material-preview --strict` 通过且 grep 无残留探针
 
-## Verification
+## 6. Blender 视口照明修正
+
+- [x] 6.1 `Viewer3D` 改用 `AgXToneMapping`，以 Three.js `toneMappingExposure=1.0` 对应 Blender 曝光 `0.0`；验证方式：新增纯函数测试断言色彩基准，渲染器实例断言 tone mapping 与曝光值
+- [x] 6.2 实体模式只启用 `basic.sl` 四灯 rig，渲染模型模式只启用 HDR；验证方式：无头读取 `__threeStats.lights`，实体为 4、渲染为 0
+- [x] 6.3 实体模式使用 `Default` studio light 的四灯方向、颜色和强度；验证方式：真实 FBX 截图保留灰色明暗分层，白色溢出像素接近零
+- [x] 6.4 默认背景改为深灰主题背景与世界空间三维地面网格，网格跨度为模型对角线的 24 倍并固定在原点，模型保留源文件世界坐标，相机水平环绕原点；验证方式：真实 FBX 截图网格铺满视口，`target` 的 x/z 均为 0
+- [x] 6.5 将旋转、强度、世界不透明度和模糊映射到环境与背景，切换 HDR 或关闭时释放旧贴图和 PMREM 目标；验证方式：连续切换 8 次后资源计数无累积增量
+
+## 7. Blender 风格材质球面板
+
+- [x] 7.1 右上角折叠态改为当前 HDR 材质球加 native-looking 小箭头，箭头点击展开环境面板；验证方式：无头点击箭头后面板可见，球本身仍打开 HDR 预设
+- [x] 7.2 面板复刻 Blender Material Preview 布局：顶部环境预览球，下方旋转、强度、世界不透明度、模糊四行控制；验证方式：DOM 断言四项标签、数值格式和顺序，截图与参考图对照
+- [x] 7.3 面板采用深灰实色、紧凑行高、蓝色数值和方形小圆角，不继承现有玻璃模糊样式；验证方式：样式断言无 `backdrop-filter`，面板宽度与边界在舞台内
+- [x] 7.4 8 个 HDR 预设保留为顶部预览球展开的缩略球行；验证方式：点击预览球后出现 8 个预设，选择后照明、预览球和当前值同步更新
+- [x] 7.5 `uiPrefs` 增加 `modelHdrRotation`、`modelHdrStrength`、`modelHdrOpacity`、`modelHdrBlur`，带范围校验；验证方式：扩展 `tests/uiStore.test.ts` 覆盖默认值、合法值和非法值回退
+
+## 8. Blender 视口验收
+
+- [x] 8.1 运行 `npm run typecheck`、`npm run test` 与 `npm run build`，记录完整结果；验证方式：类型检查、测试和构建通过，已知 `eagle.test.ts` worker flake 单独重跑 3/3 通过
+- [x] 8.2 无头验证 FBX、GLB、OBJ 的实体与渲染模式，以及面板展开、四项参数和 HDR 切换；验证方式：三种格式实体均为 `lights=4`、渲染均为 `lights=0`，面板四项齐全、8 个预设可见
+- [x] 8.3 对照 Blender 视口检查真实 FBX 截图与像素统计；验证方式：模型区亮度峰值 238/255、纯白溢出为 0，灰色明暗和轮廓可辨，面板布局与参考一致
+- [x] 8.4 同步 `openspec/specs/viewer-3d` 与 `openspec/specs/lightbox`，清理临时探针；验证方式：change、viewer-3d 与 lightbox 严格校验均通过
+
+## Previous Verification
 
 - `npm run typecheck`：node/web 两侧 tsc 通过。
 - `npm run test`：41/42 文件中先出现已知 `eagle.test.ts` worker 退出；单独重跑 `eagle.test.ts` 3/3 通过。HDR、材质与 uiStore 定向测试 49/49 通过。
@@ -42,7 +65,19 @@
 - 资源释放：连续开关 10 次，`mounts` 与 `disposes` 各增加 23，未累积额外差值。
 - `openspec validate viewer-3d --type spec --strict`、`lightbox --type spec --strict` 与 change 严格校验均通过。
 
+旧版验证记录的是重新设计前的 HDR 横排入口与背景行为，不适用于本轮 Blender 视口和面板改造。
+
+## Blender 视口验证
+
+- `npm run typecheck`：node/web 两侧通过。
+- `npm run test`：41/42 文件通过；`eagle.test.ts` 触发已知 worker 退出，单独重跑 3/3 通过。
+- `npm run build`：main、preload、renderer 三段构建通过。
+- FBX、GLB、OBJ：实体模式均为 `lights=4`，渲染模型模式均为 `lights=0`；FBX target 为 `[0, 5891.664, 0]`，网格跨度为 `700466.872`，背景保持主题深灰。
+- 环境面板：四项标签顺序为旋转、强度、世界不透明度、模糊；8 个 HDR 预设齐全，面板无 `backdrop-filter` 且完全位于舞台内。
+- HDR 连续切换：`envSwitches` 从 2 增至 10，`envDisposals` 从 0 增至 8，无资源计数停滞。
+- 像素检查：真实 FBX 模型区平均亮度 83.81/255、峰值 238/255、纯白溢出 0。
+
 ## Workflow follow-up
 
-- 实现完成并通过评审后归档该 change。
+- 完成 6–8 项实现与对照验收后再归档该 change。
 - 归档后确认主规格中不再残留转台/线框/曝光相关条目。
