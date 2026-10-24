@@ -1,6 +1,6 @@
 # Format Support
 
-验证日期：2026-10-23。验证环境：Windows、Electron 44、Blender 5.2.0；Cinema 4D 2024 已安装但 MaxonApp/授权不可用。
+验证日期：2026-10-24。验证环境：Windows、Electron 44、Blender 5.2.0；Cinema 4D 2024 已安装但 MaxonApp/授权不可用。
 
 能力分为四级：
 
@@ -38,12 +38,12 @@ AI 只有保存 PDF 兼容数据时可分页预览；其它 AI 显示失败原�
 | --- | --- | --- | --- | --- |
 | GLB、glTF | GLTFLoader + Draco | 离屏 three.js | 真实预览 | GLB、内嵌 glTF、外链 buffer glTF 通过 |
 | FBX、OBJ + MTL | FBXLoader、OBJLoader/MTLLoader | 离屏 three.js | 真实预览 | 通过 |
-| PMD、PMX | @moeru/three-mmd | 离屏 three.js | 真实预览 | 真实 PMD/PMX 通过；贴图基准目录已按模型目录解析 |
+| PMD、PMX | @moeru/three-mmd | 离屏 three.js | 真实预览 | 真实 PMD/PMX 通过；英文与日文文件名、日文目录均通过；封面与灯箱按 rest pose 顶点包围盒取景 |
 | STL、PLY、3DS、DAE、USDZ、3MF、AMF、VRML/WRL、VRM | three.js 对应 loader | 离屏 three.js | 真实预览 | 每个格式至少一个真实样本通过 |
 | BLEND | 本机 Blender CLI 导出 GLB | Blender + 离屏 three.js | 缓存 GLB | Blender 5.2 真实文件通过 |
 | C4D | 无内置解析器 | 占位 | 外部软件 | 仅验证不可用降级；没有可用授权与真实 C4D 文件，真实预览未验证 |
 
-三维缩略图固定为 640px JPEG，使用深灰棚底和统一相机取景。内置预览限制为 512MB、20 秒加载；环境图限制为 512MB、30 秒加载。解析失败会释放 WebGL canvas。
+三维缩略图固定为 640px JPEG，使用深灰棚底和统一相机取景。PMX 的绝对 morph target 不参与默认取景，避免极端变形值把 rest pose 模型缩成一条；三维封面记录 renderer 版本，取景规则变化时自动重建旧缓存。内置预览限制为 512MB、20 秒加载；环境图限制为 512MB、30 秒加载。解析失败会释放 WebGL canvas。
 
 ## 元数据与缓存
 
@@ -63,4 +63,3 @@ AI 只有保存 PDF 兼容数据时可分页预览；其它 AI 显示失败原�
 - 格式内编码仍可能损坏或使用罕见 profile；失败按文件内容指纹缓存，文件变化后自动重试。
 - MMD 缺少外部贴图时保留几何，但不能凭空恢复纹理。
 - BLEND/C4D 的渲染结果取决于本机软件版本、授权和工程外部资源。
-- 当前没有日文文件名 PMX 样本，路径解析已有纯函数覆盖，但真实日文纹理样本未验证。

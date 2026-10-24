@@ -43,7 +43,7 @@
 - [ ] 6.1 增加 three 多格式 loader 路由，覆盖 STL/PLY/3DS/DAE/USDZ/3MF/AMF/VRML/VRM；用每类有效样本验证灯箱。
 - [ ] 6.2 增加 PMD/PMX 加载和贴图路径解析，覆盖日文文件名、缺失纹理和损坏模型；验证模型几何与材质降级。
 - [ ] 6.3 增加 HDR/EXR 环境图预览和曝光控制；验证环境球、tone mapping 和曝光重启保留。
-- [ ] 6.4 增加三维离屏缩略图渲染，复用相机/环境/材质规则；用 GLB/STL/PMX 验证封面与灯箱取景一致。
+- [x] 6.4 增加三维离屏缩略图渲染，复用相机/环境/材质规则；用 GLB/STL/PMX 验证封面与灯箱取景一致。
 - [ ] 6.5 实现 BLEND 到 GLB 的外部 Blender 缓存流程；用有效 BLEND 和缺失 Blender 两种场景验证。
 - [ ] 6.6 实现 C4D 外部预览探测与外部打开降级；用有效/缺失 Cinema 4D 场景验证，不把占位误报为成功。
 - [ ] 6.7 为三维缩略图和预览增加超时、文件大小上限、GPU 资源释放和重复开关测试。
@@ -59,12 +59,12 @@
 ## 8. 集成验证
 
 - [ ] 8.1 准备格式验证矩阵，列出每类有效样本、损坏样本、预期缩略图、预期预览和实际结果；缺失样本必须明确标注“未验证”。
-- [ ] 8.2 运行 `npm run typecheck`，确认 node 与 web 两侧通过。
-- [ ] 8.3 运行相关 vitest 文件，再运行 `npm run test`，确认无回归和原生模块 ABI 问题。
-- [ ] 8.4 运行 `npm run build`，确认新依赖、worker、three loader 和外部进程路径进入产物。
+- [x] 8.2 运行 `npm run typecheck`，确认 node 与 web 两侧通过。
+- [x] 8.3 运行相关 vitest 文件，再运行 `npm run test`，确认无回归和原生模块 ABI 问题。
+- [x] 8.4 运行 `npm run build`，确认新依赖、worker、three loader 和外部进程路径进入产物。
 - [ ] 8.5 在开发模式执行真实 UI 路径验证：扫描、缩略图加载、灯箱打开、转码缓存命中、外部工具缺失降级；记录截图或可复现日志。
 - [ ] 8.6 检查进程、临时文件和缓存清理：解码完成后无残留 ffmpeg/Blender/C4D 进程，失败任务不无限重试。
-- [ ] 8.7 运行 `openspec validate expand-media-formats --strict` 并修复所有 spec 格式问题。
+- [x] 8.7 运行 `openspec validate expand-media-formats --strict` 并修复所有 spec 格式问题。
 
 ## Workflow follow-up
 
