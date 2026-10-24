@@ -75,12 +75,42 @@ describe('thumbnail cache', () => {
     expect(await readFile(second.path)).toEqual(first)
   })
 
+  it('rebuilds a same-name JPEG when the manifest version is stale', async () => {
+    await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
+    await flushManifest(root)
+    const first = await readFile(thumbPath(root, fingerprint))
+
+    await writeImage(absImage, 800, { r: 220, g: 40, b: 30 })
+    const stale = JSON.parse(await readFile(thumbManifestPath(root), 'utf8'))
+    stale.version = 1
+    await writeFile(thumbManifestPath(root), JSON.stringify(stale))
+    resetThumbCache()
+
+    await ensureThumb(root, absImage, fingerprint, 'PNG', meta())
+    const rebuilt = await readFile(thumbPath(root, fingerprint))
+    expect(rebuilt).not.toEqual(first)
+  })
+
   it('falls back to a placeholder when the source cannot be decoded', async () => {
     const broken = join(root, 'broken.psd')
     await writeFile(broken, 'not really a psd')
     const result = await ensureThumb(root, broken, 'fp-broken', 'PSD', meta('broken.psd'))
     expect(result.placeholder).toBe(true)
     expect(await exists(result.path)).toBe(true)
+  })
+
+  it('records a cached failure and does not decode the same fingerprint repeatedly', async () => {
+    const broken = join(root, 'broken.psd')
+    await writeFile(broken, 'not really a psd')
+    const first = await ensureThumb(root, broken, 'fp-failed', 'PSD', meta('broken.psd'))
+    await flushManifest(root)
+    const manifest = JSON.parse(await readFile(thumbManifestPath(root), 'utf8'))
+    expect(manifest.entries['fp-failed'].failure).toBeTruthy()
+    expect(manifest.entries['fp-failed'].generatedAt).toBeTruthy()
+
+    const second = await ensureThumb(root, broken, 'fp-failed', 'PSD', meta('broken.psd'))
+    expect(second.placeholder).toBe(true)
+    expect(await readFile(second.path)).toEqual(await readFile(first.path))
   })
 
   it('keeps the thumbnail after the source moves and follows the new path', async () => {

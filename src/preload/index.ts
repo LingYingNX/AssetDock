@@ -16,6 +16,12 @@ const api = {
   },
 
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
+  pickFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFile'),
+
+  tools: {
+    status: (): Promise<{ blender: { available: boolean; path?: string; version?: string; error?: string }; cinema4d: { available: boolean; path?: string; version?: string; error?: string } }> =>
+      ipcRenderer.invoke('tools:status')
+  },
 
   library: {
     create: (folderPath: string, name?: string): Promise<{ id: number; name: string; path: string; warning?: string } | { error: string }> =>
@@ -45,6 +51,16 @@ const api = {
       ipcRenderer.invoke('assets:rows', libraryId, ids),
     update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:update', libraryId, id, patch),
+    preparePreview: (libraryId: number, id: number): Promise<
+      | { kind: 'native' }
+      | { kind: 'video'; url: string }
+      | { kind: 'three'; url: string }
+      | { kind: 'pdf'; url: string; pages: number }
+      | { kind: 'external'; tool: 'cinema4d'; message: string }
+      | { error: string }
+    > => ipcRenderer.invoke('assets:preparePreview', libraryId, id),
+    openExternal: (libraryId: number, id: number): Promise<{ ok: true } | { error: string }> =>
+      ipcRenderer.invoke('assets:openExternal', libraryId, id),
     move: (libraryId: number, ids: number[], folder: string): Promise<{ moved: number } | { error: string; moved?: number }> =>
       ipcRenderer.invoke('assets:move', libraryId, ids, folder),
     addTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>

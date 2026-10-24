@@ -1,7 +1,13 @@
 /** 解析模型外部 buffer/贴图时使用的目录基准。 */
 export function modelBaseUrl(url: string): string {
   try {
-    return new URL('.', url).href
+    const parsed = new URL(url)
+    // rel_path 是整段编码的，%2F 必须还原后才能按目录级别解析外链。
+    const pathname = decodeURIComponent(parsed.pathname)
+    parsed.pathname = pathname.slice(0, pathname.lastIndexOf('/') + 1)
+    parsed.search = ''
+    parsed.hash = ''
+    return parsed.href
   } catch {
     return ''
   }

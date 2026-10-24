@@ -6,6 +6,7 @@ import {
 } from '../services/store'
 import { ensureLibraryStorage } from '../services/libraryDb'
 import { rememberPickedPath, validateLibraryCreatePath, type PickedPathMap } from '../services/libraryCreate'
+import { configuredToolPath, probeTool } from '../services/externalTools'
 import { win, libRootOf } from './context'
 import { reconcileWhenOpened, scanLibraryContents, migrationFailures, attachRootWatcher } from './watch'
 
@@ -21,6 +22,25 @@ export function registerLibraryIpc(): void {
     if (r.canceled || !r.filePaths[0]) return null
     rememberPickedPath(pickedLibraryPaths, r.filePaths[0])
     return r.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:pickFile', async () => {
+    const w = win()
+    if (!w) return null
+    const r = await dialog.showOpenDialog(w, {
+      properties: ['openFile'],
+      filters: [{ name: '可执行文件', extensions: ['exe', 'cmd', 'bat'] }]
+    })
+    return r.canceled ? null : r.filePaths[0] ?? null
+  })
+
+  ipcMain.handle('tools:status', async () => {
+    const prefs = getAppState(getDb(), 'preferences')
+    const [blender, cinema4d] = await Promise.all([
+      probeTool('blender', configuredToolPath(prefs, 'blender')),
+      probeTool('cinema4d', configuredToolPath(prefs, 'cinema4d'))
+    ])
+    return { blender, cinema4d }
   })
 
   ipcMain.handle('library:open', (_e, libraryId: number) => {

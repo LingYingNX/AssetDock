@@ -32,7 +32,9 @@ const LOAD_TIMEOUT_MS = 20_000
 
 export interface Viewer3DProps {
   url: string
-  format: Extract<AssetFormat, 'GLB' | 'FBX' | 'OBJ'>
+  format: Extract<AssetFormat,
+    'GLB' | 'FBX' | 'OBJ' | 'PMD' | 'PMX' | 'STL' | 'PLY' | '3DS' |
+    'DAE' | 'USDZ' | '3MF' | 'AMF' | 'VRML' | 'VRM'>
   shade: ModelShade
   hdr: HdrId
   hdrSettings: HdrSettings
@@ -41,6 +43,8 @@ export interface Viewer3DProps {
   onError?: () => void
   onLoaded?: () => void
 }
+
+export type Viewer3DFormat = Viewer3DProps['format']
 
 interface ViewerApi {
   applyShade: (mode: ModelShade) => void
@@ -146,6 +150,22 @@ function decodeModelText(buf: ArrayBuffer): string {
   }
 }
 
+/** 骨骼不完整时 SkinnedMesh.computeBoundingBox 会抛错，取景改用几何本体的包围盒。 */
+function modelBounds(model: THREE.Object3D): THREE.Box3 {
+  model.updateMatrixWorld(true)
+  const box = new THREE.Box3()
+  const part = new THREE.Box3()
+  model.traverse((object) => {
+    const mesh = object as THREE.Mesh
+    if (!mesh.isMesh || !mesh.geometry) return
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
+    if (!mesh.geometry.boundingBox) return
+    part.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld)
+    box.union(part)
+  })
+  return box.isEmpty() ? new THREE.Box3().setFromObject(model) : box
+}
+
 /** 按 OBJ 声明顺序取第一份可读 MTL;材质缺失不阻断模型本体。 */
 async function loadObjMaterials(objText: string, baseUrl: string): Promise<MTLLoader.MaterialCreator | null> {
   for (const mtlUrl of objMaterialUrls(objText, baseUrl)) {
@@ -161,6 +181,108 @@ async function loadObjMaterials(objText: string, baseUrl: string): Promise<MTLLo
     }
   }
   return null
+}
+
+async function loadExtendedModel(
+  format: Viewer3DProps['format'],
+  url: string,
+  baseUrl: string,
+  buffer: ArrayBuffer
+): Promise<THREE.Object3D> {
+  if (format === 'PMD' || format === 'PMX') {
+    const manager = new THREE.LoadingManager()
+    let pending = 0
+    let resolveIdle: () => void = () => {}
+    const idle = new Promise<void>((resolve) => {
+      resolveIdle = resolve
+    })
+    const itemStart = manager.itemStart
+    const itemEnd = manager.itemEnd
+    manager.itemStart = (resourceUrl) => {
+      pending++
+      itemStart(resourceUrl)
+    }
+    manager.itemEnd = (resourceUrl) => {
+      itemEnd(resourceUrl)
+      pending--
+      if (pending === 0) resolveIdle()
+    }
+    const { MMDLoader } = await import('@moeru/three-mmd')
+    const loader = new MMDLoader(manager)
+    loader.setResourcePath(baseUrl)
+    const mmd = await loader.loadAsync(url)
+    if (pending > 0) {
+      let timer = 0
+      await Promise.race([
+        idle,
+        new Promise<void>((resolve) => {
+          timer = window.setTimeout(resolve, 5_000)
+        })
+      ])
+      window.clearTimeout(timer)
+    }
+    mmd.mesh.traverse((object: THREE.Object3D) => {
+      const mesh = object as THREE.Mesh
+      if (!mesh.isMesh) return
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      for (const material of materials) {
+        const record = material as unknown as Record<string, unknown>
+        let changed = false
+        for (const slot of ['map', 'sphereMap', 'toonMap']) {
+          const texture = record[slot] as THREE.Texture | null | undefined
+          if (texture?.isTexture && texture.version === 0) {
+            record[slot] = null
+            changed = true
+          }
+        }
+        if (changed) material.needsUpdate = true
+      }
+    })
+    return mmd.mesh
+  }
+  if (format === 'STL') {
+    const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js')
+    return new THREE.Mesh(
+      new STLLoader().parse(buffer),
+      new THREE.MeshStandardMaterial({ color: 0x9aa4b2, roughness: 0.72, metalness: 0.05 })
+    )
+  }
+  if (format === 'PLY') {
+    const { PLYLoader } = await import('three/examples/jsm/loaders/PLYLoader.js')
+    return new THREE.Mesh(
+      new PLYLoader().parse(buffer),
+      new THREE.MeshStandardMaterial({ color: 0x9aa4b2, roughness: 0.72, metalness: 0.05, vertexColors: true })
+    )
+  }
+  if (format === '3DS') {
+    const { TDSLoader } = await import('three/examples/jsm/loaders/TDSLoader.js')
+    const loader = new TDSLoader()
+    loader.setResourcePath(baseUrl)
+    return loader.loadAsync(url)
+  }
+  if (format === 'DAE') {
+    const { ColladaLoader } = await import('three/examples/jsm/loaders/ColladaLoader.js')
+    const result = new ColladaLoader().parse(decodeModelText(buffer), baseUrl)
+    if (!result) throw new Error('Collada model is empty')
+    return result.scene
+  }
+  if (format === 'USDZ') {
+    const { USDZLoader } = await import('three/examples/jsm/loaders/USDZLoader.js')
+    return new USDZLoader().loadAsync(url)
+  }
+  if (format === '3MF') {
+    const { ThreeMFLoader } = await import('three/examples/jsm/loaders/3MFLoader.js')
+    return new ThreeMFLoader().parse(buffer)
+  }
+  if (format === 'AMF') {
+    const { AMFLoader } = await import('three/examples/jsm/loaders/AMFLoader.js')
+    return new AMFLoader().parse(buffer)
+  }
+  if (format === 'VRML') {
+    const { VRMLLoader } = await import('three/examples/jsm/loaders/VRMLLoader.js')
+    return new VRMLLoader().parse(decodeModelText(buffer), baseUrl)
+  }
+  throw new Error(`unsupported model format: ${format}`)
 }
 
 /**
@@ -462,6 +584,7 @@ export function Viewer3D({
       const res = await fetch(u)
       if (!res.ok) throw new Error(`media ${res.status}`)
       const total = Number(res.headers.get('content-length')) || 0
+      if (total > 512 * 1024 * 1024) throw new Error('model exceeds 512 MB limit')
       if (!res.body) return res.arrayBuffer()
       const reader = res.body.getReader()
       const chunks: Uint8Array[] = []
@@ -472,6 +595,10 @@ export function Viewer3D({
         if (done) break
         chunks.push(value)
         loaded += value.length
+        if (loaded > 512 * 1024 * 1024) {
+          await reader.cancel()
+          throw new Error('model exceeds 512 MB limit')
+        }
         if (total > 0) {
           const pct = Math.min(99, Math.floor((loaded / total) * 100))
           if (pct !== lastPct) {
@@ -507,7 +634,12 @@ export function Viewer3D({
         }
         window.__threeStats!.preview = 'native'
         if (format === 'FBX') return new FBXLoader().parse(buf, baseUrl)
-        return new Promise<THREE.Group>((res, rej) => loader.parse(buf, baseUrl, (g) => res(g.scene as THREE.Group), rej))
+        if (format === 'GLB' || format === 'VRM') {
+          return new Promise<THREE.Group>((res, rej) =>
+            loader.parse(buf, baseUrl, (g) => res(g.scene as THREE.Group), rej)
+          )
+        }
+        return loadExtendedModel(format, url, baseUrl, buf)
       })
       .then((model) => {
         if (loadTimer) clearTimeout(loadTimer)
@@ -515,20 +647,35 @@ export function Viewer3D({
         if (!model) throw new Error('empty model')
         onProgressRef.current?.(100)
         group.add(model)
-        const box = new THREE.Box3().setFromObject(model)
-        const size = box.getSize(new THREE.Vector3()).length() || 1
+        const box = modelBounds(model)
+        const dimensions = box.getSize(new THREE.Vector3())
+        const size = dimensions.length() || 1
         const center = box.getCenter(new THREE.Vector3())
         window.__threeStats!.bounds = {
           min: box.min.toArray() as [number, number, number],
           max: box.max.toArray() as [number, number, number]
         }
         addGround(size)
-        const dist = size * 1.6
+        const alongX = dimensions.x <= dimensions.y && dimensions.x <= dimensions.z
+        const alongY = !alongX && dimensions.y <= dimensions.z
+        const horizontal = alongX ? dimensions.z : dimensions.x
+        const vertical = alongY ? dimensions.z : dimensions.y
+        const verticalTan = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
+        const dist = Math.max(
+          vertical / (2 * verticalTan),
+          horizontal / (2 * verticalTan * camera.aspect),
+          size / 100
+        ) * 1.18
         camera.near = Math.max(size / 200, 0.01)
-        camera.far = size * 30
+        camera.far = Math.max(size * 30, dist * 3)
         camera.updateProjectionMatrix()
-        camera.position.set(0, center.y + dist * 0.35, dist)
-        controls.target.set(0, center.y, 0)
+        const direction = alongX
+          ? new THREE.Vector3(1, 0.12, 0)
+          : alongY
+            ? new THREE.Vector3(0, 1, 0.12)
+            : new THREE.Vector3(0, 0.35, 1)
+        camera.position.copy(center).add(direction.normalize().multiplyScalar(dist))
+        controls.target.copy(center)
         controls.update()
         /* 材质归一:统一成 PBR,并清掉源文件把全不透明材质误标为透明的标记。 */
         const converted = new Map<THREE.Material, THREE.Material>()

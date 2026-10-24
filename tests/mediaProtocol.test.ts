@@ -29,6 +29,18 @@ describe('isAllowedMediaReferrer (S0-1)', () => {
     expect(isAllowedMediaReferrer('http://127.0.0.1:5173/')).toBe(false)
   })
 
+  it('follows the dev server origin chosen by electron-vite', () => {
+    const previous = process.env.ELECTRON_RENDERER_URL
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5174/'
+    try {
+      expect(isAllowedMediaReferrer('http://localhost:5174/')).toBe(true)
+      expect(isAllowedMediaReferrer('http://localhost:9999/')).toBe(false)
+    } finally {
+      if (previous == null) delete process.env.ELECTRON_RENDERER_URL
+      else process.env.ELECTRON_RENDERER_URL = previous
+    }
+  })
+
   it('rejects malformed referrer strings', () => {
     expect(isAllowedMediaReferrer('not a url')).toBe(false)
     expect(isAllowedMediaReferrer('http://')).toBe(false)

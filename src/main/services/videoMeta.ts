@@ -58,7 +58,7 @@ function parseCodec(s: string): string | undefined {
 }
 
 function parseFps(s: string): number | undefined {
-  const m = s.match(/([\d.]+)\s*fps/i)
+  const m = s.match(/([\d.]+)\s*fps/i) ?? s.match(/([\d.]+)\s*tbr/i)
   if (!m) return undefined
   const v = Number(m[1])
   return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : undefined

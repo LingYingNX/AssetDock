@@ -8,6 +8,12 @@ describe('model base URL', () => {
     expect(new URL('scene.bin', base).href).toBe('media://7/models/scene.bin')
   })
 
+  it('decodes an encoded relative path before resolving sibling resources', () => {
+    const base = modelBaseUrl('media://7/models%2Fscene.gltf?v=0123456789abcdef0123')
+    expect(base).toBe('media://7/models/')
+    expect(new URL('scene.bin', base).href).toBe('media://7/models/scene.bin')
+  })
+
   it('falls back to an empty base for an invalid URL', () => {
     expect(modelBaseUrl('not a url')).toBe('')
   })

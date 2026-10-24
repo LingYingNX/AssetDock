@@ -1,10 +1,11 @@
-import { ipcMain, dialog, clipboard } from 'electron'
+import { ipcMain, dialog, clipboard, shell } from 'electron'
+import { spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { getDb } from '../services/db'
 import {
   addTag, removeTag, applyMovedAssets, renameAssetFolder, renameFolderOrders,
   listFolderOrders, replaceFolderOrders, listAssets, updateAsset, getLibrary, sanitizeAssetPatch,
-  upsertScanned, type AssetPatch
+  upsertScanned, getAppState, type AssetPatch
 } from '../services/store'
 import { ensureLibraryStorage, hasLibDb } from '../services/libraryDb'
 import {
@@ -20,6 +21,12 @@ import { send } from '../events'
 import { absPathFor, libRootOf, releaseScope, scopeFor, win, type Scope } from './context'
 import { queueThumbWarmup } from './thumbs'
 import { attachRootWatcher, watchManager } from './watch'
+import { needsVideoTranscode } from '../../shared/formats'
+import { realPathWithinRoot } from '../services/libResolve'
+import { ensureTranscodedVideo } from '../services/transcode'
+import { ensureBlendPreview } from '../services/externalPreview'
+import { configuredToolPath, probeTool, type ExternalToolKey } from '../services/externalTools'
+import { countPdfPages } from '../services/aiPreview'
 
 function folderParent(path: string): string {
   const index = path.lastIndexOf('/')
@@ -180,6 +187,104 @@ export function registerAssetsIpc(): void {
       // 单素材编辑(评分/收藏/备注/回收站)走增量:渲染层只合并这一行
       send('assets:changed', { libraryId, assetIds: [id] })
       return { ok: true }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('assets:preparePreview', async (_e, libraryId: number, id: number) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    try {
+      const row = s.db
+        .prepare('SELECT rel_path, fingerprint, format, duration, missing FROM assets WHERE library_id = ? AND id = ?')
+        .get(libraryId, id) as {
+          rel_path: string
+          fingerprint: string
+          format: string
+          duration: number | null
+          missing: number
+        } | undefined
+      if (!row) return { error: '素材不存在' }
+      if (row.missing) return { error: '素材文件已缺失' }
+      const realPath = await realPathWithinRoot(s.libPath, absPathFor(s, row.rel_path))
+      if (!realPath) return { error: '素材路径越界' }
+      if (row.format === 'AI') {
+        try {
+          const pages = await countPdfPages(realPath)
+          const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?aiPage=1&page=1&v=${encodeURIComponent(row.fingerprint)}`
+          return { kind: 'pdf' as const, url, pages }
+        } catch {
+          return { error: 'AI 文件不是 PDF 兼容格式，无法生成分页预览' }
+        }
+      }
+      if (row.format === 'BLEND') {
+        try {
+          await ensureBlendPreview(s.libPath, realPath, row.fingerprint)
+          const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?blend=1&v=${encodeURIComponent(row.fingerprint)}`
+          return { kind: 'three' as const, url }
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : 'Blender 预览失败' }
+        }
+      }
+      if (row.format === 'C4D') {
+        const configured = configuredToolPath(getAppState(getDb(), 'preferences'), 'cinema4d')
+        const tool = await probeTool('cinema4d', configured)
+        return {
+          kind: 'external' as const,
+          tool: 'cinema4d',
+          message: tool.available
+            ? 'Cinema 4D 可用；该版本需从外部窗口打开或渲染'
+            : `Cinema 4D 不可用：${tool.error ?? '未安装或未配置路径'}`
+        }
+      }
+      if (!needsVideoTranscode(row.format)) return { kind: 'native' as const }
+
+      const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?transcoded=1&v=${encodeURIComponent(row.fingerprint)}`
+      send('transcode:progress', { libraryId, assetId: id, status: 'running', progress: null })
+      try {
+        await ensureTranscodedVideo(s.libPath, realPath, row.fingerprint, {
+          duration: row.duration,
+          onProgress: (progress) => send('transcode:progress', { libraryId, assetId: id, status: 'running', progress })
+        })
+        send('transcode:progress', { libraryId, assetId: id, status: 'done', progress: 100 })
+        return { kind: 'video' as const, url }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '视频转码失败'
+        send('transcode:progress', { libraryId, assetId: id, status: 'error', error: message })
+        return { error: message }
+      }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('assets:openExternal', async (_e, libraryId: number, id: number) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    try {
+      const row = s.db
+        .prepare('SELECT rel_path, format, missing FROM assets WHERE library_id = ? AND id = ?')
+        .get(libraryId, id) as { rel_path: string; format: string; missing: number } | undefined
+      if (!row || row.missing) return { error: '素材文件已缺失' }
+      const realPath = await realPathWithinRoot(s.libPath, absPathFor(s, row.rel_path))
+      if (!realPath) return { error: '素材路径越界' }
+      if (row.format !== 'BLEND' && row.format !== 'C4D') {
+        const fallback = await shell.openPath(realPath)
+        return fallback ? { error: fallback } : { ok: true }
+      }
+      const key: ExternalToolKey = row.format === 'BLEND' ? 'blender' : 'cinema4d'
+      const configured = configuredToolPath(getAppState(getDb(), 'preferences'), key)
+      const tool = await probeTool(key, configured)
+      if (!tool.available || !tool.path) {
+        const fallback = await shell.openPath(realPath)
+        return fallback ? { error: fallback } : { ok: true }
+      }
+      const child = spawn(tool.path, [realPath], { detached: true, stdio: 'ignore', windowsHide: false })
+      child.unref()
+      return { ok: true }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '无法打开外部软件' }
     } finally {
       releaseScope(s)
     }

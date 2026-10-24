@@ -30,7 +30,7 @@ describe('thumbnail database selection', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('selects css alongside bitmaps and excludes video, 3D, trash and missing', () => {
+  it('selects css, bitmaps, video and 3D while excluding trash and missing', () => {
     const add = (relPath: string, type: string, format: string, fingerprint: string) =>
       upsertScanned(db, 1, [{ relPath, name: relPath.replace(/\.[^.]+$/, ''), type: type as never, format, sizeBytes: 10, mtimeMs: 1, fingerprint }])
     add('photo.png', 'image', 'PNG', 'fp-img')
@@ -40,7 +40,9 @@ describe('thumbnail database selection', () => {
     add('trashed.png', 'image', 'PNG', 'fp-trash')
     db.prepare("UPDATE assets SET deleted_at = '2026-09-27T00:00:00.000Z' WHERE fingerprint = 'fp-trash'").run()
 
-    expect(thumbJobRows(db, 1).map((row) => row.rel_path).sort()).toEqual(['loader.css', 'photo.png'])
+    expect(thumbJobRows(db, 1).map((row) => row.rel_path).sort()).toEqual([
+      'clip.mp4', 'loader.css', 'model.glb', 'photo.png'
+    ])
   })
 
   const entry = (relPath: string) => ({

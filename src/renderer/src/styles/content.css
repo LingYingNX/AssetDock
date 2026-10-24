@@ -1,5 +1,5 @@
 /* ============================ 内容区 ============================ */
-.content{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;
+.content{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;container-type:inline-size;
   background:
     radial-gradient(1000px 520px at 88% -6%,rgba(64,156,255,.12),transparent 62%),
     radial-gradient(820px 520px at -4% 112%,rgba(140,220,255,.10),transparent 62%),
@@ -88,10 +88,23 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .vr{width:1px;height:18px;background:var(--line2)}
 .filterbar .vr-lead{margin-left:auto}
-.fresult{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-cap);color:var(--t3)}
+.fresult{flex:0 0 auto;min-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-cap);color:var(--t3)}
 .fresult b{color:var(--t1);font-weight:600}
 /* 旧响应式 clamp(1600px 起线性收窄)已删:收缩改由 flex-shrink 按实际可用空间进行,
    不再依赖窗口宽(基准 100vw 在检查器打开时是错的)。 */
+@container (max-width:760px){
+  .filterbar{gap:6px;padding:0 10px}
+  .filterbar .searchbox{display:none}
+  .filterbar .btn{padding:0 6px;gap:4px}
+  .fresult{min-width:96px}
+}
+@container (max-width:600px){
+  .filterbar{gap:4px;padding:0 8px}
+  .filterbar .btn{padding:0 5px;gap:3px}
+  .filterbar .zoomer{min-width:56px}
+  .filterbar [data-menu="m-view"] .chev{display:none}
+  .filterbar .fresult{min-width:96px}
+}
 
 /* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
 .color-menu{width:max-content;padding:6px}

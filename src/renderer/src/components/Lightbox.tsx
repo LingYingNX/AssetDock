@@ -5,19 +5,22 @@ import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
 import { ModelEnvironmentPanel } from './ModelEnvironmentPanel'
+import { LazyEnvMapViewer } from './LazyEnvMapViewer'
+import type { ModelShade, Viewer3DFormat } from './Viewer3D'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
+import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
 
 let videoSessionSeq = 0
 let videoLoadSeq = 0
 
 /** 舞台媒体加载失败占位 */
-function MediaFallback(): React.JSX.Element {
+function MediaFallback({ label = '文件加载失败或已缺失' }: { label?: string }): React.JSX.Element {
   return (
     <div className="empty" style={{ minHeight: 240 }}>
       <Icon name="image" />
-      <span>文件加载失败或已缺失</span>
+      <span>{label}</span>
     </div>
   )
 }
@@ -103,6 +106,7 @@ export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
   const assets = useUI((s) => s.assets)
+  const showToast = useUI((s) => s.showToast)
   const fullscreen = useUI((s) => s.lightboxFullscreen)
   const setFullscreen = useUI((s) => s.setLightboxFullscreen)
   const modelShade = useUI((s) => s.modelShade)
@@ -137,18 +141,102 @@ export function Lightbox(): React.JSX.Element | null {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   )
 
+  const [envExposure, setEnvExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
   const [realFailed, setRealFailed] = useState(false)
+  const [prepareNonce, setPrepareNonce] = useState(0)
   const [videoEpoch] = useState(() => ++videoSessionSeq)
+  const [preparedMedia, setPreparedMedia] = useState<{
+    id: string
+    url?: string
+    progress?: number | null
+    error?: string
+    message?: string
+    pages?: number
+  } | null>(null)
+  const [pdfPage, setPdfPage] = useState(1)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
   const a = assets.find((x) => x.id === (lightboxId ?? lastId))
+  const thumbRevision = useUI((s) => a?.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const isVideo = a?.type === 'video'
-  const videoSrc = isVideo && a
-    ? (a.dbId != null ? `${a.originalUrl ?? ''}&lightbox=1&session=${videoEpoch}` : `/@fs/${a.previewUrl ?? ''}`)
+  const isModel = a?.type === 'model'
+  const isStyle = a?.type === 'style'
+  const spec = a ? formatSpec(a.format) : undefined
+  const isEnvMap = spec?.preview === 'envmap'
+  const transcodeRequired = isVideo && !!a && needsVideoTranscode(a.format)
+  const aiRequired = a?.format === 'AI'
+  const blendRequired = a?.format === 'BLEND'
+  const c4dRequired = a?.format === 'C4D'
+  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired
+  const rawVideoSrc = isVideo && a ? (a.dbId != null ? a.originalUrl ?? '' : `/@fs/${a.previewUrl ?? ''}`) : ''
+  const sourceVideo = rawVideoSrc
+    ? `${rawVideoSrc}${rawVideoSrc.includes('?') ? '&' : '?'}lightbox=1&session=${videoEpoch}`
     : ''
+  const videoSrc = transcodeRequired
+    ? (preparedMedia?.id === a?.id ? preparedMedia.url ?? '' : '')
+    : sourceVideo
   const playback = useVideoPlayback(videoSrc)
+
+  useEffect(() => {
+    if (!a || !prepareRequired || a.libraryId == null || a.dbId == null) {
+      setPreparedMedia(null)
+      return
+    }
+    let cancelled = false
+    const libraryId = a.libraryId
+    const assetId = a.dbId
+    setPreparedMedia({ id: a.id, progress: null })
+    const off = window.windowApi.on('transcode:progress', (payload) => {
+      if (cancelled || payload.libraryId !== libraryId || payload.assetId !== assetId) return
+      setPreparedMedia((current) => ({
+        id: a.id,
+        url: current?.url,
+        progress: payload.progress,
+        error: payload.error
+      }))
+    })
+    void window.windowApi.assets.preparePreview(libraryId, assetId).then((result) => {
+      if (cancelled) return
+      if ('error' in result) {
+        setPreparedMedia({ id: a.id, error: result.error })
+      } else if (result.kind === 'video') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
+      } else if (result.kind === 'three') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
+      } else if (result.kind === 'pdf') {
+        setPreparedMedia({ id: a.id, url: result.url, pages: result.pages })
+      } else if (result.kind === 'external') {
+        setPreparedMedia({ id: a.id, message: result.message })
+      } else {
+        setPreparedMedia({ id: a.id, url: sourceVideo, progress: 100 })
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setPreparedMedia({ id: a.id, error: error instanceof Error ? error.message : '媒体准备失败' })
+      }
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [a?.id, a?.libraryId, a?.dbId, prepareRequired, sourceVideo, prepareNonce])
+
+  useEffect(() => {
+    setPdfPage(1)
+  }, [lightboxId])
+
+  useEffect(() => {
+    if (!isEnvMap) return
+    let cancelled = false
+    void window.windowApi.state.get('viewerExposure').then((value) => {
+      if (value == null) return
+      const parsed = Number(value)
+      if (!cancelled && Number.isFinite(parsed) && parsed >= 0 && parsed <= 10) setEnvExposure(parsed)
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [isEnvMap, lightboxId])
 
   /* 入场与退场。打开:先挂载、下一帧置 shown 播淡入。
      关闭:先置 shown=false 播淡出,180ms 后再卸载——不能只等 transitionend,
@@ -262,9 +350,32 @@ export function Lightbox(): React.JSX.Element | null {
   /* 真实显示态:退场时锁住离开那一刻的全屏形态 */
   const fsNow = lightboxId ? fullscreen : lastFull
 
-  const isModel = a.type === 'model'
-  const isStyle = a.type === 'style'
-  const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
+  const prepared = preparedMedia?.id === a.id ? preparedMedia : null
+  const preparedModelUrl = a.format === 'BLEND' ? prepared?.url : undefined
+  const realModel = isModel && a.dbId != null && !!a.originalUrl &&
+    (spec?.preview === 'three' || !!preparedModelUrl)
+  const viewerUrl = preparedModelUrl ?? a.originalUrl ?? ''
+  const viewerFormat = (a.format === 'BLEND' ? 'GLB' : a.format) as Viewer3DFormat
+  const externalNotice = prepared?.error ?? prepared?.message
+  const retryPreview = (): void => setPrepareNonce((value) => value + 1)
+  const openExternally = (): void => {
+    if (a.libraryId == null || a.dbId == null) return
+    void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
+      if ('error' in result) showToast(result.error, 'warn')
+    }).catch(() => showToast('无法启动外部软件', 'warn'))
+  }
+  const directImage = ['JPG', 'PNG', 'WEBP', 'GIF', 'SVG', 'AVIF'].includes(a.format)
+  const aiPageUrl = prepared?.url
+    ? prepared.url.replace(/([?&])page=\d+/, `$1page=${pdfPage}`)
+    : ''
+  const imageViewUrl = a.format === 'AI'
+    ? aiPageUrl
+    : directImage
+      ? a.originalUrl ?? ''
+      : a.previewUrl ?? ''
+  const refreshedImageViewUrl = imageViewUrl
+    ? `${imageViewUrl}${imageViewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
+    : ''
   const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
   const hdrSettings = {
     rotation: modelHdrRotation,
@@ -290,7 +401,7 @@ export function Lightbox(): React.JSX.Element | null {
         </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel ? ' video-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -313,8 +424,8 @@ export function Lightbox(): React.JSX.Element | null {
                   <span>{assetMeta}</span>
                 </div>
                 <LazyViewer3D
-                  url={a.originalUrl ?? ''}
-                  format={a.format as 'GLB' | 'FBX' | 'OBJ'}
+                  url={viewerUrl}
+                  format={viewerFormat}
                   shade={modelShade}
                   hdr={modelHdr}
                   hdrSettings={hdrSettings}
@@ -370,16 +481,92 @@ export function Lightbox(): React.JSX.Element | null {
                 <div className="c3d-wrap">
                   <Cube3D cs="186px" />
                 </div>
+                {spec?.preview === 'external' && (
+                  <div className="pv-loading">
+                    {externalNotice ?? (a.format === 'BLEND' ? '正在用 Blender 准备预览…' : '正在检查外部软件…')}
+                  </div>
+                )}
+                {spec?.preview === 'external' && (
+                  <div className="v3-bar">
+                    <button
+                      className="v3-chip"
+                      onClick={() => {
+                        if (a.libraryId == null || a.dbId == null) return
+                        void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
+                          if ('error' in result) showToast(result.error, 'warn')
+                        }).catch(() => showToast('无法启动外部软件', 'warn'))
+                      }}
+                    >
+                      用外部软件打开
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : isEnvMap ? (
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
+                </div>
+                <LazyEnvMapViewer
+                  url={a.originalUrl ?? ''}
+                  format={a.format as 'HDR' | 'EXR'}
+                  exposure={envExposure}
+                />
+                <div className="v3-bar">
+                  <label className="v3-chip">
+                    曝光
+                    <input
+                      type="range"
+                      min="0"
+                      max="4"
+                      step="0.05"
+                      value={envExposure}
+                      onChange={(event) => {
+                        const next = Number(event.currentTarget.value)
+                        setEnvExposure(next)
+                        void window.windowApi.state.set('viewerExposure', String(next))
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             ) : a.type === 'image' ? (
-              <MediaImg
-                src={a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`}
-                name={a.name}
-              />
+              prepared?.error ? (
+                <div className="pv3d">
+                  <MediaFallback label={prepared.error} />
+                  <div className="v3-bar">
+                    <button className="v3-chip" onClick={retryPreview}>重试</button>
+                    <button className="v3-chip" onClick={openExternally}>外部打开</button>
+                  </div>
+                </div>
+              ) : (
+                <MediaImg
+                  src={a.dbId != null ? refreshedImageViewUrl : `/@fs/${a.previewUrl ?? ''}`}
+                  name={a.name}
+                />
+              )
             ) : (
               <div className="pv-video-shell">
                 <div className="pv-video-surface">
-                  <VideoElement src={videoSrc} playback={playback} />
+                  {prepared?.error ? (
+                    <div className="pv3d">
+                      <MediaFallback label={prepared.error} />
+                      <div className="v3-bar">
+                        <button className="v3-chip" onClick={retryPreview}>重试</button>
+                        <button className="v3-chip" onClick={openExternally}>外部打开</button>
+                      </div>
+                    </div>
+                  ) : videoSrc ? (
+                    <VideoElement src={videoSrc} playback={playback} />
+                  ) : (
+                    <div className="pv-loading">
+                      {prepared?.progress == null
+                        ? '正在准备视频…'
+                        : `转码中 ${Math.round(prepared.progress)}%`}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -397,6 +584,29 @@ export function Lightbox(): React.JSX.Element | null {
               <span className="sep">·</span>
               <span title={assetMeta}>{assetMeta}</span>
             </div>
+            {a.format === 'AI' && prepared?.pages ? (
+              <div className="v3-bar">
+                <button
+                  className="v3-chip"
+                  disabled={pdfPage <= 1}
+                  onClick={() => setPdfPage((page) => Math.max(1, page - 1))}
+                  aria-label="上一页"
+                  title="上一页"
+                >
+                  <Icon name="arr-l" />
+                </button>
+                <span className="v3-chip">{pdfPage} / {prepared.pages}</span>
+                <button
+                  className="v3-chip"
+                  disabled={pdfPage >= prepared.pages}
+                  onClick={() => setPdfPage((page) => Math.min(prepared.pages!, page + 1))}
+                  aria-label="下一页"
+                  title="下一页"
+                >
+                  <Icon name="arr-r" />
+                </button>
+              </div>
+            ) : null}
           </div>
           {isVideo ? (
             <VideoControls v={playback} fps={a.fps} fullscreen={fsNow} onFullscreen={toggleFullscreen} />

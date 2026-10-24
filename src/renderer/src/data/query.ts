@@ -1,4 +1,5 @@
 import type { Asset, NavKey } from './types'
+import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
 
 /* ---------- 展示格式化 ---------- */
 
@@ -137,14 +138,18 @@ function matchNav(a: Asset, nav: NavKey): boolean {
 function matchFilters(a: Asset, f: Filters): boolean {
   if (f.format !== 'all') {
     const fm = a.format
-    if (f.format === 'photo' && !['JPG', 'PNG', 'WEBP'].includes(fm)) return false
-    if (f.format === 'psd-ai' && fm !== 'PSD') return false
-    if (f.format === 'svg-gif' && !['SVG', 'GIF'].includes(fm)) return false
-    if (f.format === 'video' && !['MP4', 'MOV'].includes(fm)) return false
-    if (f.format === 'glb' && fm !== 'GLB') return false
-    if (f.format === 'fbx' && fm !== 'FBX') return false
-    if (f.format === 'obj' && fm !== 'OBJ') return false
-    if (f.format === 'css' && fm !== 'CSS') return false
+    // 旧持久化筛选值保留兼容；新值直接使用规范格式名。
+    const legacy: Record<string, string[]> = {
+      photo: ['JPG', 'PNG', 'WEBP'],
+      'psd-ai': ['PSD'],
+      'svg-gif': ['SVG', 'GIF'],
+      video: ['MP4', 'MOV'],
+      glb: ['GLB'],
+      fbx: ['FBX'],
+      obj: ['OBJ'],
+      css: ['CSS']
+    }
+    if (!(legacy[f.format] ?? [f.format]).includes(fm)) return false
   }
   if (f.shape !== 'all' && a.type !== 'model') {
     const ar = (a.width ?? 1) / (a.height ?? 1)
@@ -234,9 +239,11 @@ export function statsOf(list: Asset[]): { count: number; size: string } {
 
 /** 文件信息 dl:图片/视频与三维两套字段 */
 export function infoRows(a: Asset): [string, string, string?][] {
+  const capability = formatCapability(a)
   if (a.type === 'model') {
     return [
       ['类型', `${a.format} 模型`, a.format === 'GLB' ? 'glTF 2.0' : undefined],
+      ['能力', capability],
       ['大小', formatBytes(a.sizeBytes)],
       ['导入', formatFullDate(a.importedAt)]
     ]
@@ -251,6 +258,7 @@ export function infoRows(a: Asset): [string, string, string?][] {
   }
   const rows: [string, string, string?][] = [
     ['类型', `${a.format} ${a.type === 'video' ? '视频' : '图片'}`, a.type === 'video' ? codecLabel(a.codec) : undefined],
+    ['能力', capability],
     ['分辨率', `${formatResolution(a)}`, a.format === 'SVG' ? undefined : pxLabel(a)]
   ]
   if (a.type === 'video') rows.push(['时长', `${a.duration ?? '—'}`, a.fps ? `${a.fps} fps` : undefined])
@@ -258,6 +266,19 @@ export function infoRows(a: Asset): [string, string, string?][] {
   rows.push(['导入', formatFullDate(a.importedAt)])
   rows.push(['来源', a.sourceUrl ? '外部链接' : '本地素材库'])
   return rows
+}
+
+export function formatCapability(a: Asset): string {
+  const spec = formatSpec(a.format)
+  if (!spec) return '仅入库'
+  if ('external' in spec && spec.external === 'blender') return '需 Blender'
+  if ('external' in spec && spec.external === 'cinema4d') return '需 Cinema 4D'
+  if (spec.preview === 'envmap') return '环境图预览'
+  if (spec.preview === 'pdf') return 'PDF 兼容预览'
+  if (spec.preview === 'css') return '可编辑'
+  if (spec.type === 'video') return needsVideoTranscode(a.format) ? '需转码播放' : '可播放'
+  if (spec.preview === 'three' || spec.preview === 'image') return '可预览'
+  return '仅入库'
 }
 
 /** 编码名展示映射 */

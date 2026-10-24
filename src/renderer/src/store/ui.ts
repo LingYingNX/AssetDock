@@ -12,6 +12,7 @@ import {
   type HdrId
 } from '../data/hdr-presets'
 import type { ModelShade } from '../components/Viewer3D'
+import { THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -190,7 +191,7 @@ function rowToAsset(r: Record<string, unknown>): Asset {
   const fingerprint = encodeURIComponent(String(r.fingerprint ?? ''))
   // 网格卡片走 640px 缩略图缓存(?thumb=1);回收站素材入库时已清理缩略图,不再请求它
   const originalUrl = `media://${r.library_id as number}/${encodeURIComponent(relPath)}?v=${fingerprint}`
-  const sourceUrl = r.deleted_at ? originalUrl : `${originalUrl}&thumb=1`
+  const sourceUrl = r.deleted_at ? originalUrl : thumbUrl(originalUrl)
   return {
     id: `a${r.id as number}`,
     dbId: r.id as number,
@@ -225,6 +226,10 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     absPath: r.absPath as string,
     deletedAt: (r.deleted_at as string) ?? undefined
   }
+}
+
+function thumbUrl(originalUrl: string): string {
+  return `${originalUrl}&thumb=1&tv=${THUMB_CACHE_VERSION}`
 }
 
 function TAG_COLOR(name: string): string {
@@ -263,6 +268,9 @@ interface UIState {
   /** 缩略图全量生成进度;null 表示没有正在进行的预热 */
   thumbProgress: { done: number; total: number } | null
   setThumbProgress: (p: { done: number; total: number } | null) => void
+  /** 指纹 → 完成序号：懒生成占位必须先有这一跳，浏览器才会换 URL 重取真实图。 */
+  thumbRevisions: Record<string, number>
+  markThumbReady: (fingerprint: string) => void
   /** 一次性操作提示(复制/重命名等);自动消失,null 表示无提示 */
   toast: { text: string; kind: 'ok' | 'warn' } | null
   showToast: (text: string, kind?: 'ok' | 'warn') => void
@@ -500,6 +508,13 @@ export const useUI = create<UIState>((set, get) => {
     scanProgress: null,
     thumbProgress: null,
     setThumbProgress: (p) => set({ thumbProgress: p }),
+    thumbRevisions: {},
+    markThumbReady: (fingerprint) => set((s) => ({
+      thumbRevisions: {
+        ...s.thumbRevisions,
+        [fingerprint]: (s.thumbRevisions[fingerprint] ?? 0) + 1
+      }
+    })),
     toast: null,
     /** 一次性提示:定时清空,并让后一条覆盖前一条 */
     showToast: (text, kind = 'ok') => {
@@ -679,7 +694,7 @@ export const useUI = create<UIState>((set, get) => {
           if (relPath === asset.relPath) return asset
           const fingerprint = encodeURIComponent(String(asset.fingerprint ?? ''))
           const originalUrl = `media://${asset.libraryId}/${encodeURIComponent(relPath)}?v=${fingerprint}`
-          const previewUrl = `${originalUrl}&thumb=1`
+          const previewUrl = thumbUrl(originalUrl)
           return {
             ...asset,
             relPath,
@@ -904,7 +919,7 @@ export const useUI = create<UIState>((set, get) => {
         ctxMenu: null
       }))
     },
-    restoreAsset: (id) => edit(id, { deleted_at: null }, (a) => ({ ...a, deletedAt: undefined, previewUrl: a.originalUrl ? `${a.originalUrl}&thumb=1` : a.previewUrl })),
+      restoreAsset: (id) => edit(id, { deleted_at: null }, (a) => ({ ...a, deletedAt: undefined, previewUrl: a.originalUrl ? thumbUrl(a.originalUrl) : a.previewUrl })),
     emptyTrash: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return

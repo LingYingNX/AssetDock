@@ -68,7 +68,7 @@
 .menu.compact-menu button .ic{width:var(--ic-xs);height:var(--ic-xs)}
 
 /* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
-.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu)}
+.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));max-height:70vh;overflow-y:auto;overscroll-behavior:contain;padding:4px;border-radius:var(--r-menu)}
 .menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:var(--r-sm);font-size:var(--fs-body);white-space:nowrap;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
 /* pick-menu 的按钮左右内边距是 10px(比 .menu 默认的 9px 宽 1px),分组标题要跟着走,

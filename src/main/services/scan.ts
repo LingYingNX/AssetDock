@@ -1,9 +1,9 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join, basename } from 'node:path'
-import sharp from 'sharp'
 import { isIgnored, isIgnoredDir, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
+import { probeImageMeta } from './formatProbe'
 import type { ScanEntry } from './store'
 
 const SCAN_BATCH_SIZE = 64
@@ -21,12 +21,10 @@ async function collectEntry(absPath: string, relPath: string, sizeBytes: number,
     mtimeMs,
     fingerprint: await fingerprint(absPath, sizeBytes, mtimeMs)
   }
-  if (kind.type === 'image' && kind.format !== 'PSD') {
-    try {
-      const meta = await sharp(absPath).metadata()
-      entry.width = meta.width ?? undefined
-      entry.height = meta.height ?? undefined
-    } catch { /* 尺寸留空 */ }
+  if (kind.type === 'image') {
+    const meta = await probeImageMeta(absPath, relPath)
+    entry.width = meta.width
+    entry.height = meta.height
   }
   if (kind.type === 'video') {
     const meta = await probeVideo(absPath)

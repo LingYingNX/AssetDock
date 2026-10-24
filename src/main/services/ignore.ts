@@ -1,23 +1,13 @@
 /** 扩展名白名单与忽略规则(扫描与监听共用) */
-export type AssetKind = 'image' | 'video' | 'model' | 'style'
+import { detectFormat, FORMAT_SPECS, isSupportedExtension } from '../../shared/formats'
+import type { AssetFormat, AssetKind } from '../../shared/formats'
 
-export const EXT_WHITELIST: Record<string, { type: AssetKind; format: string }> = {
-  jpg: { type: 'image', format: 'JPG' },
-  jpeg: { type: 'image', format: 'JPG' },
-  png: { type: 'image', format: 'PNG' },
-  webp: { type: 'image', format: 'WEBP' },
-  gif: { type: 'image', format: 'GIF' },
-  svg: { type: 'image', format: 'SVG' },
-  psd: { type: 'image', format: 'PSD' },
-  mp4: { type: 'video', format: 'MP4' },
-  mov: { type: 'video', format: 'MOV' },
-  glb: { type: 'model', format: 'GLB' },
-  gltf: { type: 'model', format: 'GLB' },
-  fbx: { type: 'model', format: 'FBX' },
-  obj: { type: 'model', format: 'OBJ' },
-  // CSS 片段作为「效果素材」入库;没有尺寸与时长,预览靠 HTML 骨架承载
-  css: { type: 'style', format: 'CSS' }
-}
+export type { AssetFormat, AssetKind } from '../../shared/formats'
+
+/** 兼容旧调用点；新增格式请只改 src/shared/formats.ts。 */
+export const EXT_WHITELIST: Record<string, { type: AssetKind; format: AssetFormat }> = Object.fromEntries(
+  FORMAT_SPECS.map((spec) => [spec.ext, { type: spec.type, format: spec.format }])
+)
 
 const TEMP_SUFFIX = /\.(tmp|crdownload|part)$/i
 const IGNORED_DIRS = new Set(['thumbs', '.mediahub'])
@@ -36,8 +26,7 @@ export function isIgnored(relPath: string): boolean {
   const dot = relPath.lastIndexOf('.')
   if (dot < 0) return true
   const ext = relPath.slice(dot + 1).toLowerCase()
-  if (ext === 'jpeg') return false
-  return !Object.keys(EXT_WHITELIST).includes(ext)
+  return !isSupportedExtension(ext)
 }
 
 /** 目录相对路径的忽略判断(不做扩展名检查) */
@@ -54,9 +43,6 @@ export function isIgnoredWatch(p: string): boolean {
 
 /** 相对路径 → 类型/格式;不在白名单返回 null */
 export function detectKind(relPath: string): { type: AssetKind; format: string } | null {
-  const dot = relPath.lastIndexOf('.')
-  if (dot < 0) return null
-  const ext = relPath.slice(dot + 1).toLowerCase()
-  if (ext === 'jpeg') return EXT_WHITELIST.jpg
-  return EXT_WHITELIST[ext] ?? null
+  const spec = detectFormat(relPath)
+  return spec ? { type: spec.type, format: spec.format } : null
 }

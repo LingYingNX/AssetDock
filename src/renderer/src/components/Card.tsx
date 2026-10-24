@@ -34,12 +34,16 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
   const lightboxId = useUI((s) => s.lightboxId)
+  const thumbRevision = useUI((s) => a.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
   // 已解码过的预览直接以可见态挂载:切换文件夹时卡片会重挂载,
   // 若从 opacity:0 重新淡入,用户看到的就是缩略图重新刷新。
   const previewKey = a.previewUrl ?? ''
+  const thumbSrc = a.previewUrl
+    ? `${a.previewUrl}${a.previewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
+    : ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
   const [modelFailed, setModelFailed] = useState(false)
   /** 视频卡悬浮进度:读实时播放进度,避免所有视频卡都画同一条假进度条 */
@@ -185,7 +189,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               <Cube3D cs="58px" />
             </div>
           ) : null
-        ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
+        ) : a.type === 'model' && a.originalUrl && !modelFailed &&
+          ['GLB', 'FBX', 'OBJ'].includes(a.format) ? (
           inView && lightboxId !== a.id ? (
             <div className="model-card-preview">
               <LazyViewer3D
@@ -198,9 +203,19 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               />
             </div>
           ) : null
+        ) : a.type === 'model' && a.previewUrl ? (
+          <img
+            src={thumbSrc}
+            alt={a.name}
+            loading="lazy"
+            decoding="async"
+            className={imgLoaded ? 'loaded' : ''}
+            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+            draggable={false}
+          />
         ) : a.dbId != null && (a.type === 'image' || a.type === 'style') ? (
           <img
-            src={a.previewUrl}
+            src={thumbSrc}
             alt={a.name}
             loading="lazy"
             decoding="async"
@@ -214,6 +229,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               ref={videoRef}
               /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
               src={a.originalUrl}
+              poster={a.previewUrl ? thumbSrc : undefined}
               muted={hoverSound !== true}
               /* 只预载元数据:挂载时取头部拿到首帧即可,整片留给悬浮播放与灯箱 */
               preload="metadata"
@@ -241,6 +257,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             <video
               ref={videoRef}
               src={`/@fs/${a.previewUrl}`}
+              poster={a.previewUrl ? thumbSrc : undefined}
               muted={hoverSound !== true}
               preload="metadata"
               className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}

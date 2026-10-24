@@ -99,7 +99,8 @@ export default function App(): React.JSX.Element {
       }
     )
     const un4 = window.windowApi.on('thumbs:progress', (p) => {
-      const d = p as { phase: string; done: number; total: number }
+      const d = p as { phase: string; done: number; total: number; fingerprint?: string }
+      if (d.fingerprint) useUI.getState().markThumbReady(d.fingerprint)
       progressBatch.push(d.phase === 'done' || d.total <= 0 ? null : { done: d.done, total: d.total })
     })
     const un2 = window.windowApi.on('library:scan', (p) => {

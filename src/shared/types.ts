@@ -100,6 +100,16 @@ export interface ThumbsProgressPayload {
   phase: 'running' | 'done'
   /** S3-6:预热失败计数(渲染层可提示"部分缩略图生成失败") */
   failed?: number
+  /** 单张懒生成完成时携带，用于让占位 URL 立即换成真实缓存。 */
+  fingerprint?: string
+}
+
+export interface TranscodeProgressPayload {
+  libraryId: number
+  assetId: number
+  status: 'running' | 'done' | 'error'
+  progress?: number | null
+  error?: string
 }
 
 /** preload on() 白名单事件通道 → payload 映射(与主进程实际发送一致) */
@@ -108,4 +118,5 @@ export interface EventChannelMap {
   'assets:changed': AssetsChangedPayload
   'window:maximized': boolean
   'thumbs:progress': ThumbsProgressPayload
+  'transcode:progress': TranscodeProgressPayload
 }
