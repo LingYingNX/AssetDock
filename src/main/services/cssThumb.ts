@@ -83,7 +83,20 @@ export async function renderSvgPreviewPng(absPath: string): Promise<Buffer> {
   const width = Math.max(1, meta.width ?? RENDER_WIDTH)
   const height = Math.max(1, meta.height ?? RENDER_HEIGHT)
   const zoom = Math.max(0.1, Math.min(4, RENDER_WIDTH / width, RENDER_HEIGHT / height))
-  return renderPreviewPng(`data:image/svg+xml;base64,${svg.toString('base64')}`, zoom)
+  const png = await renderPreviewPng(`data:image/svg+xml;base64,${svg.toString('base64')}`, zoom)
+  const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true })
+  const background = {
+    r: data[0] ?? 255,
+    g: data[1] ?? 255,
+    b: data[2] ?? 255,
+    alpha: info.channels === 4 ? (data[3] ?? 255) / 255 : 1
+  }
+  const trimmed = await sharp(png).trim({ background, threshold: 12 }).toBuffer({ resolveWithObject: true })
+  const pad = Math.max(24, Math.round(Math.max(trimmed.info.width, trimmed.info.height) * 0.18))
+  return sharp(trimmed.data)
+    .extend({ top: pad, bottom: pad, left: pad, right: pad, background })
+    .png()
+    .toBuffer()
 }
 
 /** 截图 → 640px 长边 JPEG(与位图缩略图同一编码参数,便于共用缓存目录) */
