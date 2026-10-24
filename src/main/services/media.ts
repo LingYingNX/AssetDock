@@ -3,7 +3,7 @@ import { createReadStream, promises as fsp } from 'node:fs'
 import { Readable } from 'node:stream'
 import { join, extname } from 'node:path'
 import { libScopeDb, realPathWithinRoot, registryLib, libScopeRelease } from './libResolve'
-import { inlinePlaceholderSvg, thumbPath, warmThumbInBackground } from './thumbs'
+import { ensureThumb, inlinePlaceholderSvg, thumbPath, warmThumbInBackground } from './thumbs'
 import { send } from '../events'
 import { detectFormat } from '../../shared/formats'
 import { transcodePath } from './transcode'
@@ -192,11 +192,6 @@ export function registerMediaProtocol(): void {
           // 缩略图请求与生成解耦(S1-8):命中缓存直接回;miss 立即回占位 SVG,
           // 生成转后台并发池,完成后 thumbs:progress 通知渲染层重取该图。
           // 三维模型传 thumb=1 时也在此路由；不支持离屏渲染的格式会得到可缓存占位图。
-          const thumbFile = thumbPath(lib.path, fingerprint)
-          const cached = await fsp.stat(thumbFile).catch(() => null)
-          if (cached?.isFile()) {
-            return serveFile(thumbFile, 'image/jpeg', true, cached.size)
-          }
           const meta = { relPath: rel, mtimeMs: st.mtimeMs, sizeBytes: st.size, libraryId: libId }
           const format = detectFormat(rel)?.format ?? ext.slice(1).toUpperCase()
           // CSS 封面由配套 HTML 决定外观,把 HTML 摘要一并作为缓存依据
@@ -204,6 +199,14 @@ export function registerMediaProtocol(): void {
           const look = format === 'CSS'
             ? await import('./cssThumb').then((m) => m.resolveShellSignature(lib.path, realPath))
             : ''
+          const thumbFile = thumbPath(lib.path, fingerprint)
+          const cached = await fsp.stat(thumbFile).catch(() => null)
+          if (cached?.isFile()) {
+            // 命中并非永久有效:CSS/SVG 的渲染规则版本升级后要按清单重建。
+            const ensured = await ensureThumb(lib.path, realPath, fingerprint, format, meta, look)
+            const fresh = await fsp.stat(ensured.path).catch(() => null)
+            if (fresh?.isFile()) return serveFile(ensured.path, 'image/jpeg', true, fresh.size)
+          }
           const libraryId = libId
           warmThumbInBackground(lib.path, realPath, fingerprint, format, meta, look, () => {
             send('thumbs:progress', { libraryId, done: 0, total: 0, phase: 'done', fingerprint })

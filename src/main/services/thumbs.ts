@@ -34,7 +34,7 @@ const MISSING_TOOL_RETRY_MS = 60_000
  * 改渲染逻辑时递增,存量 CSS 封面即按新骨架重建(位图不受影响)。
  */
 export const SHELL_VERSION = 2
-export const SVG_THUMB_RENDERER = 1
+export const SVG_THUMB_RENDERER = 2
 
 export interface ThumbEntry {
   /** 生成时的原图相对路径,仅用于可读性与排查;原图移动后由调用方更新 */

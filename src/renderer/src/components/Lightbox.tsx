@@ -370,11 +370,9 @@ export function Lightbox(): React.JSX.Element | null {
     : ''
   const imageViewUrl = a.format === 'AI'
     ? aiPageUrl
-    : a.format === 'SVG'
-      ? a.previewUrl ?? ''
-      : directImage
-        ? a.originalUrl ?? ''
-        : a.previewUrl ?? ''
+    : directImage
+      ? a.originalUrl ?? ''
+      : a.previewUrl ?? ''
   const refreshedImageViewUrl = imageViewUrl
     ? `${imageViewUrl}${imageViewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
     : ''
@@ -414,7 +412,7 @@ export function Lightbox(): React.JSX.Element | null {
             onClick={(e) => {
               if (isModel) return
               const t = e.target as HTMLElement
-              if (t.tagName === 'IMG' || t.tagName === 'VIDEO' || t.tagName === 'CANVAS' || t.closest('button') || t.closest('input')) return
+              if (t.tagName === 'IMG' || t.tagName === 'VIDEO' || t.tagName === 'CANVAS' || t.tagName === 'IFRAME' || t.closest('button') || t.closest('input')) return
               closeLightbox()
             }}
           >
@@ -543,6 +541,13 @@ export function Lightbox(): React.JSX.Element | null {
                     <button className="v3-chip" onClick={openExternally}>外部打开</button>
                   </div>
                 </div>
+              ) : a.format === 'SVG' ? (
+                <iframe
+                  className="pv-svg-doc"
+                  src={a.originalUrl ?? ''}
+                  title={a.name}
+                  sandbox=""
+                />
               ) : (
                 <MediaImg
                   src={a.dbId != null ? refreshedImageViewUrl : `/@fs/${a.previewUrl ?? ''}`}
