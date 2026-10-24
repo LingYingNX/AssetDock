@@ -35,6 +35,7 @@ const MISSING_TOOL_RETRY_MS = 60_000
  */
 export const SHELL_VERSION = 2
 export const SVG_THUMB_RENDERER = 2
+export const MODEL_THUMB_RENDERER = 1
 
 export interface ThumbEntry {
   /** 生成时的原图相对路径,仅用于可读性与排查;原图移动后由调用方更新 */
@@ -208,12 +209,20 @@ export async function ensureThumb(
   const target = thumbPath(libPath, fingerprint)
   // CSS 封面还要外观对齐:骨架版本或配套 HTML 变了,存量封面必须重建(位图只认指纹)
   const wantLook = format === 'CSS' ? (look ?? '') : ''
+  const spec = formatSpec(format)
+  const isModelThumb = spec?.thumbnail === 'three' ||
+    (format === 'BLEND' && spec?.thumbnail === 'external')
+  const rendererVersion = format === 'SVG'
+    ? SVG_THUMB_RENDERER
+    : isModelThumb
+      ? MODEL_THUMB_RENDERER
+      : null
   const matches = (entry: ThumbEntry | undefined): boolean => {
     if (!entry) return false
     if (entry.failure === 'missing-tool' && Date.now() - Date.parse(entry.generatedAt) >= MISSING_TOOL_RETRY_MS) {
       return false
     }
-    if (format === 'SVG') return entry.renderer === SVG_THUMB_RENDERER
+    if (rendererVersion != null) return entry.renderer === rendererVersion
     return format !== 'CSS' || (entry.shell === SHELL_VERSION && (entry.look ?? '') === wantLook)
   }
 
@@ -232,9 +241,9 @@ export async function ensureThumb(
       delete fresh.entries[fingerprint]
       await rm(target, { force: true }).catch(() => undefined)
     }
-    if ((format === 'CSS' || format === 'SVG') && freshEntry) delete fresh.entries[fingerprint]
+    if ((format === 'CSS' || rendererVersion != null) && freshEntry) delete fresh.entries[fingerprint]
     if (await fileExists(target)) {
-      if (format === 'CSS' || format === 'SVG' || !freshEntry) {
+      if (format === 'CSS' || rendererVersion != null || !freshEntry) {
         // 清单版本失效、孤儿文件或 CSS 外观变化时,旧 JPEG 不可证明对应当前规则
         await rm(target, { force: true }).catch(() => undefined)
       } else {
@@ -255,7 +264,6 @@ export async function ensureThumb(
         const { renderCssThumbFromFile } = await import('./cssThumb')
         buf = await renderCssThumbFromFile(libPath, absPath, THUMB_SIZE)
       } else {
-        const spec = formatSpec(format)
         if (!spec) throw new ThumbnailDecodeError(`unknown format: ${format}`, 'unsupported')
         if (spec.thumbnail === 'three') {
           if (meta.libraryId == null) throw new ThumbnailDecodeError('missing library id', 'unsupported')
@@ -291,7 +299,7 @@ export async function ensureThumb(
       ...(failure ? { failure } : {}),
       ...(failureDetail ? { error: failureDetail } : {}),
       ...(format === 'CSS' ? { shell: SHELL_VERSION, look: wantLook } : {}),
-      ...(format === 'SVG' ? { renderer: SVG_THUMB_RENDERER } : {})
+      ...(rendererVersion != null ? { renderer: rendererVersion } : {})
     }
     scheduleFlush(libPath)
     return { path: target, placeholder }

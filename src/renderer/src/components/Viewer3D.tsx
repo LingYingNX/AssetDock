@@ -9,6 +9,7 @@ import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { modelBaseUrl, objMaterialUrls } from '../data/model-url'
+import { modelBounds } from '../data/model-bounds'
 import { hdrPreset, type HdrId, type HdrSettings } from '../data/hdr-presets'
 import {
   MODEL_OUTPUT_COLOR_SPACE,
@@ -147,22 +148,6 @@ function decodeModelText(buf: ArrayBuffer): string {
   } catch {
     return utf8
   }
-}
-
-/** 骨骼不完整时 SkinnedMesh.computeBoundingBox 会抛错，取景改用几何本体的包围盒。 */
-function modelBounds(model: THREE.Object3D): THREE.Box3 {
-  model.updateMatrixWorld(true)
-  const box = new THREE.Box3()
-  const part = new THREE.Box3()
-  model.traverse((object) => {
-    const mesh = object as THREE.Mesh
-    if (!mesh.isMesh || !mesh.geometry) return
-    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
-    if (!mesh.geometry.boundingBox) return
-    part.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld)
-    box.union(part)
-  })
-  return box.isEmpty() ? new THREE.Box3().setFromObject(model) : box
 }
 
 /** 按 OBJ 声明顺序取第一份可读 MTL;材质缺失不阻断模型本体。 */
