@@ -10,16 +10,19 @@ MediaHub 素材管理器是一款本地优先的 Electron 桌面应用，用 ele
 | preload | `src/preload/index.ts` | 经 `contextBridge` 暴露受控 API；`index.d.ts` 声明类型 |
 | renderer | `src/renderer/index.html` → `src/App.tsx` | React 界面，仅经 preload API 访问主进程 |
 
-数据跨进程只有一种口子：preload API。跨进程共享的纯类型在 `src/shared/types.ts`（如 `PaletteColor`）。
+数据跨进程只有一种口子：preload API。跨进程共享的纯类型在 `src/shared/types.ts`，格式能力清单位于 `src/shared/formats.ts`。
 
 ## Main Process
 
 IPC 与事件入口：`index.ts`、`ipc.ts`、`events.ts`。业务逻辑拆成 `src/main/services/`，每个模块职责单一：
 
 - `db.ts` / `sqlite.ts` / `libraryDb.ts`：SQLite 库与工作库
-- `scan.ts` / `media.ts`：素材扫描与媒体处理
+- `scan.ts` / `media.ts` / `formatProbe.ts`：素材扫描、媒体协议与格式元数据探测
 - `cacheFiles.ts` / `fingerprint.ts`：缩略图缓存与文件指纹
-- `videoMeta.ts`：ffmpeg 抽视频元数据
+- `videoMeta.ts` / `ffmpeg.ts`：ffmpeg 视频元数据与受控子进程
+- `thumbnailDecoder.ts` / `thumbs.ts` / `modelThumb.ts`：缩略图路由、缓存和三维离屏封面
+- `aiPreview.ts` / `transcode.ts`：AI 页面缓存与视频按需转码
+- `externalTools.ts` / `externalPreview.ts`：Blender/Cinema 4D 探测与 BLEND 预览缓存
 - `eagle.ts` / `legacySourceMigration.ts`：Eagle 库导入与旧源迁移
 - `folders.ts` / `ignore.ts` / `libResolve.ts`：目录、忽略规则、库解析
 - `store.ts` / `watch.ts`：应用状态与 chokidar 文件监视
@@ -31,7 +34,8 @@ IPC 与事件入口：`index.ts`、`ipc.ts`、`events.ts`。业务逻辑拆成 `
 ## Data & Build
 
 - 库：better-sqlite3（自带 N-API 跨运行时预编译绑定，无需按 Electron ABI 重建）。
-- 媒体：sharp（缩略图）、ffmpeg-static（视频元数据）、chokidar（文件变化）。
+- 元数据：每个库仅使用 `.mediahub/library.db` 作为权威源；缩略图、AI 页面、BLEND GLB 和转码都是可重建缓存。
+- 媒体：sharp、pdfjs-dist、ag-psd、heic-convert、three.js、ffmpeg-static；BLEND/C4D 可选依赖本机软件。
 - 构建：electron-vite（main/preload/renderer 三入口），脚本见 `package.json`。
 - 类型：`tsconfig.node.json`（main/preload）与 `tsconfig.web.json`（renderer）双侧。
 
@@ -39,4 +43,5 @@ IPC 与事件入口：`index.ts`、`ipc.ts`、`events.ts`。业务逻辑拆成 `
 
 - 改动先 `npm run typecheck`；涉及原生模块再跑 `npm run test` 与 Electron 冒烟。
 - 跨进程通信只经 preload API；新增能力先理清 main/renderer 边界。
+- 格式支持、缓存位置与已验证边界见 `docs/FORMAT_SUPPORT.md`。
 - `AGENTS.md` 是索引，细节放这里。
