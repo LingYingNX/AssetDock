@@ -12,7 +12,6 @@ import { modelBaseUrl, objMaterialUrls } from '../data/model-url'
 import { hdrPreset, type HdrId, type HdrSettings } from '../data/hdr-presets'
 import {
   MODEL_OUTPUT_COLOR_SPACE,
-  MODEL_STUDIO_LIGHTS,
   MODEL_TONE_MAPPING,
   MODEL_TONE_MAPPING_EXPOSURE,
   MODEL_TONE_MAPPING_NAME,
@@ -391,27 +390,19 @@ export function Viewer3D({
     let currentHdr: HdrId | null = null
     let currentShade = shade
 
-    const studioRig = new THREE.Group()
-    const studioLights = MODEL_STUDIO_LIGHTS.map((spec) => {
-      const target = new THREE.Object3D()
-      studioRig.add(target)
-      const light = new THREE.DirectionalLight(
-        new THREE.Color(...spec.color),
-        spec.intensity
-      )
-      light.position.fromArray(spec.direction).normalize().multiplyScalar(10)
-      light.target = target
-      studioRig.add(light)
-      return light
-    })
-    scene.add(studioRig)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.28)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.25)
+    keyLight.position.set(3, 5, 4)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.45)
+    fillLight.position.set(-4, 2, -3)
+    scene.add(ambientLight, keyLight, fillLight)
 
     const applyLighting = (): void => {
-      const solid = currentShade === 'solid'
-      studioRig.visible = solid
-      scene.environment = solid ? null : (hdrRT?.texture ?? studioRT.texture)
+      scene.environment = currentShade === 'solid'
+        ? null
+        : (hdrRT?.texture ?? studioRT.texture)
       scene.environmentIntensity = hdrSettingsRef.current.strength
-      window.__threeStats!.lights = solid ? studioLights.length : 0
+      window.__threeStats!.lights = 3
     }
     const applyHdrSettings = (settings: HdrSettings): void => {
       scene.environmentRotation.set(0, -THREE.MathUtils.degToRad(settings.rotation), 0)
@@ -531,9 +522,9 @@ export function Viewer3D({
       window.__threeStats!.gridSpan = span
     }
     const solidMaterial = new THREE.MeshStandardMaterial({
-      color: 0x56595c,
-      roughness: 0.82,
-      metalness: 0
+      color: 0x7b8491,
+      roughness: 0.8,
+      metalness: 0.02
     })
     const originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
     const rememberMaterials = (model: THREE.Object3D): void => {
@@ -731,8 +722,6 @@ export function Viewer3D({
     const loop = (): void => {
       raf = requestAnimationFrame(loop)
       controls.update()
-      studioRig.position.copy(camera.position)
-      studioRig.quaternion.copy(camera.quaternion)
       backgroundMaterial.uniforms.inverseProjection.value = camera.projectionMatrixInverse
       backgroundMaterial.uniforms.cameraWorld.value = camera.matrixWorld
       renderer.clear(true, true, true)

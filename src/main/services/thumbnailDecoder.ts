@@ -154,6 +154,10 @@ export async function decodeThumbnailSource(format: AssetFormat, absPath: string
   if (file.size > MAX_SOURCE_BYTES) throw new ThumbnailDecodeError('source file exceeds limit', 'too-large')
 
   try {
+    if (format === 'SVG') {
+      const { renderSvgPreviewPng } = await import('./cssThumb')
+      return await renderSvgPreviewPng(absPath)
+    }
     if (spec.thumbnail === 'sharp') {
       try {
         return await decodeSharp(absPath)

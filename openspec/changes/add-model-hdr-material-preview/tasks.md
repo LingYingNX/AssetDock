@@ -34,7 +34,7 @@
 ## 6. Blender 视口照明修正
 
 - [x] 6.1 `Viewer3D` 改用 `AgXToneMapping`，以 Three.js `toneMappingExposure=1.0` 对应 Blender 曝光 `0.0`；验证方式：新增纯函数测试断言色彩基准，渲染器实例断言 tone mapping 与曝光值
-- [x] 6.2 实体模式只启用 `basic.sl` 四灯 rig，渲染模型模式只启用 HDR；验证方式：无头读取 `__threeStats.lights`，实体为 4、渲染为 0
+- [x] 6.2 实体模式启用 Ambient、主光和补光三灯基线，渲染模型模式叠加 HDR 并保留基线灯；验证方式：无头读取 `__threeStats.lights` 为 3，且 HDR 强度为 0 时模型仍可见
 - [x] 6.3 实体模式使用 `Default` studio light 的四灯方向、颜色和强度；验证方式：真实 FBX 截图保留灰色明暗分层，白色溢出像素接近零
 - [x] 6.4 默认背景改为深灰主题背景与世界空间三维地面网格，网格跨度为模型对角线的 24 倍并固定在原点，模型保留源文件世界坐标，相机水平环绕原点；验证方式：真实 FBX 截图网格铺满视口，`target` 的 x/z 均为 0
 - [x] 6.5 将旋转、强度、世界不透明度和模糊映射到环境与背景，切换 HDR 或关闭时释放旧贴图和 PMREM 目标；验证方式：连续切换 8 次后资源计数无累积增量
@@ -55,7 +55,7 @@
 ## 8. Blender 视口验收
 
 - [x] 8.1 运行 `npm run typecheck`、`npm run test` 与 `npm run build`，记录完整结果；验证方式：类型检查、测试和构建通过，已知 `eagle.test.ts` worker flake 单独重跑 3/3 通过
-- [x] 8.2 无头验证 FBX、GLB、OBJ 的实体与渲染模式，以及面板展开、四项参数和 HDR 切换；验证方式：三种格式实体均为 `lights=4`、渲染均为 `lights=0`，面板四项齐全、8 个预设可见
+- [x] 8.2 无头验证 FBX、GLB、OBJ 的实体与渲染模式，以及面板展开、四项参数和 HDR 切换；验证方式：三种格式均保留 `lights=3`，面板四项齐全、8 个预设可见
 - [x] 8.3 对照 Blender 视口检查真实 FBX 截图与像素统计；验证方式：模型区亮度峰值 238/255、纯白溢出为 0，灰色明暗和轮廓可辨，面板布局与参考一致
 - [x] 8.4 同步 `openspec/specs/viewer-3d` 与 `openspec/specs/lightbox`，清理临时探针；验证方式：change、viewer-3d 与 lightbox 严格校验均通过
 
@@ -77,7 +77,7 @@
 - `npm run typecheck`：node/web 两侧通过。
 - `npm run test`：41/42 文件通过；`eagle.test.ts` 触发已知 worker 退出，单独重跑 3/3 通过。
 - `npm run build`：main、preload、renderer 三段构建通过。
-- FBX、GLB、OBJ：实体模式均为 `lights=4`，渲染模型模式均为 `lights=0`；FBX target 为 `[0, 5891.664, 0]`，网格跨度为 `700466.872`，背景保持主题深灰。
+- FBX、GLB、OBJ：两种模式均保留 `lights=3`；HDR 强度为 `0` 时模型仍可见。FBX target 为 `[0, 5891.664, 0]`，网格跨度为 `700466.872`，背景保持主题深灰。
 - 环境面板：四项标签顺序为旋转、强度、世界不透明度、模糊；8 个 HDR 预设齐全，面板无 `backdrop-filter` 且完全位于舞台内。
 - 完整面板：点击球或箭头后预览球、8 个 HDR 材质球横排和四项参数一次展开，没有第二层菜单；选择材质球后顶部预览同步更新。
 - HDR 连续切换：`envSwitches` 从 2 增至 10，`envDisposals` 从 0 增至 8，无资源计数停滞。

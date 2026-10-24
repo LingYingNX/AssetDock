@@ -370,9 +370,11 @@ export function Lightbox(): React.JSX.Element | null {
     : ''
   const imageViewUrl = a.format === 'AI'
     ? aiPageUrl
-    : directImage
-      ? a.originalUrl ?? ''
-      : a.previewUrl ?? ''
+    : a.format === 'SVG'
+      ? a.previewUrl ?? ''
+      : directImage
+        ? a.originalUrl ?? ''
+        : a.previewUrl ?? ''
   const refreshedImageViewUrl = imageViewUrl
     ? `${imageViewUrl}${imageViewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
     : ''

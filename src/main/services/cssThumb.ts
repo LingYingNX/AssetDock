@@ -18,10 +18,10 @@ const RENDER_HEIGHT = 675
 const RENDER_TIMEOUT_MS = 5000
 
 /**
- * 渲染预览 HTML 并截图,返回可供 sharp 处理的 PNG Buffer。
+ * 渲染一个本地 data URL 页面并截图,返回可供 sharp 处理的 PNG Buffer。
  * 任何失败(超时、窗口创建失败、空图)都抛出,由调用方回退占位图。
  */
-export async function renderCssPreviewPng(html: string): Promise<Buffer> {
+async function renderPreviewPng(url: string, zoomFactor = 1): Promise<Buffer> {
   const win = new BrowserWindow({
     width: RENDER_WIDTH,
     height: RENDER_HEIGHT,
@@ -53,7 +53,8 @@ export async function renderCssPreviewPng(html: string): Promise<Buffer> {
       })
     })
 
-    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+    await win.loadURL(url)
+    if (zoomFactor !== 1) win.webContents.setZoomFactor(zoomFactor)
     await loaded
 
     const image = await win.webContents.capturePage()
@@ -65,6 +66,24 @@ export async function renderCssPreviewPng(html: string): Promise<Buffer> {
   } finally {
     if (!win.isDestroyed()) win.destroy()
   }
+}
+
+/** 渲染预览 HTML 并截图。 */
+export async function renderCssPreviewPng(html: string): Promise<Buffer> {
+  return renderPreviewPng('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+}
+
+/**
+ * SVG 内的 foreignObject 在 sharp/librsvg 和 img 标签中都不可靠,
+ * 用隐藏 Chromium 按原始尺寸等比缩放后截图。
+ */
+export async function renderSvgPreviewPng(absPath: string): Promise<Buffer> {
+  const svg = await readFile(absPath)
+  const meta = await sharp(svg).metadata()
+  const width = Math.max(1, meta.width ?? RENDER_WIDTH)
+  const height = Math.max(1, meta.height ?? RENDER_HEIGHT)
+  const zoom = Math.max(0.1, Math.min(4, RENDER_WIDTH / width, RENDER_HEIGHT / height))
+  return renderPreviewPng(`data:image/svg+xml;base64,${svg.toString('base64')}`, zoom)
 }
 
 /** 截图 → 640px 长边 JPEG(与位图缩略图同一编码参数,便于共用缓存目录) */
