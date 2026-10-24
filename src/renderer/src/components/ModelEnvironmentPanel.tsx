@@ -61,12 +61,10 @@ export function ModelEnvironmentPanel({
   onBlur
 }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const [presetsOpen, setPresetsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setOpen(false)
-    setPresetsOpen(false)
   }, [resetKey])
 
   useEffect(() => {
@@ -88,11 +86,6 @@ export function ModelEnvironmentPanel({
     }
   }, [open])
 
-  const togglePresets = (): void => {
-    setOpen(true)
-    setPresetsOpen((value) => !value)
-  }
-
   return (
     <div className="env-controls" ref={rootRef}>
       <div className="env-controls-collapsed">
@@ -101,9 +94,9 @@ export function ModelEnvironmentPanel({
           className="hdr-ball"
           style={{ backgroundImage: `url(${hdrPreset(hdr).thumbUrl})` }}
           title={`HDR 环境：${hdrPreset(hdr).label}`}
-          aria-label={`HDR 环境：${hdrPreset(hdr).label}，点击选择预设`}
-          aria-expanded={presetsOpen}
-          onClick={togglePresets}
+          aria-label={`HDR 环境：${hdrPreset(hdr).label}，点击打开环境面板`}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
         />
         <button
           type="button"
@@ -111,47 +104,35 @@ export function ModelEnvironmentPanel({
           title={open ? '收起环境面板' : '展开环境面板'}
           aria-label={open ? '收起环境面板' : '展开环境面板'}
           aria-expanded={open}
-          onClick={() => {
-            setOpen((value) => !value)
-            setPresetsOpen(false)
-          }}
+          onClick={() => setOpen((value) => !value)}
         >
-          <Icon name={open ? 'chev-d' : 'chev-r'} />
+          <Icon name={open ? 'chev-u' : 'chev-d'} />
         </button>
       </div>
 
       {open && (
         <section className="blender-env-panel" role="dialog" aria-label="Blender 环境设置">
           <div className="blender-env-preview">
-            <button
-              type="button"
+            <div
               className="blender-env-preview-ball"
               style={{ backgroundImage: `url(${hdrPreset(hdr).thumbUrl})` }}
-              title="选择 HDR 环境"
-              aria-label="选择 HDR 环境"
-              aria-expanded={presetsOpen}
-              onClick={() => setPresetsOpen((value) => !value)}
+              aria-hidden="true"
             />
           </div>
-          {presetsOpen && (
-            <div className="blender-env-presets" aria-label="HDR 环境">
-              {HDR_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`blender-env-preset${preset.id === hdr ? ' on' : ''}`}
-                  style={{ backgroundImage: `url(${preset.thumbUrl})` }}
-                  title={preset.label}
-                  aria-label={preset.label}
-                  aria-pressed={preset.id === hdr}
-                  onClick={() => {
-                    onHdr(preset.id)
-                    setPresetsOpen(false)
-                  }}
-                />
-              ))}
-            </div>
-          )}
+          <div className="blender-env-presets" aria-label="HDR 环境">
+            {HDR_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={`blender-env-preset${preset.id === hdr ? ' on' : ''}`}
+                style={{ backgroundImage: `url(${preset.thumbUrl})` }}
+                title={preset.label}
+                aria-label={preset.label}
+                aria-pressed={preset.id === hdr}
+                onClick={() => onHdr(preset.id)}
+              />
+            ))}
+          </div>
           <EnvSlider
             icon="rotate-3d"
             label="旋转"
