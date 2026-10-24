@@ -1,10 +1,7 @@
-export type AssetType = 'image' | 'video' | 'model' | 'style'
+import type { AssetFormat, AssetKind } from '../../../shared/formats'
 
-export type AssetFormat =
-  | 'JPG' | 'PNG' | 'WEBP' | 'SVG' | 'GIF' | 'PSD'
-  | 'MP4' | 'MOV'
-  | 'GLB' | 'FBX' | 'OBJ'
-  | 'CSS'
+export type AssetType = AssetKind
+export type { AssetFormat }
 
 export interface AssetTag {
   name: string

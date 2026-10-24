@@ -8,7 +8,6 @@ import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
-import { LazyViewer3D } from './LazyViewer3D'
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -33,14 +32,17 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
   const lightboxId = useUI((s) => s.lightboxId)
+  const thumbRevision = useUI((s) => a.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const toggleFavorite = useUI((s) => s.toggleFavorite)
   // 已解码过的预览直接以可见态挂载:切换文件夹时卡片会重挂载,
   // 若从 opacity:0 重新淡入,用户看到的就是缩略图重新刷新。
   const previewKey = a.previewUrl ?? ''
+  const thumbSrc = a.previewUrl
+    ? `${a.previewUrl}${a.previewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
+    : ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
-  const [modelFailed, setModelFailed] = useState(false)
   /** 视频卡悬浮进度:读实时播放进度,避免所有视频卡都画同一条假进度条 */
   const [progress, setProgress] = useState(0)
   /** 悬浮重播时的短溶解,替掉尾帧→首帧的硬切 */
@@ -184,22 +186,19 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               <Cube3D cs="58px" />
             </div>
           ) : null
-        ) : a.type === 'model' && a.originalUrl && !modelFailed ? (
-          inView && lightboxId !== a.id ? (
-            <div className="model-card-preview">
-              <LazyViewer3D
-                url={a.originalUrl}
-                format={a.format as 'GLB' | 'FBX' | 'OBJ'}
-                turntable
-                wireframe={false}
-                view="auto"
-                onError={() => setModelFailed(true)}
-              />
-            </div>
-          ) : null
+        ) : a.type === 'model' && a.previewUrl ? (
+          <img
+            src={thumbSrc}
+            alt={a.name}
+            loading="lazy"
+            decoding="async"
+            className={imgLoaded ? 'loaded' : ''}
+            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
+            draggable={false}
+          />
         ) : a.dbId != null && (a.type === 'image' || a.type === 'style') ? (
           <img
-            src={a.previewUrl}
+            src={thumbSrc}
             alt={a.name}
             loading="lazy"
             decoding="async"
@@ -213,6 +212,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
               ref={videoRef}
               /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
               src={a.originalUrl}
+              poster={a.previewUrl ? thumbSrc : undefined}
               muted={hoverSound !== true}
               /* 只预载元数据:挂载时取头部拿到首帧即可,整片留给悬浮播放与灯箱 */
               preload="metadata"
@@ -240,6 +240,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             <video
               ref={videoRef}
               src={`/@fs/${a.previewUrl}`}
+              poster={a.previewUrl ? thumbSrc : undefined}
               muted={hoverSound !== true}
               preload="metadata"
               className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}

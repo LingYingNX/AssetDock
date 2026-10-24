@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, screen } from 'electron'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
@@ -17,6 +17,11 @@ const DEFAULT_WINDOW = { width: 1600, height: 950 }
    与 content.css 的 .filterbar)。 */
 const MIN_WINDOW = { width: 1024, height: 640 }
 const WINDOW_STATE_KEY = 'windowBounds'
+
+// 无头/真实窗口验证使用独立 userData，避免测试触碰用户的库注册表。
+if (!app.isPackaged && process.env.MEDIAHUB_TEST_USER_DATA) {
+  app.setPath('userData', resolve(process.env.MEDIAHUB_TEST_USER_DATA))
+}
 
 /** 偏好中的关闭行为:minimize=关闭时最小化到任务栏,quit=直接退出应用 */
 function closeBehavior(): 'minimize' | 'quit' {
@@ -270,7 +275,8 @@ if (!app.requestSingleInstanceLock()) {
     debugBridge.on('error', (error) => {
       console.warn('[MediaHub] debug bridge unavailable:', error.message)
     })
-    debugBridge.listen(9223, '127.0.0.1')
+    const debugPort = Number(process.env.MEDIAHUB_TEST_BRIDGE_PORT)
+    debugBridge.listen(Number.isInteger(debugPort) && debugPort > 0 ? debugPort : 9223, '127.0.0.1')
   }
 
   createWindow()

@@ -3,6 +3,7 @@ import { useUI } from '../store/ui'
 import { SUGGESTED_TAGS } from '../data/dataset'
 import { infoRows } from '../data/query'
 import { Icon } from './Icons'
+import { formatSpec } from '../../../shared/formats'
 
 export function Inspector(): React.JSX.Element {
   const assets = useUI((s) => s.assets)
@@ -10,9 +11,9 @@ export function Inspector(): React.JSX.Element {
   const firstSelectedId = useUI((s) => s.selectedIds[0] ?? null)
   const renaming = useUI((s) => s.renaming)
   const setRenaming = useUI((s) => s.setRenaming)
+  const startRenaming = useUI((s) => s.startRenaming)
   const renameAsset = useUI((s) => s.renameAsset)
   const setRating = useUI((s) => s.setRating)
-  const toggleReviewFlag = useUI((s) => s.toggleReviewFlag)
   const addTag = useUI((s) => s.addTag)
   const removeTag = useUI((s) => s.removeTag)
   const setNote = useUI((s) => s.setNote)
@@ -21,6 +22,8 @@ export function Inspector(): React.JSX.Element {
 
   /* 当前素材:激活项 > 选中第一项 */
   const a = assets.find((x) => x.id === activeId) ?? assets.find((x) => x.id === firstSelectedId)
+  const spec = a ? formatSpec(a.format) : undefined
+  const external = spec && 'external' in spec ? spec.external : undefined
 
   if (!a) {
     return (
@@ -70,34 +73,33 @@ export function Inspector(): React.JSX.Element {
             ) : (
               <b>{a.name}</b>
             )}
-            <Icon name="edit" />
+            {!(renaming && activeId === a.id) && (
+              <button
+                className="rename-btn"
+                type="button"
+                title="重命名"
+                aria-label="重命名"
+                onClick={() => startRenaming(a.id)}
+              >
+                <Icon name="edit" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* 评分与待审同属「素材的工作状态」,但语义不同:评分是质量,待审是流程。
-            原来这一行没有任何标题,五颗星与右侧的「待审」并排、谁都不说明谁,
-            看起来像两个碰巧挨着的控件。补上和其它块一致的 .insp-h 标题。 */}
         <div className="insp-sec">
-          <div className="insp-h"><Icon name="star" />评分与状态</div>
-          <div className="flagrow">
-            <span className="rate big">
-              {[1, 2, 3, 4, 5].map((v) => (
-                <span
-                  key={v}
-                  className={`star${a.rating >= v ? ' fill' : ''}`}
-                  onClick={() => setRating(a.id, a.rating === v ? v - 1 : v)}
-                >
-                  <svg><use href="#i-star" /></svg>
-                </span>
-              ))}
-            </span>
-            <button
-              className={`flagbtn${a.reviewFlag ? ' on' : ''}`}
-              onClick={() => toggleReviewFlag(a.id)}
-            >
-              <Icon name="flag" />待审
-            </button>
-          </div>
+          <div className="insp-h"><Icon name="star" />评分</div>
+          <span className="rate big">
+            {[1, 2, 3, 4, 5].map((v) => (
+              <span
+                key={v}
+                className={`star${a.rating >= v ? ' fill' : ''}`}
+                onClick={() => setRating(a.id, a.rating === v ? v - 1 : v)}
+              >
+                <svg><use href="#i-star" /></svg>
+              </span>
+            ))}
+          </span>
         </div>
 
         <div className="insp-sec">
@@ -108,6 +110,24 @@ export function Inspector(): React.JSX.Element {
             ))}
           </dl>
         </div>
+
+        {external ? (
+          <div className="insp-sec">
+            <button
+              className="dirin"
+              type="button"
+              onClick={() => {
+                if (a.libraryId == null || a.dbId == null) return
+                void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
+                  if ('error' in result) useUI.getState().showToast(result.error, 'warn')
+                }).catch(() => useUI.getState().showToast('无法启动外部软件', 'warn'))
+              }}
+            >
+              <Icon name="external" />
+              <span>用 {external === 'blender' ? 'Blender' : 'Cinema 4D'} 打开</span>
+            </button>
+          </div>
+        ) : null}
 
         <div className="insp-sec">
           <div className="insp-h"><Icon name="tag" />标签</div>
@@ -153,6 +173,21 @@ export function Inspector(): React.JSX.Element {
             })}
           </div>
         </div>
+
+        {a.absPath && (
+          <div className="insp-sec">
+            <button
+              className="dirin"
+              type="button"
+              title={a.absPath}
+              aria-label="在资源管理器中显示素材所在目录"
+              onClick={() => window.windowApi.showInFolder(a.absPath as string)}
+            >
+              <Icon name="folder" />
+              <span>{a.absPath.replace(/[\\/][^\\/]+$/, '')}</span>
+            </button>
+          </div>
+        )}
 
         <div className="insp-sec">
           <div className="insp-h"><Icon name="external" />来源链接</div>

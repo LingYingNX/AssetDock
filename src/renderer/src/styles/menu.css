@@ -68,7 +68,7 @@
 .menu.compact-menu button .ic{width:var(--ic-xs);height:var(--ic-xs)}
 
 /* 单选下拉(筛选/视图):宽度按内容收缩,选中项用左缘蓝条 + 加粗蓝字,不用勾选列 */
-.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));padding:4px;border-radius:var(--r-menu)}
+.menu.pick-menu{min-width:0;width:max-content;max-width:min(260px,calc(100vw - 16px));max-height:70vh;overflow-y:auto;overscroll-behavior:contain;padding:4px;border-radius:var(--r-menu)}
 .menu.pick-menu button{position:relative;gap:8px;padding:6px 10px;border-radius:var(--r-sm);font-size:var(--fs-body);white-space:nowrap;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .menu.pick-menu button .lbl{flex:1;min-width:0}
 /* pick-menu 的按钮左右内边距是 10px(比 .menu 默认的 9px 宽 1px),分组标题要跟着走,
@@ -107,6 +107,10 @@
 .settings-menu button.settings-menu-item{border:0;background:transparent;font:inherit;text-align:left}
 .settings-menu-item:not(:active):hover,.settings-menu button.settings-menu-item:focus-visible{background:var(--acc-soft)}
 .settings-menu-parent{position:relative;display:flex;align-self:stretch}
+/* 子菜单与父项留 5px 视觉间隙，但用略宽的透明桥接区接住指针；
+   否则鼠标穿过空隙会触发父项 mouseleave，子菜单立即消失。
+   7px 同时覆盖子菜单入场动画中的水平偏移。 */
+.settings-menu-parent::after{content:"";position:absolute;left:100%;top:0;width:7px;height:100%}
 .settings-menu-parent>.settings-menu-item{flex:1}
 /* top 由 -7px 收到 -1px:子菜单自己没有内边距了(上面那条改成 padding:0),
    原来那 6px 是在补父菜单的内边距,不减掉子菜单首项会比父项高 6px。 */

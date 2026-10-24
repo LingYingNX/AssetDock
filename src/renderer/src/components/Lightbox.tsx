@@ -4,20 +4,22 @@ import { formatResolution } from '../data/query'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { LazyViewer3D } from './LazyViewer3D'
-import type { ViewKey } from './Viewer3D'
+import { LazyEnvMapViewer } from './LazyEnvMapViewer'
+import type { ModelShade, Viewer3DFormat } from './Viewer3D'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
+import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
 
 let videoSessionSeq = 0
 let videoLoadSeq = 0
 
 /** 舞台媒体加载失败占位 */
-function MediaFallback(): React.JSX.Element {
+function MediaFallback({ label = '文件加载失败或已缺失' }: { label?: string }): React.JSX.Element {
   return (
     <div className="empty" style={{ minHeight: 240 }}>
       <Icon name="image" />
-      <span>文件加载失败或已缺失</span>
+      <span>{label}</span>
     </div>
   )
 }
@@ -99,25 +101,11 @@ function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Eleme
   )
 }
 
-/** 视角预设条:5 个 64×38 玻璃小格 */
-const PRESETS: { title: string; rot: string; view: ViewKey }[] = [
-  { title: '透视', rot: 'rotateX(-24deg) rotateY(24deg)', view: 'auto' },
-  { title: '前视', rot: 'rotateX(-14deg) rotateY(0deg)', view: 'front' },
-  { title: '侧视', rot: 'rotateX(-14deg) rotateY(90deg)', view: 'side' },
-  { title: '顶视', rot: 'rotateX(62deg) rotateY(0deg)', view: 'top' },
-  { title: '背视', rot: 'rotateX(-14deg) rotateY(180deg)', view: 'back' }
-]
-
-const VIEW_ROT: Record<string, string> = {
-  front: 'rotateX(-24deg) rotateY(0deg)',
-  side: 'rotateX(-24deg) rotateY(90deg)',
-  top: 'rotateX(66deg) rotateY(0deg)'
-}
-
 export function Lightbox(): React.JSX.Element | null {
   const lightboxId = useUI((s) => s.lightboxId)
   const closeLightbox = useUI((s) => s.closeLightbox)
   const assets = useUI((s) => s.assets)
+  const showToast = useUI((s) => s.showToast)
   const fullscreen = useUI((s) => s.lightboxFullscreen)
   const setFullscreen = useUI((s) => s.setLightboxFullscreen)
   const [shown, setShown] = useState(false)
@@ -140,43 +128,103 @@ export function Lightbox(): React.JSX.Element | null {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   )
 
-  /* 占位舞台(FBX/OBJ/演示模型)状态 */
-  const [paused, setPaused] = useState(false)
-  const [wire, setWire] = useState(false)
-  const [rot, setRot] = useState<string | null>(null)
-
-  /* 真实 3D(GLB/glTF)状态:reduced-motion 默认暂停转台 */
-  const [realTurn, setRealTurn] = useState(
-    () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-  const [realWire, setRealWire] = useState(false)
-  const [realView, setRealView] = useState<ViewKey>('auto')
-  const [exposure, setExposure] = useState(1)
+  const [modelShade, setModelShade] = useState<ModelShade>('solid')
+  const [envExposure, setEnvExposure] = useState(1)
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
   const [realFailed, setRealFailed] = useState(false)
+  const [prepareNonce, setPrepareNonce] = useState(0)
   const [videoEpoch] = useState(() => ++videoSessionSeq)
+  const [preparedMedia, setPreparedMedia] = useState<{
+    id: string
+    url?: string
+    progress?: number | null
+    error?: string
+    message?: string
+    pages?: number
+  } | null>(null)
+  const [pdfPage, setPdfPage] = useState(1)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
   const a = assets.find((x) => x.id === (lightboxId ?? lastId))
+  const thumbRevision = useUI((s) => a?.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const isVideo = a?.type === 'video'
-  const videoSrc = isVideo && a
-    ? (a.dbId != null ? `${a.originalUrl ?? ''}&lightbox=1&session=${videoEpoch}` : `/@fs/${a.previewUrl ?? ''}`)
+  const isModel = a?.type === 'model'
+  const isStyle = a?.type === 'style'
+  const spec = a ? formatSpec(a.format) : undefined
+  const isEnvMap = spec?.preview === 'envmap'
+  const transcodeRequired = isVideo && !!a && needsVideoTranscode(a.format)
+  const aiRequired = a?.format === 'AI'
+  const blendRequired = a?.format === 'BLEND'
+  const c4dRequired = a?.format === 'C4D'
+  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired
+  const rawVideoSrc = isVideo && a ? (a.dbId != null ? a.originalUrl ?? '' : `/@fs/${a.previewUrl ?? ''}`) : ''
+  const sourceVideo = rawVideoSrc
+    ? `${rawVideoSrc}${rawVideoSrc.includes('?') ? '&' : '?'}lightbox=1&session=${videoEpoch}`
     : ''
+  const videoSrc = transcodeRequired
+    ? (preparedMedia?.id === a?.id ? preparedMedia.url ?? '' : '')
+    : sourceVideo
   const playback = useVideoPlayback(videoSrc)
 
-  /* 曝光持久化:打开灯箱时读应用状态(组件常驻挂载,不可依赖[]) */
   useEffect(() => {
-    void window.windowApi.state.get('viewerExposure').then((v) => {
-      const n = Number(v)
-      if (v != null && !Number.isNaN(n)) setExposure(Math.min(1.6, Math.max(0.4, n)))
+    if (!a || !prepareRequired || a.libraryId == null || a.dbId == null) {
+      setPreparedMedia(null)
+      return
+    }
+    let cancelled = false
+    const libraryId = a.libraryId
+    const assetId = a.dbId
+    setPreparedMedia({ id: a.id, progress: null })
+    const off = window.windowApi.on('transcode:progress', (payload) => {
+      if (cancelled || payload.libraryId !== libraryId || payload.assetId !== assetId) return
+      setPreparedMedia((current) => ({
+        id: a.id,
+        url: current?.url,
+        progress: payload.progress,
+        error: payload.error
+      }))
     })
+    void window.windowApi.assets.preparePreview(libraryId, assetId).then((result) => {
+      if (cancelled) return
+      if ('error' in result) {
+        setPreparedMedia({ id: a.id, error: result.error })
+      } else if (result.kind === 'video') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
+      } else if (result.kind === 'three') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
+      } else if (result.kind === 'pdf') {
+        setPreparedMedia({ id: a.id, url: result.url, pages: result.pages })
+      } else if (result.kind === 'external') {
+        setPreparedMedia({ id: a.id, message: result.message })
+      } else {
+        setPreparedMedia({ id: a.id, url: sourceVideo, progress: 100 })
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setPreparedMedia({ id: a.id, error: error instanceof Error ? error.message : '媒体准备失败' })
+      }
+    })
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [a?.id, a?.libraryId, a?.dbId, prepareRequired, sourceVideo, prepareNonce])
+
+  useEffect(() => {
+    setPdfPage(1)
   }, [lightboxId])
 
-  const changeExposure = (v: number): void => {
-    setExposure(v)
-    void window.windowApi.state.set('viewerExposure', String(v))
-  }
+  useEffect(() => {
+    if (!isEnvMap) return
+    let cancelled = false
+    void window.windowApi.state.get('viewerExposure').then((value) => {
+      if (value == null) return
+      const parsed = Number(value)
+      if (!cancelled && Number.isFinite(parsed) && parsed >= 0 && parsed <= 10) setEnvExposure(parsed)
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [isEnvMap, lightboxId])
 
   /* 入场与退场。打开:先挂载、下一帧置 shown 播淡入。
      关闭:先置 shown=false 播淡出,180ms 后再卸载——不能只等 transitionend,
@@ -206,15 +254,9 @@ export function Lightbox(): React.JSX.Element | null {
   }, [lightboxId, fullscreen])
 
   useEffect(() => {
-    setPaused(false)
-    setWire(false)
-    setRot(null)
-    const current = useUI.getState().assets.find((asset) => asset.id === lightboxId)
-    setRealWire(current?.format === 'OBJ' || current?.format === 'FBX')
-    setRealView('auto')
     setLoadPct(undefined)
     setRealFailed(false)
-    setRealTurn(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setModelShade('solid')
   }, [lightboxId])
 
   /* 全屏 FLIP。position 不可过渡,所以整值切换必须靠反向补偿补出连续感:
@@ -297,63 +339,38 @@ export function Lightbox(): React.JSX.Element | null {
   /* 真实显示态:退场时锁住离开那一刻的全屏形态 */
   const fsNow = lightboxId ? fullscreen : lastFull
 
-  const isModel = a.type === 'model'
-  const isStyle = a.type === 'style'
-  const realModel = isModel && a.dbId != null && ['GLB', 'FBX', 'OBJ'].includes(a.format) && !!a.originalUrl
+  const prepared = preparedMedia?.id === a.id ? preparedMedia : null
+  const preparedModelUrl = a.format === 'BLEND' ? prepared?.url : undefined
+  const realModel = isModel && a.dbId != null && !!a.originalUrl &&
+    (spec?.preview === 'three' || !!preparedModelUrl)
+  const viewerUrl = preparedModelUrl ?? a.originalUrl ?? ''
+  const viewerFormat = (a.format === 'BLEND' ? 'GLB' : a.format) as Viewer3DFormat
+  const externalNotice = prepared?.error ?? prepared?.message
+  const retryPreview = (): void => setPrepareNonce((value) => value + 1)
+  const openExternally = (): void => {
+    if (a.libraryId == null || a.dbId == null) return
+    void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
+      if ('error' in result) showToast(result.error, 'warn')
+    }).catch(() => showToast('无法启动外部软件', 'warn'))
+  }
+  const directImage = ['JPG', 'PNG', 'WEBP', 'GIF', 'SVG', 'AVIF'].includes(a.format)
+  const aiPageUrl = prepared?.url
+    ? prepared.url.replace(/([?&])page=\d+/, `$1page=${pdfPage}`)
+    : ''
+  const imageViewUrl = a.format === 'AI'
+    ? aiPageUrl
+    : directImage
+      ? a.originalUrl ?? ''
+      : a.previewUrl ?? ''
+  const refreshedImageViewUrl = imageViewUrl
+    ? `${imageViewUrl}${imageViewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
+    : ''
   const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
-
-  /* 控制条动作(按真实/占位分流) */
-  const onTurntable = (): void => {
-    if (realModel) {
-      setRealTurn((t) => !t)
-      if (!realTurn) setRealView('auto')
-    } else {
-      const next = !paused
-      setPaused(next)
-      if (!next) {
-        setRot(null)
-        setRealView('auto')
-      }
-    }
-  }
-  const onWireframe = (): void => (realModel ? setRealWire(!realWire) : setWire(!wire))
-  const onViewChip = (v: Exclude<ViewKey, 'auto' | 'back'>): void => {
-    if (realModel) {
-      setRealView(v)
-      setRealTurn(false)
-    } else {
-      setRot(VIEW_ROT[v])
-      setPaused(false)
-    }
-  }
-  const onPreset = (p: (typeof PRESETS)[number]): void => {
-    if (realModel) {
-      if (p.view === 'auto') {
-        setRealView('auto')
-        setRealTurn(true)
-      } else {
-        setRealView(p.view)
-        setRealTurn(false)
-      }
-    } else {
-      setRot(p.rot)
-      setPaused(false)
-    }
-  }
-
-  const stageClass = realModel ? '' : `pv3d${wire ? ' wf' : ''}${paused ? ' paused' : ''}`
-  const curPresetIndex = realModel
-    ? PRESETS.findIndex((p) => p.view === realView)
-    : rot
-      ? PRESETS.findIndex((p) => p.rot === rot)
-      : !paused
-        ? 0
-        : -1
 
   return (
     <div
       ref={rootRef}
-      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}`}
+      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}${isModel ? ' model' : ''}`}
       role="dialog"
       aria-modal={fsNow}
       aria-label="详情预览"
@@ -366,13 +383,9 @@ export function Lightbox(): React.JSX.Element | null {
         <button className="pv-corner-btn" title="返回 (Esc)" aria-label="返回" onClick={closeLightbox}>
           <Icon name="arr-l" />
         </button>
-        <span />
-        <button className="pv-corner-btn" title="关闭 (Esc)" aria-label="关闭" onClick={closeLightbox}>
-          <Icon name="x" />
-        </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo ? ' video-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -388,15 +401,16 @@ export function Lightbox(): React.JSX.Element | null {
             }}
           >
             {realModel ? (
-              <div className="pv3d" style={{ position: 'relative' }}>
-                <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
+                </div>
                 <LazyViewer3D
-                  url={a.originalUrl ?? ''}
-                  format={a.format as 'GLB' | 'FBX' | 'OBJ'}
-                  turntable={realTurn}
-                  wireframe={realWire}
-                  view={realView}
-                  exposure={exposure}
+                  url={viewerUrl}
+                  format={viewerFormat}
+                  shade={modelShade}
                   onProgress={setLoadPct}
                   onLoaded={() => setRealFailed(false)}
                   onError={() => {
@@ -410,92 +424,126 @@ export function Lightbox(): React.JSX.Element | null {
                   </div>
                 )}
                 <div className="v3-bar">
-                  <button className={`v3-chip${realTurn && realView === 'auto' ? ' on' : ''}`} title="转台 开/暂停" onClick={onTurntable}>
-                    <Icon name="rotate-3d" />转台
+                  <button
+                    className={`v3-chip${modelShade === 'solid' ? ' on' : ''}`}
+                    onClick={() => setModelShade('solid')}
+                  >
+                    实体模式
                   </button>
-                  <button className={`v3-chip${realWire ? ' on' : ''}`} onClick={onWireframe}>
-                    线框
+                  <button
+                    className={`v3-chip${modelShade === 'render' ? ' on' : ''}`}
+                    onClick={() => setModelShade('render')}
+                  >
+                    渲染模型
                   </button>
-                  <span className="vr" />
-                  <button className={`v3-chip${realView === 'front' ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
-                  <button className={`v3-chip${realView === 'side' ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
-                  <button className={`v3-chip${realView === 'top' ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
-                  <span className="vr" />
-                  <span className="v3-env">环境 · 影棚</span>
-                  <span className="vr" />
-                  <span className="zoomer" style={{ gap: 5 }} title="曝光 0.4–1.6">
-                    <Icon name="spark" />
-                    <input
-                      type="range"
-                      min={0.4}
-                      max={1.6}
-                      step={0.05}
-                      value={exposure}
-                      aria-label="影棚曝光"
-                      style={{ background: `linear-gradient(90deg,var(--acc) ${((exposure - 0.4) / 1.2) * 100}%,var(--line2) ${((exposure - 0.4) / 1.2) * 100}%)` }}
-                      onChange={(e) => changeExposure(Number(e.target.value))}
-                    />
-                  </span>
                 </div>
               </div>
             ) : isModel ? (
-              <div className={stageClass}>
-                <span className="v3-badge"><Icon name="cube" />{a.format} · 转台预览</span>
-                <div className="c3d-wrap">
-                  <Cube3D cs="186px" transform={rot ?? undefined} />
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
                 </div>
+                <div className="c3d-wrap">
+                  <Cube3D cs="186px" />
+                </div>
+                {spec?.preview === 'external' && (
+                  <div className="pv-loading">
+                    {externalNotice ?? (a.format === 'BLEND' ? '正在用 Blender 准备预览…' : '正在检查外部软件…')}
+                  </div>
+                )}
+                {spec?.preview === 'external' && (
+                  <div className="v3-bar">
+                    <button
+                      className="v3-chip"
+                      onClick={() => {
+                        if (a.libraryId == null || a.dbId == null) return
+                        void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
+                          if ('error' in result) showToast(result.error, 'warn')
+                        }).catch(() => showToast('无法启动外部软件', 'warn'))
+                      }}
+                    >
+                      用外部软件打开
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : isEnvMap ? (
+              <div className="pv3d">
+                <div className="pv-model-meta">
+                  <strong title={a.name}>{a.name}</strong>
+                  <span>·</span>
+                  <span>{assetMeta}</span>
+                </div>
+                <LazyEnvMapViewer
+                  url={a.originalUrl ?? ''}
+                  format={a.format as 'HDR' | 'EXR'}
+                  exposure={envExposure}
+                />
                 <div className="v3-bar">
-                  <button
-                    className={`v3-chip${!paused && !rot ? ' on' : ''}`}
-                    title="转台 开/暂停"
-                    onClick={onTurntable}
-                  >
-                    <Icon name="rotate-3d" />转台
-                  </button>
-                  <button className={`v3-chip${wire ? ' on' : ''}`} onClick={onWireframe}>
-                    线框
-                  </button>
-                  <span className="vr" />
-                  <button className={`v3-chip${rot === VIEW_ROT.front ? ' on' : ''}`} onClick={() => onViewChip('front')}>前视</button>
-                  <button className={`v3-chip${rot === VIEW_ROT.side ? ' on' : ''}`} onClick={() => onViewChip('side')}>侧视</button>
-                  <button className={`v3-chip${rot === VIEW_ROT.top ? ' on' : ''}`} onClick={() => onViewChip('top')}>顶视</button>
-                  <span className="vr" />
-                  <span className="v3-env">环境 · 影棚</span>
+                  <label className="v3-chip">
+                    曝光
+                    <input
+                      type="range"
+                      min="0"
+                      max="4"
+                      step="0.05"
+                      value={envExposure}
+                      onChange={(event) => {
+                        const next = Number(event.currentTarget.value)
+                        setEnvExposure(next)
+                        void window.windowApi.state.set('viewerExposure', String(next))
+                      }}
+                    />
+                  </label>
                 </div>
               </div>
             ) : a.type === 'image' ? (
-              <MediaImg
-                src={a.dbId != null ? (a.originalUrl ?? '') : `/@fs/${a.previewUrl ?? ''}`}
-                name={a.name}
-              />
+              prepared?.error ? (
+                <div className="pv3d">
+                  <MediaFallback label={prepared.error} />
+                  <div className="v3-bar">
+                    <button className="v3-chip" onClick={retryPreview}>重试</button>
+                    <button className="v3-chip" onClick={openExternally}>外部打开</button>
+                  </div>
+                </div>
+              ) : (
+                <MediaImg
+                  src={a.dbId != null ? refreshedImageViewUrl : `/@fs/${a.previewUrl ?? ''}`}
+                  name={a.name}
+                />
+              )
             ) : (
               <div className="pv-video-shell">
                 <div className="pv-video-surface">
-                  <VideoElement src={videoSrc} playback={playback} />
+                  {prepared?.error ? (
+                    <div className="pv3d">
+                      <MediaFallback label={prepared.error} />
+                      <div className="v3-bar">
+                        <button className="v3-chip" onClick={retryPreview}>重试</button>
+                        <button className="v3-chip" onClick={openExternally}>外部打开</button>
+                      </div>
+                    </div>
+                  ) : videoSrc ? (
+                    <VideoElement src={videoSrc} playback={playback} />
+                  ) : (
+                    <div className="pv-loading">
+                      {prepared?.progress == null
+                        ? '正在准备视频…'
+                        : `转码中 ${Math.round(prepared.progress)}%`}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
-          {isModel && (
-            <div className="pv-strip" title="视角预设">
-              {PRESETS.map((p, i) => (
-                <div
-                  key={p.title}
-                  className={`fr${curPresetIndex === i ? ' cur' : ''}`}
-                  title={p.title}
-                  onClick={() => onPreset(p)}
-                >
-                  <div className="c3d-wrap"><Cube3D cs="20px" transform={p.rot} /></div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         </>
         )}
       </div>
 
-      {!isStyle ? (
+      {!isStyle && !isModel ? (
         <div className="pv-dock">
           <div className="pv-meta-row">
             <div className="pv-meta-copy">
@@ -503,21 +551,33 @@ export function Lightbox(): React.JSX.Element | null {
               <span className="sep">·</span>
               <span title={assetMeta}>{assetMeta}</span>
             </div>
+            {a.format === 'AI' && prepared?.pages ? (
+              <div className="v3-bar">
+                <button
+                  className="v3-chip"
+                  disabled={pdfPage <= 1}
+                  onClick={() => setPdfPage((page) => Math.max(1, page - 1))}
+                  aria-label="上一页"
+                  title="上一页"
+                >
+                  <Icon name="arr-l" />
+                </button>
+                <span className="v3-chip">{pdfPage} / {prepared.pages}</span>
+                <button
+                  className="v3-chip"
+                  disabled={pdfPage >= prepared.pages}
+                  onClick={() => setPdfPage((page) => Math.min(prepared.pages!, page + 1))}
+                  aria-label="下一页"
+                  title="下一页"
+                >
+                  <Icon name="arr-r" />
+                </button>
+              </div>
+            ) : null}
           </div>
           {isVideo ? (
             <VideoControls v={playback} fps={a.fps} fullscreen={fsNow} onFullscreen={toggleFullscreen} />
-          ) : (
-            <div className="pv-ctl pv-generic-ctl">
-              <span className="sp" />
-              <button
-                className="tb-btn"
-                title={fsNow ? '退出全屏 (F)' : '全屏 (F)'}
-                onClick={toggleFullscreen}
-              >
-                <Icon name={fsNow ? 'contract' : 'expand'} />
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
 

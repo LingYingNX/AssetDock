@@ -5,6 +5,7 @@ import { fmtCount, queryAssets, statsOf } from '../data/query'
 import { tagMenuItems } from '../data/filter-menu'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
+import { FORMAT_GROUPS, type AssetFormat } from '../../../shared/formats'
 
 /* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
    纵向压到 ±0.4——筛选条只有 42px 高,照抄 35px 的幅度会飞出条外。 */
@@ -23,16 +24,21 @@ const VIEW_ICONS: Record<string, string> = {
   list: 'list'
 }
 
+const FORMAT_LABELS: Partial<Record<AssetFormat, string>> = {
+  GLB: 'GLB / glTF',
+  HEIC: 'HEIC / HEIF',
+  MPEG: 'MPEG / MPG',
+  VRML: 'VRML / WRL'
+}
+
 const FORMAT_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部格式', groupEnd: true },
-  { id: 'photo', label: 'JPG / PNG / WEBP', heading: '图片' },
-  { id: 'psd-ai', label: 'PSD / AI' },
-  { id: 'svg-gif', label: 'SVG / GIF' },
-  { id: 'video', label: 'MP4 / MOV', heading: '视频' },
-  { id: 'glb', label: 'GLB / glTF', heading: '三维' },
-  { id: 'fbx', label: 'FBX' },
-  { id: 'obj', label: 'OBJ' },
-  { id: 'css', label: 'CSS', heading: '代码' }
+  ...FORMAT_GROUPS.flatMap((group, groupIndex) => group.formats.map((format, formatIndex) => ({
+    id: format,
+    label: FORMAT_LABELS[format] ?? format,
+    heading: formatIndex === 0 ? group.label : undefined,
+    groupEnd: formatIndex === group.formats.length - 1 && groupIndex < FORMAT_GROUPS.length - 1
+  })))
 ]
 
 const SHAPE_ITEMS: MenuItem[] = [

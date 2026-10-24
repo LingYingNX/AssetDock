@@ -17,6 +17,10 @@
 .pv-top{display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 20px;color:var(--t2)}
 .pv-corner-btn{width:32px;height:32px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--t3)}
 .pv-corner-btn:hover{background:rgba(255,255,255,.07);color:var(--t1)}
+/* 模型预览沉浸式:返回/关闭覆盖在画面上,不再单独占一条顶栏。 */
+.pv.model .pv-top{position:absolute;inset:0 0 auto;z-index:6;height:0;padding:0;pointer-events:none}
+.pv.model .pv-corner-btn{position:absolute;top:12px;pointer-events:auto;background:rgba(9,12,18,.62);border:1px solid var(--pv-line)}
+.pv.model .pv-corner-btn:first-child{left:12px}
 /* 工作区只有舞台一列:文件信息/评分/标签由右侧已有的检查器承担,不在这里重复一份 */
 .pv-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:0 20px 6px;min-height:0}
 .pv-body.video-body{padding:0}
@@ -29,38 +33,21 @@
 .pv-video-surface{position:relative;z-index:1;display:grid;place-items:center;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;background:#45404E;border:0;border-radius:0}
 .pv-video-element{display:block;width:100%;height:100%;min-width:0;min-height:0}
 .pv-video-surface video{display:block;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;border-radius:0;box-shadow:none;background:#45404E}
+.pv-model-meta{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:7px;min-width:0;max-width:calc(50% - 90px);padding:4px 8px;background:rgba(9,12,18,.62);border:1px solid var(--pv-line);border-radius:var(--r-sm);color:var(--t2);font-variant-numeric:tabular-nums;pointer-events:none}
+.pv-model-meta strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-body);font-weight:600;color:var(--t1)}
+.pv-model-meta span{flex:none;font:500 var(--fs-cap)/1 var(--font-mono);color:var(--t3)}
 /* 3D 舞台 */
-.pv3d{position:relative;width:min(100%,calc((100vh - 210px)*16/9));aspect-ratio:16/9;border:1px solid var(--pv-line-strong);border-radius:var(--r-sm);overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.6);
+.pv3d{position:relative;width:100%;height:100%;min-height:0;border:0;border-radius:0;overflow:hidden;
   background:#070a0f}
 .pv3d::before{content:"";position:absolute;left:14%;right:14%;bottom:7%;height:36%;transform:perspective(520px) rotateX(58deg);transform-origin:bottom;opacity:.5;
   background:linear-gradient(rgba(120,170,230,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(120,170,230,.1) 1px,transparent 1px);background-size:34px 34px;
   -webkit-mask-image:linear-gradient(180deg,transparent,#000 40%);mask-image:linear-gradient(180deg,transparent,#000 40%)}
 .pv3d>.c3d-wrap{position:absolute;inset:0;perspective:820px}
 .pv3d .cube3d{--cs:186px}
-.pv3d.wf .cube3d i{background:rgba(255,255,255,.18);border-color:rgba(16,110,235,.8);box-shadow:none}
-.pv3d.paused .cube3d{animation-play-state:paused}
-.v3-badge{position:absolute;left:12px;top:12px;z-index:2;display:flex;align-items:center;gap:7px;height:26px;padding:0 9px;border-radius:var(--r-sm);font:500 var(--fs-micro)/1 var(--font-mono);color:#c7d2e1;background:rgba(9,12,18,.86);border:1px solid var(--pv-line-strong);backdrop-filter:blur(12px)}
-.v3-badge .ic{width:var(--ic-xs);height:var(--ic-xs);color:#72b4ff}
-/* 工具条此前用 left:50% + translateX(-50%) 居中,宽度由内容撑开。绝对定位元素的
-   shrink-to-fit 上限是「包含块宽度 - left 偏移」,也就是只有舞台的一半可用;
-   内容一旦超过这个上限,flex 子项就会各自收缩,按钮里的中文被挤成一个字一行,
-   变成竖排的「转/台」「线/框」。两处一起修:
-   1) width:max-content 让宽度由内容决定,不再受 left 偏移截断;
-   2) 子项 flex:none + white-space:nowrap,即使真的放不下也只整体溢出,不拆字。
-   max-width 兜底:窗口很窄时允许工具条横向滚动,而不是把按钮压扁。 */
-.v3-bar{position:absolute;left:50%;bottom:12px;z-index:2;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px 5px;width:max-content;max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none;background:rgba(9,12,18,.92);border:1px solid var(--pv-line);border-radius:var(--r-sm);backdrop-filter:blur(16px);box-shadow:0 10px 28px rgba(0,0,0,.42)}
-.v3-bar::-webkit-scrollbar{height:0}
-.v3-bar .zoomer{flex:none;white-space:nowrap}
+.v3-bar{position:absolute;left:50%;bottom:12px;z-index:2;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px 5px;width:max-content;background:rgba(9,12,18,.92);border:1px solid var(--pv-line);border-radius:var(--r-sm);backdrop-filter:blur(16px);box-shadow:0 10px 28px rgba(0,0,0,.42)}
 .v3-chip{flex:none;height:var(--h-xs);padding:0 8px;border-radius:var(--r-sm);font-size:var(--fs-cap);color:#8e99aa;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .v3-chip:hover{background:rgba(255,255,255,.08);color:#f3f5f8}
 .v3-chip.on{background:rgba(59,130,246,.16);color:#72b4ff}
-.v3-chip .ic{width:var(--ic-xs);height:var(--ic-xs)}
-.v3-env{flex:none;white-space:nowrap;font-size:var(--fs-cap);color:#687486;padding:0 7px}
-.pv-strip{display:flex;gap:6px;justify-content:center;padding:12px 0 2px}
-.pv-strip .fr{width:64px;height:38px;border-radius:var(--r-xs);opacity:.55;border:1px solid var(--pv-line);cursor:pointer;flex:none;display:grid;place-items:center;overflow:hidden;background:#0c0e13}
-.pv-strip .fr:hover{opacity:.85}
-.pv-strip .fr.cur{opacity:1;border-color:#3b82f6;background:rgba(59,130,246,.1)}
-.pv-strip .fr .cube3d{--cs:20px;animation:none}
 .pv-side{background:var(--bg1);backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--line);border-radius:var(--r-l);padding:14px;overflow-y:auto}
 
 /* ---------- 底部:元数据 + 控制条 + 胶片带 ---------- */

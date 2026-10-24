@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises'
 import { isIgnoredWatch, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
+import { probeImageMeta } from './formatProbe'
 import { upsertScanned, setAssetMissing, type ScanUpsertResult } from './store'
 import type { Database } from 'better-sqlite3'
 
@@ -50,8 +51,8 @@ async function upsertOne(db: Database, libraryId: number, root: string, absPath:
   const state = await stat(absPath).catch(() => null)
   if (!state) return null
   let meta: { width?: number; height?: number; duration?: number; codec?: string; fps?: number } = {}
-  if (kind.type === 'image' && kind.format !== 'PSD') {
-    meta = await (await import('sharp')).default(absPath).metadata().then((value) => ({ width: value.width, height: value.height }), () => ({}))
+  if (kind.type === 'image') {
+    meta = await probeImageMeta(absPath, relPath)
   } else if (kind.type === 'video') {
     meta = await probeVideo(absPath)
   }

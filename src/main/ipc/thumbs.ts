@@ -32,12 +32,12 @@ function thumbJobs(libraryId: number): ThumbJob[] {
   const s = scopeFor(libraryId)
   if (!s) return []
   try {
-    // 需要缩略图的素材集合(位图 + CSS)统一在 thumbs.ts 里定义,避免两处 SQL 漂移
+    // 需要缩略图的素材集合统一在 thumbs.ts 里定义,避免两处 SQL 漂移
     return thumbJobRows(s.db, libraryId).map((r) => ({
       absPath: absPathFor(s, r.rel_path),
       fingerprint: r.fingerprint,
       format: r.format,
-      meta: { relPath: r.rel_path, mtimeMs: r.mtime_ms, sizeBytes: r.size_bytes }
+      meta: { relPath: r.rel_path, mtimeMs: r.mtime_ms, sizeBytes: r.size_bytes, libraryId }
     }))
   } finally {
     releaseScope(s)

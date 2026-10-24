@@ -76,9 +76,14 @@
 .pref-field input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(60,151,232,.15)}
 .pref-field input[readonly]{color:var(--t2);cursor:pointer}
 .pref-path-picker{display:flex;gap:8px}
-.pref-path-picker input{min-width:0;flex:1}
+.pref-path-picker input{min-width:0;flex:1;height:34px;padding:0 10px;border:1px solid var(--line2);border-radius:var(--r-xs);outline:none;background:var(--bg4);color:var(--t1);font:inherit}
+.pref-path-picker input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(60,151,232,.15)}
 .pref-path-picker button{height:34px;padding:0 13px;border:1px solid var(--line2);border-radius:var(--r-xs);background:var(--bg4);color:var(--t2);font-size:var(--fs-sub);white-space:nowrap}
 .pref-path-picker button:hover{background:var(--bg4);color:var(--t1)}
+.pref-tool-row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:7px 12px;align-items:center;margin-top:10px}
+.pref-tool-name{color:var(--t2);font-size:var(--fs-sub)}
+.pref-tool-row .pref-path-picker{grid-column:2}
+.pref-tool-status{grid-column:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t3);font-size:var(--fs-cap)}
 .pref-create-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
 
 /* 未实现的分类:给出明确空态而不是空白面板 */

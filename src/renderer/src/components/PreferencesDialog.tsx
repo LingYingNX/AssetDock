@@ -12,6 +12,8 @@ type PreferenceState = {
   closeAction: CloseAction
   hoverVideo: boolean
   hoverSound: boolean
+  blenderPath: string
+  cinema4dPath: string
 }
 
 const PREFERENCES_KEY = 'preferences'
@@ -21,7 +23,9 @@ const DEFAULT_PREFERENCES: PreferenceState = {
   autoLaunch: false,
   closeAction: 'minimize',
   hoverVideo: true,
-  hoverSound: false
+  hoverSound: false,
+  blenderPath: '',
+  cinema4dPath: ''
 }
 
 type SectionKey = 'general' | 'library' | 'media' | 'interface' | 'operation' | 'shortcuts' | 'notify'
@@ -88,7 +92,9 @@ function readPreferences(raw: string | null): PreferenceState {
       autoLaunch: value.autoLaunch === true,
       closeAction: value.closeAction === 'quit' ? 'quit' : 'minimize',
       hoverVideo: value.hoverVideo !== false,
-      hoverSound: value.hoverSound === true
+      hoverSound: value.hoverSound === true,
+      blenderPath: typeof value.blenderPath === 'string' ? value.blenderPath : '',
+      cinema4dPath: typeof value.cinema4dPath === 'string' ? value.cinema4dPath : ''
     }
   } catch {
     return DEFAULT_PREFERENCES
@@ -129,6 +135,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [libraryName, setLibraryName] = useState('')
   const [libraryPath, setLibraryPath] = useState('')
   const [autoLaunchSupported, setAutoLaunchSupported] = useState(true)
+  const [toolStatus, setToolStatus] = useState<{ blender: string; cinema4d: string }>({ blender: '未检测', cinema4d: '未检测' })
   /** 偏好是否已从磁盘加载完成:draft 初值是默认浅色,加载前拿它预览会把夜间切成白天 */
   const [draftLoaded, setDraftLoaded] = useState(false)
   /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
@@ -161,6 +168,15 @@ export function PreferencesDialog(): React.JSX.Element | null {
     })
     void window.windowApi.app.getAutoLaunch().then((r) => {
       if (!cancelled) setAutoLaunchSupported(r.supported)
+    })
+    void window.windowApi.tools.status().then((r) => {
+      if (cancelled) return
+      setToolStatus({
+        blender: r.blender.available ? (r.blender.version ?? '可用') : (r.blender.error ?? '不可用'),
+        cinema4d: r.cinema4d.available ? (r.cinema4d.version ?? '可用') : (r.cinema4d.error ?? '不可用')
+      })
+    }).catch(() => {
+      if (!cancelled) setToolStatus({ blender: '检测失败', cinema4d: '检测失败' })
     })
     return () => { cancelled = true }
   }, [open])
@@ -232,6 +248,11 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const browseLibraryPath = (): void => {
     void window.windowApi.pickFolder().then((path) => {
       if (path) setLibraryPath(path)
+    })
+  }
+  const browseToolPath = (key: 'blenderPath' | 'cinema4dPath'): void => {
+    void window.windowApi.pickFile().then((path) => {
+      if (path) setDraft((current) => ({ ...current, [key]: path }))
     })
   }
   const createLibrary = (): void => {
@@ -328,6 +349,25 @@ export function PreferencesDialog(): React.JSX.Element | null {
         <div className="pref-row">
           <Choice name="hover-sound" label="静音" checked={!draft.hoverSound} onChange={() => setDraft({ ...draft, hoverSound: false })} />
           <Choice name="hover-sound" label="开启音量" checked={draft.hoverSound} onChange={() => setDraft({ ...draft, hoverSound: true })} />
+        </div>
+      </section>
+      <section className="pref-section">
+        <h2>外部预览工具</h2>
+        <div className="pref-tool-row">
+          <span className="pref-tool-name">Blender</span>
+          <span className="pref-path-picker">
+            <input value={draft.blenderPath} placeholder="留空则自动探测" onChange={(e) => setDraft({ ...draft, blenderPath: e.target.value })} />
+            <button onClick={() => browseToolPath('blenderPath')}>选择</button>
+          </span>
+          <span className="pref-tool-status">{toolStatus.blender}</span>
+        </div>
+        <div className="pref-tool-row">
+          <span className="pref-tool-name">Cinema 4D</span>
+          <span className="pref-path-picker">
+            <input value={draft.cinema4dPath} placeholder="留空则自动探测" onChange={(e) => setDraft({ ...draft, cinema4dPath: e.target.value })} />
+            <button onClick={() => browseToolPath('cinema4dPath')}>选择</button>
+          </span>
+          <span className="pref-tool-status">{toolStatus.cinema4d}</span>
         </div>
       </section>
     </>

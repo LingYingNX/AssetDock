@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
+import { formatCapability, formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
 
 const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tag: 'all' }
@@ -47,6 +47,15 @@ describe('queryAssets', () => {
   it('uses a placeholder for images without dimensions', () => {
     expect(formatResolution(asset({ format: 'PSD', width: undefined, height: undefined }))).toBe('—')
   })
+
+  it('reports the real preview capability for external and transcoded formats', () => {
+    expect(formatCapability(asset({ format: 'BLEND', type: 'model' }))).toBe('需 Blender')
+    expect(formatCapability(asset({ format: 'C4D', type: 'model' }))).toBe('需 Cinema 4D')
+    expect(formatCapability(asset({ format: 'MKV', type: 'video' }))).toBe('需转码播放')
+    expect(formatCapability(asset({ format: 'EXR', type: 'image' }))).toBe('环境图预览')
+    expect(formatCapability(asset({ format: 'AI', type: 'image' }))).toBe('PDF 兼容预览')
+  })
+
   it('counts only live local assets in the sidebar', () => {
     const assets = [asset({ id: 'one', folders: ['图'], favorite: true }), asset({ id: 'two' }), asset({ id: 'trash', deletedAt: '2026-09-10T00:00' })]
     expect(sidebarCounts(assets)).toMatchObject({ all: 2, untagged: 1, fav: 1, trash: 1, folders: { 图: 1 } })

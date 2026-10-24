@@ -2,6 +2,14 @@ import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { fileExists, writeFileAtomically } from './cacheFiles'
+import { formatSpec, type AssetFormat } from '../../shared/formats'
+import { THUMB_CACHE_VERSION, THUMB_SIZE } from '../../shared/thumbnailConfig'
+import {
+  createThumbnailJpeg,
+  ThumbnailDecodeError,
+  type ThumbnailFailureKind
+} from './thumbnailDecoder'
+import { ensureBlendPreview, ExternalPreviewError } from './externalPreview'
 
 /**
  * 库内缩略图缓存:<库>/.mediahub/thumbs/
@@ -13,9 +21,10 @@ import { fileExists, writeFileAtomically } from './cacheFiles'
  *   权威来源始终是库内数据库的 assets 表。
  */
 
-export const THUMB_SIZE = 640
-const THUMB_VERSION = 2
+export { THUMB_SIZE } from '../../shared/thumbnailConfig'
+const THUMB_VERSION = THUMB_CACHE_VERSION
 const FLUSH_DELAY_MS = 1500
+const MISSING_TOOL_RETRY_MS = 60_000
 
 /**
  * CSS 封面的渲染逻辑版本。
@@ -32,6 +41,9 @@ export interface ThumbEntry {
   mtimeMs: number
   sizeBytes: number
   generatedAt: string
+  /** 失败也按指纹缓存，重复请求不会反复启动解码进程。 */
+  failure?: ThumbnailFailureKind
+  error?: string
   /** 仅 CSS 封面写入:生成时的骨架版本 */
   shell?: number
   /**
@@ -182,7 +194,7 @@ export async function ensureThumb(
   absPath: string,
   fingerprint: string,
   format: string,
-  meta: { relPath: string; mtimeMs: number; sizeBytes: number },
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number; libraryId?: number },
   /**
    * CSS 专用的外观签名:配套 HTML 的内容摘要。
    * 传 null 表示当前没有配套 HTML(用推导骨架),与「有 HTML」区分开,不能只用空串混淆。
@@ -193,24 +205,33 @@ export async function ensureThumb(
   const target = thumbPath(libPath, fingerprint)
   // CSS 封面还要外观对齐:骨架版本或配套 HTML 变了,存量封面必须重建(位图只认指纹)
   const wantLook = format === 'CSS' ? (look ?? '') : ''
-  const matches = (entry: ThumbEntry | undefined): boolean =>
-    !!entry && (format !== 'CSS' || (entry.shell === SHELL_VERSION && (entry.look ?? '') === wantLook))
+  const matches = (entry: ThumbEntry | undefined): boolean => {
+    if (!entry) return false
+    if (entry.failure === 'missing-tool' && Date.now() - Date.parse(entry.generatedAt) >= MISSING_TOOL_RETRY_MS) {
+      return false
+    }
+    return format !== 'CSS' || (entry.shell === SHELL_VERSION && (entry.look ?? '') === wantLook)
+  }
 
   const cached = manifest.entries[fingerprint]
   if (matches(cached) && await fileExists(target)) {
-    return { path: target, placeholder: cached.relPath === '' }
+    return { path: target, placeholder: !!cached.failure }
   }
 
   return enqueue(async () => {
     const fresh = await loadManifest(libPath)
     const freshEntry = fresh.entries[fingerprint]
     if (matches(freshEntry) && await fileExists(target)) {
-      return { path: target, placeholder: false }
+      return { path: target, placeholder: !!freshEntry.failure }
+    }
+    if (freshEntry?.failure === 'missing-tool' && !matches(freshEntry)) {
+      delete fresh.entries[fingerprint]
+      await rm(target, { force: true }).catch(() => undefined)
     }
     if (format === 'CSS' && freshEntry) delete fresh.entries[fingerprint]
     if (await fileExists(target)) {
-      if (format === 'CSS') {
-        // 外观已变的存量 CSS 封面:文件还在但渲染依据已变,必须重画而不是沿用
+      if (format === 'CSS' || !freshEntry) {
+        // 清单版本失效、孤儿文件或 CSS 外观变化时,旧 JPEG 不可证明对应当前规则
         await rm(target, { force: true }).catch(() => undefined)
       } else {
         fresh.entries[fingerprint] = { ...meta, generatedAt: new Date().toISOString() }
@@ -222,27 +243,49 @@ export async function ensureThumb(
     await mkdir(thumbsDir(libPath), { recursive: true })
     let buf: Buffer
     let placeholder = false
+    let failure: ThumbnailFailureKind | undefined
+    let failureDetail: string | undefined
     try {
       if (format === 'CSS') {
         // CSS 没有可解码像素:走离屏渲染截图,产出与位图同规格的 JPEG
         const { renderCssThumbFromFile } = await import('./cssThumb')
         buf = await renderCssThumbFromFile(libPath, absPath, THUMB_SIZE)
       } else {
-        const sharp = (await import('sharp')).default
-        buf = await sharp(absPath)
-          .rotate()
-          .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality: 84, mozjpeg: true })
-          .toBuffer()
+        const spec = formatSpec(format)
+        if (!spec) throw new ThumbnailDecodeError(`unknown format: ${format}`, 'unsupported')
+        if (spec.thumbnail === 'three') {
+          if (meta.libraryId == null) throw new ThumbnailDecodeError('missing library id', 'unsupported')
+          const url = `media://${meta.libraryId}/${encodeURIComponent(meta.relPath)}?v=${encodeURIComponent(fingerprint)}`
+          const { renderModelThumbJpeg } = await import('./modelThumb')
+          buf = await renderModelThumbJpeg(url, spec.format, THUMB_SIZE)
+        } else if (spec.thumbnail === 'external') {
+          if (format !== 'BLEND' || meta.libraryId == null) {
+            throw new ThumbnailDecodeError(`external preview unavailable for ${format}`, 'missing-tool')
+          }
+          await ensureBlendPreview(libPath, absPath, fingerprint)
+          const url = `media://${meta.libraryId}/${encodeURIComponent(meta.relPath)}?blend=1&v=${encodeURIComponent(fingerprint)}`
+          const { renderModelThumbJpeg } = await import('./modelThumb')
+          buf = await renderModelThumbJpeg(url, 'GLB', THUMB_SIZE)
+        } else {
+          buf = await createThumbnailJpeg(spec.format as AssetFormat, absPath)
+        }
       }
-    } catch {
+    } catch (error) {
       buf = await placeholderJpeg(format)
       placeholder = true
+      failure = error instanceof ThumbnailDecodeError
+        ? error.kind
+        : error instanceof ExternalPreviewError
+          ? (error.kind === 'failed' ? 'corrupt' : error.kind)
+          : 'corrupt'
+      failureDetail = error instanceof Error ? error.message : String(error)
     }
     await writeFileAtomically(target, buf)
     fresh.entries[fingerprint] = {
       ...meta,
       generatedAt: new Date().toISOString(),
+      ...(failure ? { failure } : {}),
+      ...(failureDetail ? { error: failureDetail } : {}),
       ...(format === 'CSS' ? { shell: SHELL_VERSION, look: wantLook } : {})
     }
     scheduleFlush(libPath)
@@ -260,7 +303,7 @@ export function warmThumbInBackground(
   absPath: string,
   fingerprint: string,
   format: string,
-  meta: { relPath: string; mtimeMs: number; sizeBytes: number },
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number; libraryId?: number },
   look?: string | null,
   onDone?: () => void
 ): void {
@@ -383,7 +426,7 @@ export interface ThumbJob {
   absPath: string
   fingerprint: string
   format: string
-  meta: { relPath: string; mtimeMs: number; sizeBytes: number }
+  meta: { relPath: string; mtimeMs: number; sizeBytes: number; libraryId?: number }
 }
 
 export interface ThumbJobRow {
@@ -395,8 +438,7 @@ export interface ThumbJobRow {
 }
 
 /**
- * Rows that need a thumbnail: bitmaps plus CSS (offscreen render + screenshot).
- * Video and 3D are excluded - they read the original file directly.
+ * Rows that need a thumbnail: raster/doc images, video keyframes, 3D models and CSS.
  * Missing files and trashed assets are excluded too.
  */
 export function thumbJobRows(db: Database.Database, libraryId: number): ThumbJobRow[] {
@@ -404,7 +446,7 @@ export function thumbJobRows(db: Database.Database, libraryId: number): ThumbJob
     .prepare(
       `SELECT rel_path, fingerprint, format, mtime_ms, size_bytes FROM assets
        WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
-         AND type IN ('image', 'style') AND fingerprint <> ''`
+         AND type IN ('image', 'video', 'model', 'style') AND fingerprint <> ''`
     )
     .all(libraryId) as ThumbJobRow[]
 }

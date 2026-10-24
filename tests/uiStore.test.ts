@@ -24,7 +24,7 @@ describe('UI store', () => {
 
     // 原图 URL 不带 thumb;卡片预览 URL 指向缩略图缓存
     expect(asset.originalUrl).toBe('media://7/same.jpg?v=fp')
-    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp&thumb=1')
+    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp&thumb=1&tv=3')
   })
   it('does not request thumbnails for assets already in the trash', async () => {
     vi.stubGlobal('window', { windowApi: {} })
