@@ -93,11 +93,11 @@ FBX/OBJ 常导出 `MeshPhongMaterial` / `MeshLambertMaterial`，没有 metalness
 
 ### 8. 色彩管理与照明改为 Blender 视口基准
 
-`WebGLRenderer` 改用 `AgXToneMapping`。Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`，不在基准外再乘曝光增益。渲染模型模式中 HDR 环境是唯一主光源；实体模式中四灯 Studio rig 是唯一主光源。两种模式都移除 `AmbientLight`、主方向光和补方向光。
+`WebGLRenderer` 改用 `AgXToneMapping`。Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`，不在基准外再乘曝光增益。实体模式使用 `AmbientLight 0.28`、主方向光 `1.25` 和补方向光 `0.45` 作为 clay 基线灯。渲染模型模式在同一组基线灯上叠加 HDR，避免 HDR 强度归零时模型变成黑色剪影。
 
-实体模式不再依赖 HDR 或 Studio 环境贴图来“照亮” clay。使用 Blender `basic.sl` 的 `Default` studio light 四灯参数建立视空间方向光 rig；默认 clay 颜色取中性灰，保留高光和轮廓，但不得把材质推到纯白。
+实体模式不依赖 HDR 或 Studio 环境贴图来“照亮” clay。默认 clay 颜色取中性灰，保留高光和轮廓，但不得把材质推到纯白。
 
-渲染模式使用同一套色彩管理，并继续使用模型源材质。HDR 只提供环境光照、反射和可选背景，避免与场景灯重复叠加。
+渲染模式使用同一套色彩管理，并继续使用模型源材质。HDR 提供环境光照、反射和可选背景，基线灯保证模型在低 HDR 强度下仍可见。
 
 ### 9. 世界参数映射
 

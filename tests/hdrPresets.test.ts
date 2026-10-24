@@ -11,7 +11,6 @@ import {
   parseHdrSettings
 } from '../src/renderer/src/data/hdr-presets'
 import {
-  MODEL_STUDIO_LIGHTS,
   MODEL_OUTPUT_COLOR_SPACE,
   MODEL_TONE_MAPPING,
   MODEL_TONE_MAPPING_EXPOSURE,
@@ -52,10 +51,7 @@ describe('HDR presets', () => {
     expect(MODEL_OUTPUT_COLOR_SPACE).toBe(THREE.SRGBColorSpace)
   })
 
-  it('defines the four-light Blender studio rig and a world-space grid', () => {
-    expect(MODEL_STUDIO_LIGHTS).toHaveLength(4)
-    expect(MODEL_STUDIO_LIGHTS[0].direction).toEqual([0, 0.639175, 0.769061])
-    expect(MODEL_STUDIO_LIGHTS[0].color).toEqual([0.507074, 0.507074, 0.507074])
+  it('defines a world-space grid', () => {
     expect(MODEL_VIEW_GRID_SPAN).toBeGreaterThan(1)
     expect(MODEL_VIEW_GRID_DIVISIONS).toBeGreaterThan(100)
   })

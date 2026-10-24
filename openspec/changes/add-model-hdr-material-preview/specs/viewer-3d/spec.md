@@ -68,11 +68,15 @@
 - **THEN** 若源材质没有实际透明信息,渲染模式按不透明显示
 
 ### Requirement: Blender 视口照明基线
-三维预览 SHALL 使用 `AgXToneMapping`,Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`。渲染模型模式 SHALL 只使用 HDR 环境光照,不得叠加场景灯;实体模式 SHALL 只使用 `basic.sl` 四灯 Studio rig,不得叠加 HDR 或 Studio 环境贴图。默认背景 SHALL 为深灰主题背景与真实三维地面网格,不得直接显示 HDR 全景背景。
+三维预览 SHALL 使用 `AgXToneMapping`,Blender 曝光 `0.0` 对应 Three.js `toneMappingExposure=1.0`。实体模式 SHALL 使用 AmbientLight、主方向光和补方向光组成的 clay 基线灯。渲染模型模式 SHALL 叠加 HDR 环境光照,同时保留同一组基线灯,确保 HDR 强度为 `0` 时模型仍可见。默认背景 SHALL 为深灰主题背景与真实三维地面网格,不得直接显示 HDR 全景背景。
 
 #### Scenario: 默认不叠加额外灯光
 - **WHEN** 用户打开任意三维素材
-- **THEN** 实体模式只启用四盏 Studio 灯,渲染模型模式场景灯数量为 0,且两种模式都没有额外 AmbientLight
+- **THEN** 实体模式启用 AmbientLight、主方向光和补方向光,渲染模型模式保留这三盏灯并叠加 HDR
+
+#### Scenario: HDR 强度归零仍可见
+- **WHEN** 用户在渲染模型模式把 HDR 强度调到 `0`
+- **THEN** 模型仍由基线灯照亮,不得显示为黑色剪影
 
 #### Scenario: 高光保留细节
 - **WHEN** 用户切换实体模式或渲染模型模式
