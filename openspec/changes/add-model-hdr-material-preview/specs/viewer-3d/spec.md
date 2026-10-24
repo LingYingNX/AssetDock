@@ -87,30 +87,22 @@
 - **THEN** 模型保持在原始世界坐标,地面网格固定在原点并覆盖视口,相机的水平环绕中心也保持在世界原点
 
 ### Requirement: HDR 环境参数
-环境设置 SHALL 提供旋转、强度、世界不透明度和模糊四项控制,并即时影响当前模型。旋转 SHALL 只旋转环境,不旋转模型和相机;世界不透明度为 `0` 时 SHALL 完全隐藏 HDR 背景并显示主题背景。四项值与当前 HDR SHALL 跨重启保留。
+完整环境面板 SHALL 同时显示旋转、强度、世界不透明度和模糊四项控制,并即时影响当前模型。旋转 SHALL 只旋转环境,不旋转模型和相机;世界不透明度为 `0` 时 SHALL 完全隐藏 HDR 背景并显示主题背景。四项值与当前 HDR SHALL 跨重启保留。
 
 #### Scenario: 调整环境参数
 - **WHEN** 用户拖动旋转、强度、世界不透明度或模糊
 - **THEN** 环境光照、反射或背景实时变化,模型和相机方向不移动
-
-#### Scenario: 默认世界不可见
-- **WHEN** 用户首次打开模型
-- **THEN** 世界不透明度为 `0.000`,背景为深灰主题背景与网格,HDR 仍参与环境光照
-
-#### Scenario: 显示 HDR 背景
-- **WHEN** 用户把世界不透明度提高到大于 `0`
-- **THEN** HDR 背景按该不透明度显示,模糊值同步生效
 
 #### Scenario: 环境参数保留
 - **WHEN** 用户修改四项参数后重启应用
 - **THEN** 下次打开模型恢复上次的 HDR、旋转、强度、世界不透明度和模糊值
 
 ### Requirement: HDR 环境预设
-材质球面板 SHALL 保留 8 个 Blender 官方 CC0 1K EXR 环境:`city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset`,默认 `forest`。点击面板顶部预览球 SHALL 展开这些预设,选择后更新环境光照、反射和预览球。
+材质球入口 SHALL 保留 8 个 Blender 官方 CC0 1K EXR 环境:`city`、`courtyard`、`forest`、`interior`、`night`、`studio`、`sunrise`、`sunset`,默认 `forest`。完整面板打开时 SHALL 立即显示横排预设,不需要第二层菜单;选择后更新环境光照、反射、顶部材质球和面板预览球。
 
 #### Scenario: 切换 HDR 预设
-- **WHEN** 用户展开预览球并选择另一个 HDR
-- **THEN** 当前环境与预览球更新,旧环境贴图和 PMREM 目标被释放
+- **WHEN** 用户展开完整面板并选择另一个 HDR
+- **THEN** 当前环境、顶部材质球与预览球更新,面板保持打开,旧环境贴图和 PMREM 目标被释放
 
 #### Scenario: 默认森林环境
 - **WHEN** 用户首次打开三维模型
