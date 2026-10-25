@@ -13,6 +13,7 @@ import {
 } from '../data/hdr-presets'
 import type { ModelShade } from '../components/Viewer3D'
 import { THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
+import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../data/sidebar-width'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -48,6 +49,8 @@ interface UiPrefs {
   cbarOpen: boolean
   /** 上次停留的侧栏导航项(全部素材/文件夹/标签等) */
   nav: NavKey
+  /** 用户拖拽后的侧栏宽度 */
+  sideWidth: number
   /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留 */
   collapsedFolders: string[]
   /** 三维预览模式与 HDR 环境:跨重启保留 */
@@ -86,6 +89,7 @@ function persistUiPrefs(): void {
       inspHidden: s.inspHidden,
       cbarOpen: s.cbarOpen,
       nav: s.nav,
+      sideWidth: s.sideWidth,
       collapsedFolders: [...s.collapsedFolders],
       modelShade: s.modelShade,
       modelHdr: s.modelHdr,
@@ -100,6 +104,7 @@ function persistUiPrefs(): void {
 
 /** S2-9:setColw 高频调用,落库走防抖 */
 let colwPersistTimer: ReturnType<typeof setTimeout> | null = null
+let sideWidthPersistTimer: ReturnType<typeof setTimeout> | null = null
 let hdrPersistTimer: ReturnType<typeof setTimeout> | null = null
 
 function scheduleHdrPersist(): void {
@@ -156,6 +161,7 @@ export async function restoreUiPrefs(): Promise<void> {
         inspHidden: parsed.inspHidden === true,
         cbarOpen: parsed.cbarOpen === true,
         nav: parseNav(parsed.nav),
+        sideWidth: parsed.sideWidth == null ? SIDEBAR_DEFAULT : clampSidebarWidth(Number(parsed.sideWidth)),
         collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders),
         modelShade: parsed.modelShade === 'render' ? 'render' : 'solid',
         modelHdr: parseHdrPreset(parsed.modelHdr),
@@ -314,6 +320,8 @@ interface UIState {
   setView: (v: ViewMode) => void
   colw: number
   setColw: (n: number) => void
+  sideWidth: number
+  setSideWidth: (n: number) => void
   inspHidden: boolean
   toggleInspector: () => void
   /** 三维预览:实体/渲染模式与 HDR 环境 */
@@ -775,6 +783,12 @@ export const useUI = create<UIState>((set, get) => {
       colwPersistTimer = setTimeout(persistUiPrefs, 300)
     },
     inspHidden: false,
+    sideWidth: SIDEBAR_DEFAULT,
+    setSideWidth: (sideWidth) => {
+      set({ sideWidth: clampSidebarWidth(sideWidth) })
+      if (sideWidthPersistTimer) clearTimeout(sideWidthPersistTimer)
+      sideWidthPersistTimer = setTimeout(persistUiPrefs, 300)
+    },
     toggleInspector: () => {
       set((s) => ({ inspHidden: !s.inspHidden }))
       persistUiPrefs()
