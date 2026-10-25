@@ -9,6 +9,7 @@ import { detectFormat } from '../../shared/formats'
 import { transcodePath } from './transcode'
 import { blendPreviewPath } from './externalPreview'
 import { ensureAiPagePreview } from './aiPreview'
+import { ensureImagePreview } from './imagePreview'
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
@@ -151,9 +152,10 @@ export function registerMediaProtocol(): void {
       const transcodeRequested = params.get('transcoded') === '1'
       const blendRequested = params.get('blend') === '1'
       const aiPageRequested = params.get('aiPage') === '1'
+      const imagePreviewRequested = params.get('imagePreview') === '1'
       const aiPage = Number(params.get('page') ?? '1')
 
-      if ((thumbRequested || transcodeRequested || blendRequested || aiPageRequested) && !isValidThumbFingerprint(fingerprint)) {
+      if ((thumbRequested || transcodeRequested || blendRequested || aiPageRequested || imagePreviewRequested) && !isValidThumbFingerprint(fingerprint)) {
         return new Response('forbidden', { status: 403 })
       }
 
@@ -174,6 +176,12 @@ export function registerMediaProtocol(): void {
           return new Response('invalid page', { status: 400 })
         }
         realPath = await ensureAiPagePreview(lib.path, realPath, fingerprint, aiPage)
+        st = await fsp.stat(realPath)
+      }
+      if (imagePreviewRequested) {
+        const format = detectFormat(rel)?.format
+        if (format !== 'PSD' && format !== 'HEIC') return new Response('invalid image preview', { status: 400 })
+        realPath = await ensureImagePreview(lib.path, realPath, fingerprint, format)
         st = await fsp.stat(realPath)
       }
 
@@ -222,6 +230,8 @@ export function registerMediaProtocol(): void {
         : blendRequested
           ? 'model/gltf-binary'
           : aiPageRequested
+            ? 'image/jpeg'
+          : imagePreviewRequested
             ? 'image/jpeg'
           : mimeForExtension(ext)
       // 预览 URL 带指纹版本参数(?v=),内容变化即换 URL,可安全长缓存:

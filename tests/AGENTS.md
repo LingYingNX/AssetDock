@@ -10,7 +10,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 
 覆盖对象是**主进程的纯逻辑与文件/库行为**，外加渲染层的纯函数（`query.ts`、`folder-drag.ts`、`ui.ts` 的 `rowToAsset`）。React 组件与真实 Electron 窗口不在测试范围内。
 
-`vi.mock` 是例外而非常规：只有被测分支会牵动真实 Electron（`BrowserWindow` 离屏截图）时才用，目前仅 `cssThumb.test.ts` 一处。其余一律注入或断言纯函数——**不要在别处照抄这个 mock 写法**。
+`vi.mock` 是例外而非常规：只有被测分支会牵动真实 Electron（`BrowserWindow` 离屏截图）时才用，目前仅 `cssThumb.test.ts` 一处。解码顺序改用导出的 `decodeThumbnailSourceWith()` 注入 decoder；其余一律注入或断言纯函数——**不要在别处照抄这个 mock 写法**。
 
 ## Key Files
 
@@ -33,6 +33,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `clipboardFiles.test.ts` | 剪贴板路径的 PowerShell 数组转义（单引号双写，路径含单引号时不致整条命令失败） |
 | `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
 | `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
+| `thumbnailDecoder.test.ts` / `imagePreview.test.ts` | 按注册表路由缩略图解码、原生失败后 ffmpeg 回退、视频关键帧失败后首帧回退、PSD/HEIC 灯箱大图缓存 |
 
 ## Setup & environment
 

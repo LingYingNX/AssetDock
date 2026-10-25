@@ -4,11 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createThumbnailJpeg,
+  decodeThumbnailSourceWith,
   hdrToneMapFilter,
-  ThumbnailDecodeError
+  ThumbnailDecodeError,
+  type ThumbnailDecoders
 } from '../src/main/services/thumbnailDecoder'
 
 const roots: string[] = []
@@ -60,6 +62,70 @@ afterEach(async () => {
 })
 
 describe('routed thumbnail decoding', () => {
+  const decoders = (patch: Partial<ThumbnailDecoders>): ThumbnailDecoders => ({
+    sharp: async () => Buffer.from('sharp'),
+    heic: async () => Buffer.from('heic'),
+    psd: async () => Buffer.from('psd'),
+    pdf: async () => Buffer.from('pdf'),
+    ffmpeg: async () => Buffer.from('ffmpeg'),
+    ...patch
+  })
+
+  it('uses native sharp and never starts ffmpeg when sharp succeeds', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'sample.png')
+    await writePng(sample)
+    const ffmpeg = vi.fn(async () => Buffer.from('ffmpeg'))
+
+    const result = await decodeThumbnailSourceWith('PNG', sample, decoders({
+      sharp: async () => Buffer.from('sharp'),
+      ffmpeg
+    }))
+    expect(result.toString()).toBe('sharp')
+    expect(ffmpeg).not.toHaveBeenCalled()
+  })
+
+  it('falls back to ffmpeg only after native sharp fails', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'sample.png')
+    await writePng(sample)
+    const sharpDecoder = vi.fn(async () => { throw new Error('unsupported profile') })
+    const ffmpeg = vi.fn(async () => Buffer.from('ffmpeg'))
+
+    const result = await decodeThumbnailSourceWith('PNG', sample, decoders({
+      sharp: sharpDecoder,
+      ffmpeg
+    }))
+    expect(result.toString()).toBe('ffmpeg')
+    expect(sharpDecoder).toHaveBeenCalledTimes(1)
+    expect(ffmpeg).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a typed failure when every video decode level fails', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'broken.mp4')
+    await writeFile(sample, 'broken')
+    const ffmpeg = vi.fn(async () => { throw new Error('decode failed') })
+
+    await expect(decodeThumbnailSourceWith('MP4', sample, decoders({ ffmpeg })))
+      .rejects.toBeInstanceOf(ThumbnailDecodeError)
+    expect(ffmpeg).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries the first decodable frame when the keyframe pass fails', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'sample.mkv')
+    await writeFile(sample, 'video')
+    const ffmpeg = vi.fn(async (_path: string, _filter: string, keyframeOnly?: boolean) => {
+      if (keyframeOnly) throw new Error('bad keyframe')
+      return Buffer.from('first frame')
+    })
+
+    const result = await decodeThumbnailSourceWith('MKV', sample, decoders({ ffmpeg }))
+    expect(result.toString()).toBe('first frame')
+    expect(ffmpeg.mock.calls.map((call) => call[2])).toEqual([true, undefined])
+  })
+
   it.each([
     { format: 'BMP' as const, ext: 'bmp', args: (src: string, out: string) => ['-i', src, out] },
     {
@@ -160,6 +226,39 @@ describe('routed thumbnail decoding', () => {
     await writeFile(sample, 'not a psd')
 
     await expect(createThumbnailJpeg('PSD', sample)).rejects.toBeInstanceOf(ThumbnailDecodeError)
+  })
+
+  it('renders a PSD that only has layer pixels, without a saved composite', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'layers-only.psd')
+    const [{ createCanvas }, { initializeCanvas, writePsdBuffer }] = await Promise.all([
+      import('@napi-rs/canvas'),
+      import('ag-psd')
+    ])
+    initializeCanvas(createCanvas as never)
+    const layer = createCanvas(40, 30)
+    const context = layer.getContext('2d')
+    context.fillStyle = '#12a26b'
+    context.fillRect(0, 0, layer.width, layer.height)
+    await writeFile(sample, writePsdBuffer({
+      width: 40,
+      height: 30,
+      children: [{ name: 'layer', canvas: layer as never }]
+    }))
+
+    const jpeg = await createThumbnailJpeg('PSD', sample)
+    const meta = await sharp(jpeg).metadata()
+    expect(meta.format).toBe('jpeg')
+    expect(meta.width).toBe(40)
+    expect(meta.height).toBe(30)
+  })
+
+  it('rejects an AI file that was not saved PDF-compatible', async () => {
+    const root = await tempRoot()
+    const sample = join(root, 'legacy.ai')
+    await writeFile(sample, '%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator\nshowpage\n')
+
+    await expect(createThumbnailJpeg('AI', sample)).rejects.toBeInstanceOf(ThumbnailDecodeError)
   })
 
   it('uses scene-linear tone mapping for HDR and EXR', () => {
