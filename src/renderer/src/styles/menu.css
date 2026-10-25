@@ -94,9 +94,8 @@
    @starting-style 按自身选择器的特异性参与层叠,.settings-menu.show{opacity:1}(0,2,0)
    会盖掉 .settings-menu 里 @starting-style 的 opacity:0(0,1,0),入场就整段丢失。
    实测:起始态写在基础规则时,菜单挂载后 t=69 直接 o=1,零中间帧。
-   也不给基础规则写死 opacity:0 —— 子菜单 .settings-menu-submenu 靠 animation 的
-   fill:both 定格终态,而 glass.css 的 reduced-motion 会把动画整个移除,
-   基础声明写死 0 会让那类用户的子菜单直接隐形。 */
+   也不给基础规则写死 opacity:0 —— 子菜单 .settings-menu-submenu 靠终态声明可见,
+   基础声明写死 0 会让 reduced-motion 用户看不到子菜单。 */
 .settings-menu.show{opacity:1;transform:none;
   @starting-style{opacity:0;transform:translateY(-6px) scale(.98)}}
 .settings-menu.closing{opacity:0;transform:translateY(-6px) scale(.98);pointer-events:none;
@@ -114,7 +113,9 @@
 .settings-menu-parent>.settings-menu-item{flex:1}
 /* top 由 -7px 收到 -1px:子菜单自己没有内边距了(上面那条改成 padding:0),
    原来那 6px 是在补父菜单的内边距,不减掉子菜单首项会比父项高 6px。 */
-.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-1px;box-shadow:0 10px 26px rgba(20,60,120,.18);animation:settings-submenu-in var(--dur-fast) var(--ease-spring) both}
+.settings-menu-submenu{position:absolute;left:calc(100% + 5px);top:-1px;box-shadow:0 10px 26px rgba(20,60,120,.18);opacity:1;transform:none;
+  transition:opacity var(--dur-fast) var(--ease-spring),transform var(--dur-fast) var(--ease-spring);
+  @starting-style{opacity:0;transform:translateX(6px) scale(.98)}}
 .settings-menu-icon{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:10px;color:var(--t2)}
 .settings-menu-icon .ic{width:var(--ic-md);height:var(--ic-md)}
 .settings-menu-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -123,7 +124,5 @@
 /* 这里原有 `.settings-menu-divider`:它带 5px 上下外边距,悬停下方「偏好设置」时
    高亮上方会空出一条暗带,用户要求删掉分组线。下拉菜单的 `.menu .sep` 不受影响。 */
 
-@keyframes settings-submenu-in{from{opacity:0;transform:translateX(6px) scale(.98)}to{opacity:1;transform:none}}
-/* 这里原来有一条 `@media (prefers-reduced-motion:reduce){.settings-menu-submenu{animation-duration:.08s}}`,
-   意图是弱化动效,实际是反的:glass.css 已用 `animation:none!important` 全局移除动画,
-   这一条又把动画拖回 80ms —— 用户明确要求减少动效时反而看到了动效。删掉,交给全局策略。 */
+/* 这里原来有一条 reduced-motion 覆盖,会把全局已移除的动画重新拖回 80ms;
+   子菜单现已改成可中断的 transition,交给 glass.css 的全局策略处理。 */

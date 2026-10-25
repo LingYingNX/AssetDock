@@ -57,7 +57,7 @@
   overflow:hidden;
 }
 
-/* 动效纪律:reduced-motion 全局关动画 */
+/* 减少动效:保留颜色与透明度反馈,移除位移、缩放和循环动画 */
 @media (prefers-reduced-motion:reduce){
-  *{transition:none!important;animation:none!important}
+  *,*::before,*::after{transition-property:color,background-color,border-color,box-shadow,opacity,fill,stroke!important;animation:none!important;scroll-behavior:auto!important}
 }

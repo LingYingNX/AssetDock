@@ -32,7 +32,7 @@
 .sidebar{position:relative;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;width:100%}
 .side-scroll{flex:1;overflow-y:auto;padding:10px 8px 14px}
 .sidebar-resizer{position:absolute;top:0;right:0;bottom:0;z-index:6;width:7px;cursor:col-resize;touch-action:none;outline:none}
-.sidebar-resizer::after{content:"";position:absolute;inset:0 0 0 auto;width:1px;background:var(--line);transition:width var(--dur-fast) var(--ease-out),background-color var(--dur-fast) var(--ease-out)}
+.sidebar-resizer::after{content:"";position:absolute;inset:0 0 0 auto;width:1px;background:var(--line);transition:background-color var(--dur-fast) var(--ease-out)}
 .sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after{background:var(--acc)}
 .sidebar-resizer.dragging::after{width:2px;background:var(--acc)}
 html[data-sidebar-resizing="true"],html[data-sidebar-resizing="true"] *{cursor:col-resize!important;user-select:none}
@@ -44,16 +44,16 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
    而文件夹树并不比其它三组更重要。它额外需要的只是右侧「新建文件夹」按钮的对齐。 */
 .folder-section-title{flex:1;min-width:0}
 .side-title .ic{width:var(--ic-md);height:var(--ic-md)}
-.side-title-add{display:grid;place-items:center;width:var(--h-xs);height:var(--h-xs);margin-left:auto;border-radius:var(--r-xs);color:var(--t3)}
+.side-title-add{display:grid;place-items:center;width:var(--h-xs);height:var(--h-xs);margin-left:auto;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-title-add:hover{color:var(--t1);background:var(--bg3)}
 .side-title-add .ic{width:var(--ic-sm);height:var(--ic-sm)}
-.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 10px;border-radius:var(--r-md);color:var(--t2);font-size:var(--fs-body);text-align:left;position:relative;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 10px;border-radius:var(--r-md);color:var(--t2);font-size:var(--fs-body);text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .nav-item:hover{background:var(--bg3);color:var(--t1)}
 /* 左缘指示条:两态都常驻、只切换 scaleX,才能与背景同步过渡;
    若仅在 .on 上创建伪元素,切换时是凭空出现而非展开,过渡不会播放 */
-.nav-item::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--acc);transform:scaleX(0);transform-origin:left center;transition:transform var(--dur-press) var(--ease-out)}
+.nav-item::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--acc);opacity:0;transform:scaleX(.94);transform-origin:left center;transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
-.nav-item.on::before{transform:scaleX(1)}
+.nav-item.on::before{opacity:1;transform:scaleX(1)}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
 .nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
@@ -63,7 +63,7 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .nav-item .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);flex:none;transition:transform var(--dur-press) var(--ease-out)}
 .nav-item.exp .chev{transform:rotate(90deg)}
 .nav-tree{margin-left:14px;padding-left:9px;border-left:1px solid var(--line)}
-.side-add{display:flex;align-items:center;gap:9px;height:var(--h-md);padding:0 10px;margin-top:2px;border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body);width:100%}
+.side-add{display:flex;align-items:center;gap:9px;height:var(--h-md);padding:0 10px;margin-top:2px;border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body);width:100%;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-add:hover{color:var(--t1);background:var(--bg3)}
 .side-add .ic{width:var(--ic-md);height:var(--ic-md)}
 .folder-edit{cursor:text;padding-right:6px}
@@ -85,7 +85,7 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-toggle,.folder-arrow-spacer{flex:none;height:var(--h-md)}
 .folder-toggle,.folder-arrow-spacer{width:16px}
 /* 命中区左右各外扩 4px,但净占位仍是 16px;负外边距避免箭头推走文件夹图标。 */
-.folder-toggle{width:24px;margin:0 -4px;display:grid;place-items:center;border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.folder-toggle{width:24px;margin:0 -4px;display:grid;place-items:center;border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .folder-toggle:hover{background:none;color:var(--t1)}
 /* 展开箭头比同排图标大 20%、描边粗 15%;只改这只箭头,不放大整行图标。 */
 .folder-toggle .ic{width:19.2px;height:19.2px;stroke-width:1.955;transform:translateX(-2px);transition:transform var(--dur-press) var(--ease-out)}

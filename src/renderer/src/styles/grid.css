@@ -103,6 +103,9 @@
 .cube3d i:nth-child(6){background:linear-gradient(135deg,rgba(4,26,66,.72),rgba(2,14,38,.82));transform:rotateX(-90deg) translateZ(var(--h))}
 .c3d-wrap::after{content:"";position:absolute;left:50%;bottom:14%;width:52%;height:9%;transform:translateX(-50%);background:radial-gradient(50% 50% at 50% 50%,rgba(12,48,100,.3),transparent 72%)}
 .cube3d.static{animation:none}
+/* 卡片里的占位立方体只在该卡悬停或聚焦时转;灯箱舞台没有 .thumb 包裹,继续常转 */
+.thumb .cube3d{animation-play-state:paused}
+.card:hover .thumb .cube3d,.card:focus-within .thumb .cube3d{animation-play-state:running}
 @keyframes turnY{from{transform:rotateX(-24deg) rotateY(0deg)}to{transform:rotateX(-24deg) rotateY(360deg)}}
 
 /* 信息区往下让一让:缩略图与文字贴在一起时,眼睛分不清哪行属于哪张卡 */
