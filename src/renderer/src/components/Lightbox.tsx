@@ -169,7 +169,8 @@ export function Lightbox(): React.JSX.Element | null {
   const aiRequired = a?.format === 'AI'
   const blendRequired = a?.format === 'BLEND'
   const c4dRequired = a?.format === 'C4D'
-  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired
+  const imagePreviewRequired = a?.format === 'PSD' || a?.format === 'HEIC'
+  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired || imagePreviewRequired
   const rawVideoSrc = isVideo && a ? (a.dbId != null ? a.originalUrl ?? '' : `/@fs/${a.previewUrl ?? ''}`) : ''
   const sourceVideo = rawVideoSrc
     ? `${rawVideoSrc}${rawVideoSrc.includes('?') ? '&' : '?'}lightbox=1&session=${videoEpoch}`
@@ -204,6 +205,8 @@ export function Lightbox(): React.JSX.Element | null {
       } else if (result.kind === 'video') {
         setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
       } else if (result.kind === 'three') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
+      } else if (result.kind === 'image') {
         setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
       } else if (result.kind === 'pdf') {
         setPreparedMedia({ id: a.id, url: result.url, pages: result.pages })
@@ -370,6 +373,8 @@ export function Lightbox(): React.JSX.Element | null {
     : ''
   const imageViewUrl = a.format === 'AI'
     ? aiPageUrl
+    : (a.format === 'PSD' || a.format === 'HEIC') && prepared?.url
+      ? prepared.url
     : directImage
       ? a.originalUrl ?? ''
       : a.previewUrl ?? ''

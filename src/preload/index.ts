@@ -55,6 +55,7 @@ const api = {
       | { kind: 'native' }
       | { kind: 'video'; url: string }
       | { kind: 'three'; url: string }
+      | { kind: 'image'; url: string }
       | { kind: 'pdf'; url: string; pages: number }
       | { kind: 'external'; tool: 'cinema4d'; message: string }
       | { error: string }

@@ -133,12 +133,32 @@ async function decodePdf(absPath: string): Promise<Buffer> {
   return (await renderPdfPagePng(absPath)).png
 }
 
-async function decodeVideo(absPath: string): Promise<Buffer> {
+/**
+ * 解码器可注入版本只服务于路由测试:生产调用始终走默认实现,
+ * 这样能断言“原生失败后才启动 ffmpeg”的顺序,又不用伪造子进程。
+ */
+export interface ThumbnailDecoders {
+  sharp: (absPath: string) => Promise<Buffer>
+  heic: (absPath: string) => Promise<Buffer>
+  psd: (absPath: string) => Promise<Buffer>
+  pdf: (absPath: string) => Promise<Buffer>
+  ffmpeg: (absPath: string, filter: string, keyframeOnly?: boolean) => Promise<Buffer>
+}
+
+const defaultDecoders: ThumbnailDecoders = {
+  sharp: decodeSharp,
+  heic: decodeHeic,
+  psd: decodePsd,
+  pdf: decodePdf,
+  ffmpeg: ffmpegPng
+}
+
+async function decodeVideo(absPath: string, ffmpeg: ThumbnailDecoders['ffmpeg']): Promise<Buffer> {
   try {
-    return await ffmpegPng(absPath, SCALE_FILTER, true)
+    return await ffmpeg(absPath, SCALE_FILTER, true)
   } catch (error) {
     if (error instanceof ThumbnailDecodeError && error.kind === 'timeout') throw error
-    return ffmpegPng(absPath, SCALE_FILTER)
+    return ffmpeg(absPath, SCALE_FILTER)
   }
 }
 
@@ -147,6 +167,15 @@ async function decodeVideo(absPath: string): Promise<Buffer> {
  * Callers still run sharp afterwards, so output is always the 640px JPEG contract.
  */
 export async function decodeThumbnailSource(format: AssetFormat, absPath: string): Promise<Buffer> {
+  return decodeThumbnailSourceWith(format, absPath, defaultDecoders)
+}
+
+/** 按注册表顺序解码;前一级失败即继续下一级,最终由调用方写失败占位。 */
+export async function decodeThumbnailSourceWith(
+  format: AssetFormat,
+  absPath: string,
+  decoders: ThumbnailDecoders
+): Promise<Buffer> {
   const spec = formatSpec(format)
   if (!spec) throw new ThumbnailDecodeError(`unknown format: ${format}`, 'unsupported')
   const file = await stat(absPath).catch(() => null)
@@ -160,24 +189,24 @@ export async function decodeThumbnailSource(format: AssetFormat, absPath: string
     }
     if (spec.thumbnail === 'sharp') {
       try {
-        return await decodeSharp(absPath)
+        return await decoders.sharp(absPath)
       } catch {
-        return await ffmpegPng(absPath, SCALE_FILTER)
+        return await decoders.ffmpeg(absPath, SCALE_FILTER)
       }
     }
     if (spec.thumbnail === 'heic') {
       try {
-        return await decodeHeic(absPath)
+        return await decoders.heic(absPath)
       } catch {
-        return await ffmpegPng(absPath, SCALE_FILTER)
+        return await decoders.ffmpeg(absPath, SCALE_FILTER)
       }
     }
-    if (spec.thumbnail === 'psd') return await decodePsd(absPath)
-    if (spec.thumbnail === 'pdf') return await decodePdf(absPath)
+    if (spec.thumbnail === 'psd') return await decoders.psd(absPath)
+    if (spec.thumbnail === 'pdf') return await decoders.pdf(absPath)
     if (spec.thumbnail === 'ffmpeg') {
-      if (spec.type === 'video') return await decodeVideo(absPath)
-      if (format === 'HDR' || format === 'EXR') return await ffmpegPng(absPath, hdrToneMapFilter())
-      return await ffmpegPng(absPath, SCALE_FILTER)
+      if (spec.type === 'video') return await decodeVideo(absPath, decoders.ffmpeg)
+      if (format === 'HDR' || format === 'EXR') return await decoders.ffmpeg(absPath, hdrToneMapFilter())
+      return await decoders.ffmpeg(absPath, SCALE_FILTER)
     }
   } catch (error) {
     if (error instanceof ThumbnailDecodeError || error instanceof MediaProcessError) throw mapProcessError(error)

@@ -40,6 +40,8 @@ export interface TranscodeOptions {
   duration?: number | null
   signal?: AbortSignal
   onProgress?: (percent: number | null) => void
+  /** 仅用于边界测试;生产默认 10 分钟。 */
+  timeoutMs?: number
 }
 
 export function ensureTranscodedVideo(
@@ -61,7 +63,7 @@ export function ensureTranscodedVideo(
     let lastPct = -1
     await writeMediaFileAtomically(target, async (tempPath) => {
       await runFfmpeg(transcodeArgs(absPath, tempPath), {
-        timeoutMs: 10 * 60_000,
+        timeoutMs: options.timeoutMs ?? 10 * 60_000,
         maxOutputBytes: 8 * 1024 * 1024,
         signal: options.signal,
         onStderr: (chunk) => {

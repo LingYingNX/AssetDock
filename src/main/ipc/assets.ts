@@ -25,6 +25,7 @@ import { needsVideoTranscode } from '../../shared/formats'
 import { realPathWithinRoot } from '../services/libResolve'
 import { ensureTranscodedVideo } from '../services/transcode'
 import { ensureBlendPreview } from '../services/externalPreview'
+import { ensureImagePreview } from '../services/imagePreview'
 import { configuredToolPath, probeTool, type ExternalToolKey } from '../services/externalTools'
 import { countPdfPages } from '../services/aiPreview'
 
@@ -236,6 +237,15 @@ export function registerAssetsIpc(): void {
           message: tool.available
             ? 'Cinema 4D 可用；该版本需从外部窗口打开或渲染'
             : `Cinema 4D 不可用：${tool.error ?? '未安装或未配置路径'}`
+        }
+      }
+      if (row.format === 'PSD' || row.format === 'HEIC') {
+        try {
+          await ensureImagePreview(s.libPath, realPath, row.fingerprint, row.format)
+          const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?imagePreview=1&v=${encodeURIComponent(row.fingerprint)}`
+          return { kind: 'image' as const, url }
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : `${row.format} 预览失败` }
         }
       }
       if (!needsVideoTranscode(row.format)) return { kind: 'native' as const }

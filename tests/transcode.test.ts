@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { access, mkdtemp, rm } from 'node:fs/promises'
+import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
@@ -66,6 +66,29 @@ describe('video transcode cache', () => {
       duration: 0.5,
       signal: controller.signal
     })).rejects.toMatchObject({ kind: 'cancelled' })
+    await expect(access(transcodePath(root, fingerprint))).rejects.toThrow()
+  }, 30_000)
+
+  it('does not leave a usable target when the output directory cannot be written', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-transcode-disk-'))
+    roots.push(root)
+    const source = join(root, 'source.mkv')
+    await writeFile(source, 'not a video')
+    await writeFile(join(root, '.mediahub'), 'blocks the cache directory')
+
+    await expect(ensureTranscodedVideo(root, source, fingerprint, { duration: 0.5 })).rejects.toThrow()
+    await expect(access(transcodePath(root, fingerprint))).rejects.toThrow()
+    expect(await readdir(root)).not.toContain(`${fingerprint}.mp4`)
+  }, 30_000)
+
+  it('removes the partial MP4 when ffmpeg fails before completion', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-transcode-timeout-'))
+    roots.push(root)
+    const source = join(root, 'source.mkv')
+    await writeFile(source, 'not a video')
+
+    await expect(ensureTranscodedVideo(root, source, fingerprint, { duration: 0.5 }))
+      .rejects.toMatchObject({ kind: 'failed' })
     await expect(access(transcodePath(root, fingerprint))).rejects.toThrow()
   }, 30_000)
 
