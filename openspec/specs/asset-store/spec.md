@@ -5,7 +5,7 @@
 ## Requirements
 
 ### Requirement: 数据库 Schema
-应用 SHALL 在用户数据目录维护单个 SQLite 数据库(better-sqlite3),包含 libraries、assets、tags、asset_tags 表;素材记录含库 id、相对路径、类型/格式、尺寸/时长/面数等元数据、大小、mtime、评分、收藏、待审、备注、来源、deletedAt、missing 标记与 palette JSON;路径以 UTF-8 存储,支持中文与空格。
+应用 SHALL 在全局注册库维护 libraries，并在每个库的 `.mediahub/library.db` 维护 assets、tags、asset_tags 表;素材记录含库 id、相对路径、类型/格式、尺寸/时长/面数等元数据、大小、mtime、评分、收藏、待审、备注、来源、deletedAt、missing 标记与 palette JSON;路径以 UTF-8 存储,支持中文与空格。
 
 #### Scenario: 重启数据完整
 - **WHEN** 用户编辑评分/标签/备注/收藏后完全退出并重新启动应用
@@ -43,3 +43,40 @@
 #### Scenario: 清空回收站需确认
 - **WHEN** 用户点击清空回收站并确认
 - **THEN** 回收站内全部记录的数据库行与缩略图缓存被清除,库文件夹中的磁盘文件一个都不少
+
+### Requirement: 格式规范值
+
+素材的 `format` 字段 SHALL 使用规范格式名，不得直接用扩展名大小写或别名作为界面格式。多个扩展名映射同一格式时（如 glTF/GLB、JPG/JPEG、HEIC/HEIF）SHALL 归一存储并保留原始相对路径。
+
+#### Scenario: glTF 归一
+
+- **WHEN** 扫描一个 `.gltf` 文件
+- **THEN** 素材记录的规范格式为三维格式，相对路径仍保留 `.gltf`
+
+#### Scenario: JPEG 归一
+
+- **WHEN** 扫描 `.jpg` 和 `.jpeg`
+- **THEN** 两者都存为 JPG 格式，名称和路径保持原始文件事实
+
+### Requirement: 所有格式共享元数据
+
+任何成功入库的格式 SHALL 使用同一 assets 行和标签关联表保存评级、收藏、待审、备注、来源链接、回收站和文件夹信息。扩展格式 SHALL NOT 创建独立 JSON 元数据文件，也不得把标签或备注写入原始素材文件。
+
+#### Scenario: AI 备注持久化
+
+- **WHEN** 用户给 AI 素材填写备注、来源链接和标签
+- **THEN** 数据写入当前库的 SQLite 表，重启后与 JPG 素材一样恢复
+
+#### Scenario: BLEND 回收站
+
+- **WHEN** 用户把 BLEND 素材移入回收站
+- **THEN** 只更新素材记录的 deletedAt，不修改或移动 `.blend` 原文件
+
+### Requirement: 格式能力状态
+
+格式能力、外部工具依赖和失败原因 SHALL 作为可重建的派生缓存或运行状态保存，不得成为素材元数据的第二权威源。素材文件内容变化后，旧能力状态 SHALL 失效并重新探测。
+
+#### Scenario: 安装 Blender 后
+
+- **WHEN** 用户安装并配置 Blender，此前因缺少工具而占位的 BLEND 文件未变化
+- **THEN** 系统重新探测能力并允许生成新的预览缓存
