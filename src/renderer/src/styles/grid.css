@@ -16,7 +16,7 @@
 .v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:var(--r-sm);flex:none}
 /* 列表视图也要能收藏:原来把 .qa 直接 display:none 掉,行里再无收藏入口。
    保留它,与网格同一套悬停揭示规则。 */
-.v-list .thumb .dur,.v-list .play-big,.v-list .scrub,.v-list .orb{display:none}
+.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
 /* 同一批立方体不该有两种转速:基准 24s,列表视图只改尺寸 */
 .v-list .thumb .cube3d{--cs:30px}
 .v-list figcaption{display:contents;padding:0}
@@ -37,16 +37,14 @@
 .card:hover{border-color:var(--line2)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 78%,rgba(0,0,0,.34));pointer-events:none}
-.thumb img,.thumb video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
-.thumb img.loaded,.thumb video.loaded{opacity:1}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
+.thumb img.loaded{opacity:1}
 /* 超宽素材(1200x172 这类字幕条/长条渲染图):真实比例约 7:1,而缩略图容器最宽是
    瀑布流的 21:9、网格视图的 4:3。cover 在这两个容器里都会把宽度裁到只剩中间一小段
    (4:3 框下只剩约 19% 宽度),画面主体基本全丢。
    contain 会留出上下底色,但画面完整可辨 —— 对本来就是细长条的素材,留白比裁切更接近真相。
    判定写在 Card.tsx(超宽类),因为只有那里同时拿得到 width/height 与视图模式。 */
-.thumb.uw img,.thumb.uw video{object-fit:contain}
-/* 悬浮重播:退到首帧的那一瞬间短暂透明,用 140ms 溶解替掉「尾帧→首帧」的硬切 */
-.thumb video.dip{opacity:0;transition:opacity 140ms var(--ease-out)}
+.thumb.uw img{object-fit:contain}
 /* 渐变占位(设计稿 g-* 类) */
 .g-ocean{background:radial-gradient(circle at 72% 24%,rgba(255,255,255,.35),transparent 38%),linear-gradient(165deg,#5EE7F9 0%,#2E7CF6 48%,#16266B 100%)}
 .g-night{background:radial-gradient(circle at 26% 28%,rgba(148,187,255,.5),transparent 34%),radial-gradient(circle at 78% 72%,rgba(250,204,21,.28),transparent 26%),linear-gradient(180deg,#232C46 0%,#0E1424 78%)}
@@ -74,7 +72,6 @@
 .card.is-selected{border-color:var(--acc);outline:none}
 .card.is-selected:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .marquee{position:fixed;z-index:60;border:1px solid var(--acc);background:rgba(10,132,255,.16);pointer-events:none;transition:opacity 90ms var(--ease-out);@starting-style{opacity:0}}
-.model-card-preview{position:absolute;inset:0;pointer-events:none}
 .asset-drag-preview{position:fixed;left:-10000px;top:-10000px;z-index:-1;width:44px;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid rgba(255,255,255,.9);border-radius:var(--r-sm);background:rgba(20,40,70,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:var(--fs-cap)}
 .asset-drag-icon{position:relative;width:17px;height:13px;border:1.5px solid currentColor;border-radius:2px}
 .asset-drag-icon::before{content:"";position:absolute;left:1px;top:-4px;width:7px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}
@@ -83,7 +80,7 @@
 .card:hover .qa,.card:focus-within .qa{opacity:1;transform:none}
 /* 触屏/无悬停设备没有 .card:hover 可言,浮层按钮必须常显,否则等于没有 */
 @media (hover:none){
-  .qa,.card.video .play-big,.card.video .scrub{opacity:1;transform:none}
+  .qa,.card.video .play-big{opacity:1;transform:none}
 }
 .qa button{width:25px;height:25px;border-radius:var(--r-sm);display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.72);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(4px)}
 .qa button:hover{background:rgba(10,12,16,.88)}
@@ -93,12 +90,6 @@
 .play-big{position:absolute;left:50%;top:50%;z-index:2;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.5);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(5px);opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
 .play-big .ic{width:var(--ic-md);height:var(--ic-md);margin-left:2px}
 .card.video:hover .play-big,.card.video:focus-within .play-big{opacity:1}
-.scrub{position:absolute;left:0;right:0;bottom:0;z-index:2;height:3px;background:rgba(255,255,255,.22);opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
-/* 悬浮时的进度指示读的是视频元素实时 currentTime,不用写死的 38%——
-   固定宽度会让每张视频卡都显示同一条「进度」,是纯粹的错误信息。 */
-.scrub i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--acc);transition:width 120ms linear}
-.card.video:hover .scrub,.card.video:focus-within .scrub{opacity:1}
-
 /* 三维模型:CSS 转台立方体 */
 .c3d-wrap{position:relative;display:grid;place-items:center;perspective:640px}
 .thumb .c3d-wrap{position:absolute;inset:0}

@@ -10,8 +10,6 @@ type PreferenceState = {
   theme: ThemeMode
   autoLaunch: boolean
   closeAction: CloseAction
-  hoverVideo: boolean
-  hoverSound: boolean
   blenderPath: string
   cinema4dPath: string
 }
@@ -22,8 +20,6 @@ const DEFAULT_PREFERENCES: PreferenceState = {
   theme: 'light',
   autoLaunch: false,
   closeAction: 'minimize',
-  hoverVideo: true,
-  hoverSound: false,
   blenderPath: '',
   cinema4dPath: ''
 }
@@ -91,8 +87,6 @@ function readPreferences(raw: string | null): PreferenceState {
       theme: parseTheme(raw),
       autoLaunch: value.autoLaunch === true,
       closeAction: value.closeAction === 'quit' ? 'quit' : 'minimize',
-      hoverVideo: value.hoverVideo !== false,
-      hoverSound: value.hoverSound === true,
       blenderPath: typeof value.blenderPath === 'string' ? value.blenderPath : '',
       cinema4dPath: typeof value.cinema4dPath === 'string' ? value.cinema4dPath : ''
     }
@@ -238,8 +232,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
         savedTheme.current = draft.theme
         writeMirroredTheme(draft.theme)
         if (autoLaunchSupported) void window.windowApi.app.setAutoLaunch(draft.autoLaunch)
-        // 立即同步到运行中的界面,不必重启即可看到音视频偏好生效
-        useUI.getState().setHoverPlayback(draft.hoverVideo, draft.hoverSound)
         close()
       })
       .catch(() => useUI.getState().showToast('保存偏好设置失败,请重试', 'warn'))
@@ -338,19 +330,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
 
   const mediaPane = (
     <>
-      <section className="pref-section">
-        <h2>列表模式悬浮是否自动播放</h2>
-        <div className="pref-row">
-          <Check checked={draft.hoverVideo} label="视频自动播放" onChange={() => setDraft({ ...draft, hoverVideo: !draft.hoverVideo })} />
-        </div>
-      </section>
-      <section className="pref-section">
-        <h2>列表模式是否开启音量</h2>
-        <div className="pref-row">
-          <Choice name="hover-sound" label="静音" checked={!draft.hoverSound} onChange={() => setDraft({ ...draft, hoverSound: false })} />
-          <Choice name="hover-sound" label="开启音量" checked={draft.hoverSound} onChange={() => setDraft({ ...draft, hoverSound: true })} />
-        </div>
-      </section>
       <section className="pref-section">
         <h2>外部预览工具</h2>
         <div className="pref-tool-row">

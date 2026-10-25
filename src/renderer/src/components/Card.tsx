@@ -1,15 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
 import { thumbRatio, MAX_THUMB_AR } from '../data/thumb-ratio'
-import { onceInView } from '../data/viewport'
 import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
-import { LazyViewer3D } from './LazyViewer3D'
-import { DEFAULT_HDR, DEFAULT_HDR_SETTINGS } from '../data/hdr-presets'
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -33,7 +30,6 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const clickCard = useUI((s) => s.clickCard)
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
-  const lightboxId = useUI((s) => s.lightboxId)
   const thumbRevision = useUI((s) => a.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
@@ -44,29 +40,12 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const thumbSrc = a.previewUrl
     ? `${a.previewUrl}${a.previewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
     : ''
+  const hasCardThumb = !(a.deletedAt && (a.type === 'video' || a.type === 'model'))
+  const previewSrc = a.previewUrl && hasCardThumb
+    ? (a.dbId != null ? thumbSrc : `/@fs/${a.previewUrl}`)
+    : ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
-  const [modelFailed, setModelFailed] = useState(false)
-  /** 视频卡悬浮进度:读实时播放进度,避免所有视频卡都画同一条假进度条 */
-  const [progress, setProgress] = useState(0)
-  /** 悬浮重播时的短溶解,替掉尾帧→首帧的硬切 */
-  const [dip, setDip] = useState(false)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const thumbRef = useRef<HTMLDivElement | null>(null)
-  /**
-   * 视频与三维只在卡片进过视口后才挂载：
-   * `<video>` 没有原生的懒加载，三维卡挂载即建 WebGL 上下文，两者都会在
-   * 千级素材库里凭「存在」就吃掉带宽或上下文配额。图片走原生 `loading="lazy"`。
-   */
-  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
-  useEffect(() => {
-    const el = thumbRef.current
-    if (!el) return
-    return onceInView(el, () => setInView(true))
-  }, [])
-  // 列表/网格悬浮自动播放偏好(设置 → 音视频);默认开启,静音默认开启
-  const hoverVideo = useUI((s) => s.hoverVideo)
-  const hoverSound = useUI((s) => s.hoverSound)
 
   const cls = [
     'card',
@@ -146,28 +125,6 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         openLightbox(a.id)
       }}
       onFocus={() => setFocusedCard(a.id)}
-      onMouseEnter={() => {
-        // 悬浮自动播放:仅在偏好开启且为视频时启动。
-        // 进入前先退回首帧并淡化,否则从尾帧硬切到第 0 帧会闪一下。
-        const v = videoRef.current
-        if (!v || !hoverVideo) return
-        // 先落到底再抬起透明度:从上一轮的尾帧跳到第 0 帧是硬切,
-        // 借 140ms 的透明度回落做一次溶解,替掉那一帧突跳。
-        setDip(true)
-        v.currentTime = 0
-        void v.play().catch(() => { /* 自动播放被拦截时保持首帧 */ })
-        window.requestAnimationFrame(() =>
-          window.requestAnimationFrame(() => setDip(false))
-        )
-      }}
-      onMouseLeave={() => {
-        const v = videoRef.current
-        if (!v) return
-        // 离开即复位:暂停并把播放头退回首帧,下次进入仍从开头播
-        v.pause()
-        v.currentTime = 0
-        setProgress(0)
-      }}
       onContextMenu={(e) => {
         e.preventDefault()
         // 右键先选中被点的素材：已在选区内则保留整组(菜单仍作用于整组)，
@@ -180,32 +137,11 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         className={`thumb${a.thumbClass ? ` ${a.thumbClass}` : ''}${ultraWide ? ' uw' : ''}`}
         style={ar ? ({ ['--ar' as string]: ar } as React.CSSProperties) : undefined}
         role="img"
-        ref={thumbRef}
         aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : '图片'}缩略图:${a.name}`}
       >
-        {a.type === 'model' && a.dbId == null ? (
-          inView && lightboxId !== a.id ? (
-            <div className="c3d-wrap">
-              <Cube3D cs="58px" />
-            </div>
-          ) : null
-        ) : a.type === 'model' && a.originalUrl && !modelFailed &&
-          ['GLB', 'FBX', 'OBJ'].includes(a.format) ? (
-          inView && lightboxId !== a.id ? (
-            <div className="model-card-preview">
-              <LazyViewer3D
-                url={a.originalUrl}
-                format={a.format as 'GLB' | 'FBX' | 'OBJ'}
-                shade="render"
-                hdr={DEFAULT_HDR}
-                hdrSettings={DEFAULT_HDR_SETTINGS}
-                onError={() => setModelFailed(true)}
-              />
-            </div>
-          ) : null
-        ) : a.type === 'model' && a.previewUrl ? (
+        {previewSrc ? (
           <img
-            src={thumbSrc}
+            src={previewSrc}
             alt={a.name}
             loading="lazy"
             decoding="async"
@@ -213,61 +149,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
             onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
             draggable={false}
           />
-        ) : a.dbId != null && (a.type === 'image' || a.type === 'style') ? (
-          <img
-            src={thumbSrc}
-            alt={a.name}
-            loading="lazy"
-            decoding="async"
-            className={imgLoaded ? 'loaded' : ''}
-            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-            draggable={false}
-          />
-        ) : a.dbId != null && isVideo ? (
-          inView && lightboxId !== a.id ? (
-            <video
-              ref={videoRef}
-              /* 视频必须读原图:previewUrl 指向缩略图缓存,不能用于解码播帧 */
-              src={a.originalUrl}
-              poster={a.previewUrl ? thumbSrc : undefined}
-              muted={hoverSound !== true}
-              /* 只预载元数据:挂载时取头部拿到首帧即可,整片留给悬浮播放与灯箱 */
-              preload="metadata"
-              className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
-              onLoadedData={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-              onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-              onTimeUpdate={(e) => {
-                const v = e.currentTarget
-                if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
-              }}
-            />
-          ) : null
-        ) : a.previewUrl && (a.type === 'image' || a.type === 'style') ? (
-          <img
-            src={`/@fs/${a.previewUrl}`}
-            alt={a.name}
-            loading="lazy"
-            decoding="async"
-            className={imgLoaded ? 'loaded' : ''}
-            onLoad={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-            draggable={false}
-          />
-        ) : a.previewUrl && isVideo ? (
-          inView && lightboxId !== a.id ? (
-            <video
-              ref={videoRef}
-              src={`/@fs/${a.previewUrl}`}
-              poster={a.previewUrl ? thumbSrc : undefined}
-              muted={hoverSound !== true}
-              preload="metadata"
-              className={`${imgLoaded ? 'loaded' : ''}${dip ? ' dip' : ''}`}
-              onLoadedMetadata={() => { setImgLoaded(true); markPreviewDecoded(previewKey) }}
-              onTimeUpdate={(e) => {
-                const v = e.currentTarget
-                if (v.duration > 0) setProgress((v.currentTime / v.duration) * 100)
-              }}
-            />
-          ) : null
+        ) : a.type === 'model' ? (
+          <div className="c3d-wrap">
+            <Cube3D cs="58px" />
+          </div>
         ) : null}
 
         <div className="qa">
@@ -283,10 +168,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           </button>
         </div>
         {isVideo && (
-          <>
-            <span className="play-big"><Icon name="play" /></span>
-            <div className="scrub"><i style={{ width: `${progress}%` }} /></div>
-          </>
+          <span className="play-big"><Icon name="play" /></span>
         )}
         <span className="type-chip">
           {FORMAT_DOT[a.format] ? (
