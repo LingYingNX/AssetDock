@@ -80,7 +80,7 @@ PSD/HEIC 的灯箱大图不复用卡片的 640px 缓存：首次打开按需解�
 - HEIC 之外的 HEIF 容器变体（多 `hevc` item、缺少缩略图 item 等）没有独立样本，本机只有同一个 libheif 样本。
 - C4D 有效工程文件：本机无可用授权，无法产生真实预览缓存。
 - PMX 引用**日文纹理文件名**：已验证日文模型名与日文目录，样本贴图名仍是 ASCII（`eyeM2.bmp`）。
-- 三维 20 秒加载超时未由真实样本触发（所有样本都在限制内加载完成），上限分支由代码与体积用例覆盖。
+- 三维 20 秒加载超时:隔离实例中把 GLB 请求替换为永不落地的 fetch,逐秒采样显示 19.6s 仍在加载、20.6s 转为「3D 模型加载失败」;解除拦截后同一文件可正常重开。
 - 缩略图失败类别的 `timeout` 分类没有真实样本：已实测 `corrupt`（`broken.psd`、`broken.exr`、`bad.ai`、`bad.mkv`、`broken-model.pmx`）与 `missing-tool`（`scene.blend`、`scene.c4d`）。
 - 视频转码超时未单独用超长视频触发；`runFfmpeg` 的超时终止有单元测试（`tests/ffmpeg.test.ts`），转码层复用同一封装。取消、磁盘失败、分辨率上限分别有测试与实测。
 
