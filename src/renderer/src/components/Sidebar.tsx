@@ -3,6 +3,7 @@ import { useUI } from '../store/ui'
 import { fmtCount, sidebarCounts } from '../data/query'
 import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
 import { type FolderPlacement, canDropFolder, folderDropClass, folderDropPlacement } from '../data/folder-drag'
+import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '../data/sidebar-width'
 import { Icon } from './Icons'
 
 interface DirNode {
@@ -174,15 +175,18 @@ function DirTree({
         return (
           <div key={n.path}>
             {editingPath === n.path ? (
-              <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 22px))` }}>
-                <Icon name="folder" />
-                <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
-                <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
+              <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 16px))` }}>
+                <span className="folder-arrow-spacer" aria-hidden="true" />
+                <div className="folder-main">
+                  <Icon name="folder" />
+                  <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
+                  <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
+                </div>
               </div>
             ) : (
               <div
                 className={`nav-item folder-row${on ? ' on' : ''}${n.children.length > 0 ? ' has-children' : ''}`}
-                style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 22px))`, '--folder-depth': depth } as React.CSSProperties}
+                style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 16px))` }}
                 draggable={n.movable}
                 onDragStart={(event) => {
                   if (!n.movable) return
@@ -218,7 +222,7 @@ function DirTree({
                 }}
                 data-folder-path={n.path}
               >
-                {n.children.length > 0 && (
+                {n.children.length > 0 ? (
                   <button
                     className={`folder-toggle${collapsed ? '' : ' open'}`}
                     title={collapsed ? '展开子文件夹' : '收起子文件夹'}
@@ -231,6 +235,8 @@ function DirTree({
                   >
                     <Icon name="chev-r" />
                   </button>
+                ) : (
+                  <span className="folder-arrow-spacer" aria-hidden="true" />
                 )}
                 <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
                   <Icon name="folder" />
@@ -266,6 +272,107 @@ function DirTree({
         )
       })}
     </>
+  )
+}
+
+function SidebarResizer(): React.JSX.Element {
+  const sideWidth = useUI((s) => s.sideWidth)
+  const setSideWidth = useUI((s) => s.setSideWidth)
+  const [resizing, setResizing] = useState(false)
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => {
+    cleanupRef.current?.()
+    delete document.documentElement.dataset.sidebarResizing
+  }, [])
+
+  return (
+    <div
+      className={`sidebar-resizer${resizing ? ' dragging' : ''}`}
+      role="separator"
+      aria-label="调整侧边栏宽度"
+      aria-orientation="vertical"
+      aria-valuemin={SIDEBAR_MIN}
+      aria-valuemax={SIDEBAR_MAX}
+      aria-valuenow={sideWidth}
+      tabIndex={0}
+      title="拖拽调整侧边栏宽度"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        cleanupRef.current?.()
+
+        const element = event.currentTarget
+        const layout = element.closest('.layout') as HTMLElement | null
+        if (!layout) return
+
+        const pointerId = event.pointerId
+        const startX = event.clientX
+        const startWidth = useUI.getState().sideWidth
+        let latestX = startX
+        let frame = 0
+        let active = true
+
+        const paint = (): void => {
+          frame = 0
+          if (!active) return
+          const width = clampSidebarWidth(startWidth + latestX - startX)
+          layout.style.setProperty('--rail-nav', `${width}px`)
+          element.setAttribute('aria-valuenow', String(width))
+        }
+        const onPointerMove = (move: PointerEvent): void => {
+          if (move.pointerId !== pointerId) return
+          latestX = move.clientX
+          if (!frame) frame = requestAnimationFrame(paint)
+        }
+        const cleanup = (): void => {
+          if (!active) return
+          active = false
+          window.removeEventListener('pointermove', onPointerMove, true)
+          window.removeEventListener('pointerup', onPointerUp, true)
+          window.removeEventListener('pointercancel', onPointerCancel, true)
+          window.removeEventListener('blur', onBlur)
+          window.removeEventListener('keydown', onKeyDown, true)
+          if (frame) cancelAnimationFrame(frame)
+          cleanupRef.current = null
+        }
+        const finish = (): void => {
+          if (!active) return
+          const width = clampSidebarWidth(startWidth + latestX - startX)
+          layout.style.setProperty('--rail-nav', `${width}px`)
+          element.setAttribute('aria-valuenow', String(width))
+          cleanup()
+          setResizing(false)
+          delete document.documentElement.dataset.sidebarResizing
+          setSideWidth(width)
+        }
+        const onPointerUp = (up: PointerEvent): void => {
+          if (up.pointerId === pointerId) finish()
+        }
+        const onPointerCancel = (cancel: PointerEvent): void => {
+          if (cancel.pointerId === pointerId) finish()
+        }
+        const onBlur = (): void => finish()
+        const onKeyDown = (key: KeyboardEvent): void => {
+          if (key.key === 'Escape') finish()
+        }
+
+        cleanupRef.current = cleanup
+        window.addEventListener('pointermove', onPointerMove, true)
+        window.addEventListener('pointerup', onPointerUp, true)
+        window.addEventListener('pointercancel', onPointerCancel, true)
+        window.addEventListener('blur', onBlur)
+        window.addEventListener('keydown', onKeyDown, true)
+        setResizing(true)
+        document.documentElement.dataset.sidebarResizing = 'true'
+      }}
+      onKeyDown={(event) => {
+        const delta = event.key === 'ArrowLeft' ? -8 : event.key === 'ArrowRight' ? 8 : 0
+        if (delta === 0) return
+        event.preventDefault()
+        setSideWidth(clampSidebarWidth(useUI.getState().sideWidth + delta))
+      }}
+    />
   )
 }
 
@@ -456,6 +563,7 @@ export function Sidebar(): React.JSX.Element {
           <button className="side-add"><Icon name="edit" />管理标签</button>
         </section>
       </div>
+      <SidebarResizer />
     </aside>
   )
 }

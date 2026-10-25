@@ -28,6 +28,7 @@ export default function App(): React.JSX.Element {
    * 一格、选中集每次变化，整棵组件树都要重渲染一次。动作一律用 `useUI.getState()` 现取。
    */
   const colw = useUI((s) => s.colw)
+  const sideWidth = useUI((s) => s.sideWidth)
   const inspHidden = useUI((s) => s.inspHidden)
 
   /* 启动引导:恢复库标签/激活态,加载数据;订阅主进程事件 */
@@ -232,7 +233,10 @@ export default function App(): React.JSX.Element {
       {/* 折叠检查器时不要卸载它:它一旦从 DOM 消失,列宽的过渡就没有对手可动画,
           只会看到内容凭空消失、布局瞬间重排。让它留在 DOM 里,由 .layout 的
           grid-template-columns 过渡把它推到 0 宽,再由 overflow:hidden 裁掉。 */}
-      <div className={`layout${inspHidden ? ' insp-hidden' : ''}`}>
+      <div
+        className={`layout${inspHidden ? ' insp-hidden' : ''}`}
+        style={{ '--rail-nav': `${sideWidth}px` } as React.CSSProperties}
+      >
         <Sidebar />
         <main className="content">
           <FilterBar />

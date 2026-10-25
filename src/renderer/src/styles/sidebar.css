@@ -2,7 +2,7 @@
 /* 只过渡列轨道:.insp-hidden 会改列宽,过渡本体就是列宽变化。
    轨道值走到 0 之后面板被 overflow:hidden 完全裁掉,连 1px 边框都不剩
    所以这里不需要再叠 display:none,那个不可过渡的整值切换正是原来硬跳的原因。
-   侧栏不参与折叠:它是常驻导航,没有收起态,也不写进 uiPrefs。 */
+   侧栏不参与折叠:它是常驻导航,没有收起态,只持久化用户调整的宽度。 */
 /* 两条侧轨的宽度走自定义属性:窄窗下由一条媒体查询统一收窄,不必重写整条轨道声明。
    桌面基准宽度下仍是 236 / 304,与设计稿一致。 */
 .layout{
@@ -17,7 +17,7 @@
 /* 设计基准 1920×1080 以下:侧栏与检查器各收窄一档,把宽度让给素材网格。
    两条轨道加起来的缩减量(80px)正是筛选条右端那组控件在最窄处需要的空间。 */
 @media (max-width:1439px){
-  .layout{--rail-nav:200px;--rail-insp:268px}
+  .layout{--rail-insp:268px}
 }
 /* min-width:0 才能让检查器轨道真的收到 0(否则 min-content 顶住);面板自身 width:100%
    跟随轨道收缩,内部内容按原宽度被裁切,而不是在收缩过程中被挤变形。 */
@@ -29,8 +29,14 @@
    是多余的:glass.css:51 的 `*{transition:none!important}` 已经覆盖所有元素,
    局部再写一遍只会让人以为全局策略不存在。 */
 /* ---------- 侧栏 ---------- */
-.sidebar{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;width:100%}
+.sidebar{position:relative;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;width:100%}
 .side-scroll{flex:1;overflow-y:auto;padding:10px 8px 14px}
+.sidebar-resizer{position:absolute;top:0;right:0;bottom:0;z-index:6;width:7px;cursor:col-resize;touch-action:none;outline:none}
+.sidebar-resizer::after{content:"";position:absolute;inset:0 0 0 auto;width:1px;background:var(--line);transition:width var(--dur-fast) var(--ease-out),background-color var(--dur-fast) var(--ease-out)}
+.sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after{background:var(--acc)}
+.sidebar-resizer.dragging::after{width:2px;background:var(--acc)}
+html[data-sidebar-resizing="true"],html[data-sidebar-resizing="true"] *{cursor:col-resize!important;user-select:none}
+html[data-sidebar-resizing="true"] .layout{transition:none}
 .side-sec{margin-bottom:14px}
 .side-title{display:flex;align-items:center;gap:9px;padding:0 10px 6px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.06em;color:var(--t3)}
 .side-title-label{display:flex;align-items:center;gap:9px}
@@ -61,8 +67,9 @@
 .side-add:hover{color:var(--t1);background:var(--bg3)}
 .side-add .ic{width:var(--ic-md);height:var(--ic-md)}
 .folder-edit{cursor:text;padding-right:6px}
-.folder-edit>.ic{margin-left:24px}
 .folder-row{cursor:default;padding-right:6px;border-radius:var(--r-xs)}
+.folder-row:not(.on):hover{background:none;color:var(--t2)}
+.folder-row,.folder-edit{gap:0}
 .folder-row[draggable="true"]{cursor:grab}
 .folder-row[draggable="true"]:active{cursor:grabbing}
 .folder-row.on::before{display:none}
@@ -73,15 +80,16 @@
 .folder-row.folder-drop-before::after,.folder-row.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;height:3px;border-radius:2px;background:var(--acc);box-shadow:0 0 0 1px rgba(255,255,255,.72);z-index:2;pointer-events:none}
 .folder-row.folder-drop-before::after{top:-1px}
 .folder-row.folder-drop-after::after{bottom:-1px}
-/* 展开箭头:占满整行高度并给足宽度,高频点按目标不能要求精确瞄准。
-   层级步进必须 ≥ 箭头宽度,否则深层箭头会压住浅层箭头与该层文字。 */
-.folder-toggle{position:absolute;z-index:2;left:calc(var(--folder-indent, 10px) + var(--folder-depth, 0) * var(--folder-step, 22px));top:0;display:grid;place-items:center;width:24px;height:var(--h-md);border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
-.folder-toggle:hover{background:var(--bg3);color:var(--t1)}
-/* 直接给足尺寸,不用 scale 放大——缩放会把描边一起放大,与同行其它图标重量不一致 */
-.folder-toggle .ic{width:var(--ic-md);height:var(--ic-md);transform:rotate(0deg);transition:transform var(--dur-press) var(--ease-out)}
-.folder-toggle.open .ic{transform:rotate(90deg)}
-/* 文字起点统一让开箭头宽度:缩进只表达层级,不表达有无子节点 */
-.folder-row .folder-main{margin-left:24px}
+/* 每行固定为 16px 箭头槽 + 文件夹图标 + 文字。叶子与编辑态用同宽占位,
+   层级步进同为 16px,让子级箭头与父级文件夹图标同轴,整棵树不再逐层右漂。 */
+.folder-toggle,.folder-arrow-spacer{flex:none;height:var(--h-md)}
+.folder-toggle,.folder-arrow-spacer{width:16px}
+/* 命中区左右各外扩 4px,但净占位仍是 16px;负外边距避免箭头推走文件夹图标。 */
+.folder-toggle{width:24px;margin:0 -4px;display:grid;place-items:center;border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:background-color var(--dur-press) var(--ease-out),color var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.folder-toggle:hover{background:none;color:var(--t1)}
+/* 展开箭头比同排图标大 20%、描边粗 15%;只改这只箭头,不放大整行图标。 */
+.folder-toggle .ic{width:19.2px;height:19.2px;stroke-width:1.955;transform:translateX(-2px);transition:transform var(--dur-press) var(--ease-out)}
+.folder-toggle.open .ic{transform:translateX(-2px) rotate(90deg)}
 .folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
 .folder-main:hover{background:none}
 .folder-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
