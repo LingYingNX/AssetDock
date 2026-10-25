@@ -160,6 +160,27 @@ describe('UI store', () => {
     await vi.waitFor(() => expect(reload).toHaveBeenCalled())
   })
 
+  it('rejects a same-name folder move without touching the tree or IPC', async () => {
+    const move = vi.fn()
+    const toasts: string[] = []
+    vi.stubGlobal('window', { setTimeout, clearTimeout, windowApi: { folders: { move } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
+      activeTabId: 'library-1',
+      folderPaths: ['source', 'target', 'target/source'],
+      physicalFolderPaths: ['source', 'target', 'target/source'],
+      assets: [],
+      showToast: (text: string) => toasts.push(text)
+    })
+
+    useUI.getState().moveFolder('source', 'target', 'inside')
+
+    expect(useUI.getState().folderPaths).toEqual(['source', 'target', 'target/source'])
+    expect(toasts).toEqual(['目标位置已有同名文件夹'])
+    expect(move).not.toHaveBeenCalled()
+  })
+
   it('shows the storage fallback warning after creating a library', async () => {
     const toasts: string[] = []
     vi.stubGlobal('window', {

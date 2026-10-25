@@ -108,7 +108,13 @@ export function watchLibrary(db: Database, libraryId: number, root: string, cb: 
       const relPath = path.slice(root.length + 1).replace(/\\/g, '/')
       if (setAssetMissing(db, libraryId, relPath, true)) cb.onMissing(relPath)
     }))
-    .on('addDir', (path: string) => { if (path !== root) cb.onChanged(null) })
-    .on('unlinkDir', (path: string) => { if (path !== root) cb.onChanged(null) })
+    // 文件夹改名会让 chokidar 成串发出 addDir/unlinkDir。逐条退全量刷新会让
+    // 目录树和素材网格连续重排,表现为拖动后整窗上下闪;同一库的目录事件合并成一次。
+    .on('addDir', (path: string) => {
+      if (path !== root) debounced(`dirs:${libraryId}`, () => cb.onChanged(null))
+    })
+    .on('unlinkDir', (path: string) => {
+      if (path !== root) debounced(`dirs:${libraryId}`, () => cb.onChanged(null))
+    })
   return watcher
 }

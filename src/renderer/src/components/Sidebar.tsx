@@ -48,6 +48,21 @@ function folderDragPreview(source: HTMLElement, label: string): HTMLDivElement {
   return preview
 }
 
+function pressFolder(element: HTMLElement): void {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const parts = [element.querySelector('.folder-main > .ic'), element.querySelector('.folder-label')]
+  for (const part of parts) {
+    part?.animate(
+      [
+        { transform: 'scale(1)' },
+        { transform: 'scale(.94)' },
+        { transform: 'scale(1)' }
+      ],
+      { duration: 160, easing: 'ease-out' }
+    )
+  }
+}
+
 /** 库模式:只用真实目录建树,素材路径仅用于节点计数 */
 function buildDirTree(paths: string[], assets: { folders: string[]; missing?: boolean; deletedAt?: string }[], movablePaths: Set<string>): DirNode[] {
   const counts = new Map<string, number>()
@@ -238,7 +253,14 @@ function DirTree({
                 ) : (
                   <span className="folder-arrow-spacer" aria-hidden="true" />
                 )}
-                <button className="folder-main" onClick={() => setNav(key as never)} title={n.label}>
+                <button
+                  className="folder-main"
+                  onClick={(event) => {
+                    pressFolder(event.currentTarget)
+                    setNav(key as never)
+                  }}
+                  title={n.label}
+                >
                   <Icon name="folder" />
                   <span className="folder-label">{n.label}</span>
                   <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>

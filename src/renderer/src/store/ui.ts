@@ -691,6 +691,10 @@ export const useUI = create<UIState>((set, get) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
       const optimistic = optimisticFolderMove(get().folderPaths, source, target, placement)
+      if (optimistic.conflict) {
+        get().showToast('目标位置已有同名文件夹', 'warn')
+        return
+      }
       set((s) => ({
         folderPaths: optimistic.paths,
         physicalFolderPaths: optimistic.paths,

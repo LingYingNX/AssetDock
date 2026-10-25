@@ -68,8 +68,9 @@ export function Grid(): React.JSX.Element {
     [assets, nav, search, filters, stripColor]
   )
 
-  // colw 不进 resetKey:拖列宽滑块只该重排列,不该把滚动位置打回顶部
-  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${stripColor}|${view}|${list.length}`
+  // colw 与结果数量都不进 resetKey:拖列宽、后台重扫或移动文件夹都可能改变数量,
+  // 但用户没有换视图;此时归顶会让整个网格闪一下。只有导航/搜索/筛选/视图变化才回顶部。
+  const resetKey = `${nav}|${search}|${JSON.stringify(filters)}|${stripColor}|${view}`
   useEffect(() => {
     wrapRef.current?.scrollTo({ top: 0 })
   }, [resetKey])

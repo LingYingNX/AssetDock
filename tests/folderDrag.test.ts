@@ -22,7 +22,8 @@ describe('folder drag', () => {
       'inside'
     )).toEqual({
       path: 'target/source',
-      paths: ['target', 'target/existing', 'target/source', 'target/source/child']
+      paths: ['target', 'target/existing', 'target/source', 'target/source/child'],
+      conflict: false
     })
   })
 
@@ -31,5 +32,29 @@ describe('folder drag', () => {
     expect(canDropFolder('source', 'source/child', 'inside', true)).toBe(false)
     expect(canDropFolder('source/child', 'source', 'inside', true)).toBe(false)
     expect(canDropFolder('source', 'eagle-folder', 'inside', false)).toBe(false)
+  })
+
+  it('never fabricates a duplicate path when the target already has a same-named child', () => {
+    const moved = optimisticFolderMove(
+      ['source', 'source/child', 'target', 'target/existing', 'target/source'],
+      'source',
+      'target',
+      'inside'
+    )
+    expect(moved.paths).toEqual(['source', 'source/child', 'target', 'target/existing', 'target/source'])
+    expect(moved.conflict).toBe(true)
+    expect(new Set(moved.paths).size).toBe(moved.paths.length)
+  })
+
+  it('never fabricates a duplicate path when only a descendant collides', () => {
+    const moved = optimisticFolderMove(
+      ['source', 'source/child', 'target', 'target/source/child'],
+      'source',
+      'target',
+      'inside'
+    )
+    expect(moved.paths).toEqual(['source', 'source/child', 'target', 'target/source/child'])
+    expect(moved.conflict).toBe(true)
+    expect(new Set(moved.paths).size).toBe(moved.paths.length)
   })
 })
