@@ -26,17 +26,19 @@
    按钮组 flex:none 永不变形。全都装不下时只藏被挤出条外的部分(不横滚):
    用户明确要求「挤不下就到最小限制,不要滚动条再放开缩小」。缩小的极限 =
    右端(滑块 + 面板开关)刚好完整落在条内;再窄,控件被裁——与设计基准一致。
-   overflow:hidden + flex-shrink:0:只裁 x 溢出,垂直方向 42px 条高恒定;
+   overflow:hidden + flex-shrink:0:只裁 x 溢出,垂直方向 36px 条高恒定;
    flex-shrink:0 防止条本身在 flex 列里被压变形。 */
 /* 溢出裁切:overflow:hidden 在 flex 容器上常被 Chromium 忽略(实际渲染仍然可见,
    实测 1334 窗下面板按钮被画到检查器上),必须配合 flex-shrink:0 之外的显式
    裁切手段。contain:paint 把绘制限定在筛选条盒内,溢出部分真正不渲染。 */
-.filterbar{display:flex;align-items:center;gap:8px;height:var(--h-bar);padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body);overflow:hidden;flex-shrink:0;contain:paint inline-size}
-.filterbar>.btn,.filterbar>div>.btn,.filterbar .cbtn,.filterbar .tb-btn,.filterbar .vr{flex:none}
-/* 搜索框(原在已删除的工具栏里):与筛选下拉同处一条 42px 的筛选条,是筛选的第一入口。
+.filterbar{--fc-h:2.24em;--fc-pad-x:.64em;--fc-gap:.32em;--fc-border:max(1px,.1em);--fc-border-active:max(1px,.15em);--fc-radius:.4em;
+  display:flex;align-items:center;gap:var(--fc-pad-x);height:max(var(--h-bar),calc(var(--fc-h) + 8px));padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body);overflow:hidden;flex-shrink:0;contain:paint inline-size}
+.filterbar>.btn,.filterbar>.filter-group,.filterbar .cbtn,.filterbar .tb-btn,.filterbar .vr{flex:none}
+.filter-group{display:flex;align-items:center;gap:var(--fc-gap)}
+/* 搜索框(原在已删除的工具栏里):与筛选下拉同处一条 36px 的筛选条,是筛选的第一入口。
    外观照搬用户给的「星云输入框」:深色底 + 细边框 + 聚焦紫色辉光 + 粒子。
    照抄时只按容器改三处:去掉原设计的 width/margin 居中(位置交给筛选条)、15px 内边距收成
-   34px 高(42px 的条里放不下 47px 的框)、放大镜与 Ctrl F 键帽删掉。
+   28px 高(36px 的条里上下各留 4px)、放大镜与 Ctrl F 键帽删掉。
    用户验收后又收三点:描边收细、四层辉光收成一层(原样太扎眼)、标签不再上浮;
    最后去掉占位文案,并把不透明黑底放成 30% 透明黑 rgba(0,0,15,.3)——框里不放任何可见文字
    (用途交给 Ctrl F 快捷键与 aria-label),底色只留一层薄暗,不再是压在玻璃条上的一块死黑。
@@ -48,11 +50,11 @@
    按窗宽算出的宽度装不下,右侧按钮会被顶出条外叠到检查器上(实测溢出 41px)。
    所以搜索框 flex-shrink:1:空间不够先收缩自己(min-width 120px 触底),
    触底后才轮到按钮往左挤;挤不下即 1024px 窗口最小宽度,那是设计边界。 */
-.searchbox{position:relative;display:block;flex:0 1 auto;min-width:72px;width:382px;height:34px;
+.searchbox{position:relative;display:block;flex:0 1 auto;min-width:72px;width:382px;height:var(--fc-h);
   --nb-bg:rgba(0,0,15,.3);--nb-border:#2a2a3a;--nb-fg:#fff}
 :root:not([data-theme="dark"]) .searchbox{--nb-bg:var(--bg2);--nb-border:var(--line);--nb-fg:var(--t1)}
-.searchbox .input{width:100%;height:100%;padding:0 12px;border:2px solid var(--nb-border);background:var(--nb-bg);color:var(--nb-fg);font-size:var(--fs-body);outline:none;border-radius:var(--r-xs);transition:border-color var(--dur-press) var(--ease-out),box-shadow var(--dur-press) var(--ease-out)}
-.searchbox .input:focus{border-width:1px;border-color:#b56aff;box-shadow:0 4px 14px rgba(181,106,255,.22)}
+.searchbox .input{width:100%;height:100%;padding:0 .96em;border:max(1px,.16em) solid var(--nb-border);background:var(--nb-bg);color:var(--nb-fg);outline:none;border-radius:var(--fc-radius);transition:border-color var(--dur-press) var(--ease-out),box-shadow var(--dur-press) var(--ease-out)}
+.searchbox .input:focus{border-width:var(--fc-border);border-color:#b56aff;box-shadow:0 4px 14px rgba(181,106,255,.22)}
 .nebula-particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;opacity:0;top:50%;left:10px;filter:blur(.8px);mix-blend-mode:screen;transition:opacity .3s ease}
 .searchbox .input:focus ~ .nebula-particle{animation:nebula-float 2s forwards ease-out}
 @keyframes nebula-float{
@@ -63,35 +65,39 @@
 /* 浅色主题里 screen 混合是白上叠白,粒子会彻底看不见;换 multiply 才显色。 */
 :root:not([data-theme="dark"]) .nebula-particle{mix-blend-mode:multiply;filter:blur(1px)}
 @media (prefers-reduced-motion:reduce){.searchbox .input:focus ~ .nebula-particle{animation:none}}
-/* 筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
-   所以 border-color/color/background 的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
+/* 控件系统:高度、水平内边距、图文间距、描边和圆角都从字号换算(em),
+   字号变了整只控件一起变;描边用内阴影绘制,状态切换不改变盒模型。
+   筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
+   所以描边/颜色/背景的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
    时长用 --dur-hover(110ms):悬停是一天几十次的高频反馈,必须比按压(160ms)更短。 */
-.filterbar .btn{height:var(--h-sm);padding:0 10px;font-size:var(--fs-body);background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);display:inline-flex;align-items:center;gap:6px;color:var(--t2);white-space:nowrap;
-  transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.filterbar .btn{height:var(--fc-h);padding:0 var(--fc-pad-x);font-weight:500;line-height:1.25;background:var(--bg2);border:var(--fc-border) solid var(--line);border-radius:var(--fc-radius);display:inline-flex;align-items:center;gap:var(--fc-gap);color:var(--t2);white-space:nowrap;
+  transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .btn:hover{border-color:var(--line2);color:var(--t1)}
-.filterbar .btn.on{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
+.filterbar .btn.on{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 菜单展开时按钮必须自己给出反馈。原来 .on 只跟随筛选值(不等于 all),菜单开着按钮却毫无变化,
    用户看不出「这个按钮的菜单正开着」。用独立的 .open,不与筛选值语义混用。 */
-.filterbar .btn.open{background:var(--bg3);border-color:var(--line2);color:var(--t1)}
+.filterbar .btn.open{background:var(--bg3);border-color:var(--line2);box-shadow:none;color:var(--t1)}
 /* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
-.filterbar .btn.on.open{background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc2)}
-.filterbar .btn .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);transition:transform var(--dur-hover) var(--ease-out)}
-.filterbar .btn.open .chev{transform:rotate(180deg)}
-.cbtn{width:28px;height:var(--h-sm);border-radius:var(--r-sm);display:grid;place-items:center;background:var(--bg2);border:1px solid var(--line);
+.filterbar .btn.on.open{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
+/* 去掉箭头后只剩图标的视图下拉必须保持正方形,不能被收缩规则压成 24px 窄条。 */
+.filterbar .btn[data-menu="m-view"]{width:var(--fc-h);padding:0;justify-content:center}
+/* 中文字面没有西文下伸部,flex 几何居中会视觉偏高;补 0.13em 上内边距校正。 */
+.filter-group>.btn{padding-top:.13em}
+.cbtn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);display:grid;place-items:center;background:var(--bg2);border:var(--fc-border) solid var(--line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cbtn:hover{border-color:var(--line2)}
-.cbtn.on{border-color:var(--acc-line);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
-.cball{width:15px;height:15px;border-radius:50%;background:var(--grad-rainbow);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
-.filterbar .tb-btn{width:28px;height:var(--h-sm);border-radius:var(--r-sm);background:var(--bg2);border:1px solid var(--line);
+.cbtn.on{border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc)}
+.cball{width:1.28em;height:1.28em;border-radius:50%;background:var(--grad-rainbow);border:var(--fc-border) solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
+.filterbar .tb-btn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);background:var(--bg2);border:var(--fc-border) solid var(--line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
-.filterbar .tb-btn.on{border-color:var(--acc-line);color:var(--acc2);box-shadow:0 0 0 1px rgba(10,132,255,.25)}
+.filterbar .tb-btn.on{border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 右端(视图·缩放·面板按钮)留在条内:窄窗不折行,而是让搜索框先收、滑块次之、
     按钮组往左补齐。收缩顺序:搜索框 120px 触底 → 滑块 96px 下限 → 按钮组
     flex:none 永不变形。全装不下时筛选条 overflow:hidden 只裁被挤出条外的部分
     (不横滚,不要滚动条再放开缩小限制):最小窗口 = 右端完整进条内,再窄则裁。
     滑块最小 96px:再窄 thumb 在最左端时会压住轨道起点,盖住面板开关按钮。 */
-.zoomer{display:flex;align-items:center;color:var(--t3);flex-shrink:1;min-width:68px}
+.zoomer{display:flex;align-items:center;height:var(--fc-h);color:var(--t3);flex-shrink:1;min-width:68px}
 /* zoomer 内容:图标 + 滑块。图标 16px + 滑块 80px = 96px 刚好贴住 96px 下限,
    所以图标必须 flex:none、滑块可以再缩(60px),整体才不会撑破 96px 溢出条外。 */
 .zoomer .ic{flex:none}
@@ -99,24 +105,24 @@
 input[type=range]{-webkit-appearance:none;appearance:none;width:88px;min-width:0;height:3px;border-radius:2px;cursor:pointer;background:linear-gradient(90deg,var(--acc) 40%,rgba(255,255,255,.55) 40%)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
-.vr{width:1px;height:18px;background:var(--line2)}
-.filterbar .vr-lead{margin-left:auto}
-.fresult{flex:0 0 auto;min-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-cap);color:var(--t3)}
-.fresult b{color:var(--t1);font-weight:600}
+.vr{width:1px;height:1.28em;background:var(--line2)}
+.fresult{display:inline-flex;align-items:baseline;gap:4px;flex:0 0 auto;white-space:nowrap;font-size:var(--fs-cap);line-height:1;color:var(--t2);font-variant-numeric:tabular-nums}
+.fresult-label,.fresult-count{flex:none}
+.fresult-count{font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+.fresult-unit{flex:none}
+/* 大小占固定槽(约容 "1023.9 MB" 这种 4 位整数+1 位小数),1 KB→131.1 MB 变化不再推挤右侧按钮;
+   用 min-width 而非 width:超出槽宽(如 5 位 GB)时自然撑开,不裁字。 */
+.fresult-size{flex:none;min-width:4.9em;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
 /* 旧响应式 clamp(1600px 起线性收窄)已删:收缩改由 flex-shrink 按实际可用空间进行,
    不再依赖窗口宽(基准 100vw 在检查器打开时是错的)。 */
 @container (max-width:760px){
-  .filterbar{gap:6px;padding:0 10px}
-  .filterbar .searchbox{display:none}
-  .filterbar .btn{padding:0 6px;gap:4px}
-  .fresult{min-width:96px}
+  .filterbar{gap:4px;padding:0 8px}
+  .filterbar .btn{padding-inline:4px}
 }
 @container (max-width:600px){
   .filterbar{gap:4px;padding:0 8px}
-  .filterbar .btn{padding:0 5px;gap:3px}
+  .filterbar .btn{padding-inline:4px}
   .filterbar .zoomer{min-width:56px}
-  .filterbar [data-menu="m-view"] .chev{display:none}
-  .filterbar .fresult{min-width:96px}
 }
 
 /* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
