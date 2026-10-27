@@ -175,14 +175,6 @@ export async function restoreUiPrefs(): Promise<void> {
     }
   }
 
-  if (!prefsRead.failed) {
-    try {
-      const parsed = JSON.parse(prefsRaw ?? '{}') as { hoverVideo?: unknown; hoverSound?: unknown }
-      useUI.setState({ hoverVideo: parsed.hoverVideo !== false, hoverSound: parsed.hoverSound === true })
-    } catch {
-      /* 偏好损坏时保持默认。 */
-    }
-  }
 }
 
 /** 主进程资产行 → Asset */
@@ -280,10 +272,6 @@ interface UIState {
   /** 一次性操作提示(复制/重命名等);自动消失,null 表示无提示 */
   toast: { text: string; kind: 'ok' | 'warn' } | null
   showToast: (text: string, kind?: 'ok' | 'warn') => void
-  /** 列表悬浮自动播放(设置 → 音视频);只读镜像,由 preferences 同步 */
-  hoverVideo: boolean
-  hoverSound: boolean
-  setHoverPlayback: (video: boolean, sound: boolean) => void
   setAssets: (list: Asset[]) => void
   /** S1-7:assets:changed 携带 assetIds 时按 id 增量合并;缺省数组退全量 reload */
   applyAssetDelta: (libraryId: number, assetIds?: number[]) => void
@@ -769,6 +757,16 @@ export const useUI = create<UIState>((set, get) => {
 
     nav: 'all',
     setNav: (nav) => {
+      // 当前灯箱素材不在新视图时必须退出；否则胶片带会回退成全库，与侧栏计数不符。
+      const s = get()
+      if (s.lightboxId) {
+        const next = queryAssets(s.assets, { nav, search: s.search, filters: s.filters, stripColor: s.stripColor })
+        if (!next.some((asset) => asset.id === s.lightboxId)) {
+          s.closeLightbox()
+          // 用户取消「丢弃未保存 CSS」确认时保持原视图，不把导航改到空集合。
+          if (get().lightboxId) return
+        }
+      }
       set({ nav })
       persistUiPrefs()
     },
@@ -786,9 +784,6 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     view: 'waterfall',
-    hoverVideo: true,
-    hoverSound: false,
-    setHoverPlayback: (video, sound) => set({ hoverVideo: video, hoverSound: sound }),
     setView: (view) => {
       set({ view, openMenu: null })
       persistUiPrefs()

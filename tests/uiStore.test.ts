@@ -109,6 +109,49 @@ describe('UI store', () => {
     await vi.waitFor(() => expect(calls).toEqual(['reload', 'alert:second asset failed']))
   })
 
+  it('closes the lightbox when switching the sidebar view', async () => {
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      confirm,
+      windowApi: { state: { set: vi.fn().mockResolvedValue({ ok: true }) } }
+    })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({ nav: 'all', lightboxId: 'a1', lightboxFullscreen: true, cssDirty: true })
+
+    useUI.getState().setNav('folder:测试')
+
+    expect(useUI.getState().nav).toBe('folder:测试')
+    expect(useUI.getState().lightboxId).toBeNull()
+    expect(useUI.getState().lightboxFullscreen).toBe(false)
+    expect(useUI.getState().cssDirty).toBe(false)
+    expect(confirm).toHaveBeenCalled()
+  })
+
+  it('keeps the lightbox when its asset belongs to the new view', async () => {
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      windowApi: { state: { set: vi.fn().mockResolvedValue({ ok: true }) } }
+    })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      nav: 'all',
+      search: '',
+      filters: DEFAULT_FILTERS,
+      stripColor: null,
+      cssDirty: false,
+      assets: [{ id: 'a1', type: 'image', format: 'JPG', name: 'one', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: ['测试'], note: '', palette: [] }],
+      lightboxId: 'a1'
+    })
+
+    useUI.getState().setNav('folder:测试')
+
+    expect(useUI.getState().nav).toBe('folder:测试')
+    expect(useUI.getState().lightboxId).toBe('a1')
+  })
+
   it('moves assets without changing the active view and refreshes the library', async () => {
     const move = vi.fn().mockResolvedValue({ moved: 1 })
     const reload = vi.fn()
@@ -469,12 +512,6 @@ describe('restoreUiPrefs: 主题引导', () => {
     const { attrs, setItem } = await loadTheme({ preferences: JSON.stringify({ theme: 'light' }) })
     expect(attrs['data-theme']).toBeUndefined()
     expect(setItem).toHaveBeenCalledWith('mediahub.theme', 'light')
-  })
-
-  it('restores hover playback when uiPrefs are missing', async () => {
-    const { state } = await loadTheme({ preferences: JSON.stringify({ hoverVideo: false, hoverSound: true }) })
-    expect(state.hoverVideo).toBe(false)
-    expect(state.hoverSound).toBe(true)
   })
 
   it('does not overwrite the first-paint mirror when the preferences read fails', async () => {
