@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { AssetListResponse, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { AssetImportResponse, AssetListResponse, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
 
 const api = {
   minimize: (): void => {
@@ -17,6 +17,7 @@ const api = {
 
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
   pickFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFile'),
+  getFilePath: (file: File): string => webUtils.getPathForFile(file),
 
   tools: {
     status: (): Promise<{ blender: { available: boolean; path?: string; version?: string; error?: string }; cinema4d: { available: boolean; path?: string; version?: string; error?: string } }> =>
@@ -75,6 +76,8 @@ const api = {
     readShell: (libraryId: number, id: number): Promise<{ text: string | null; exists: boolean; sizeBytes?: number } | { error: string }> => ipcRenderer.invoke('assets:readShell', libraryId, id),
     writeShell: (libraryId: number, id: number, html: string): Promise<{ ok: true } | { error: string }> => ipcRenderer.invoke('assets:writeShell', libraryId, id, html),
     rename: (libraryId: number, id: number, newName: string): Promise<{ ok: true; relPath: string } | { error: string }> => ipcRenderer.invoke('assets:rename', libraryId, id, newName),
+    importPaths: (libraryId: number, paths: string[], folder: string): Promise<AssetImportResponse | { error: string }> =>
+      ipcRenderer.invoke('assets:importPaths', libraryId, paths, folder),
     purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId),
     copy: (libraryId: number, ids: number[]): Promise<{ copied: number; mode: 'files' | 'paths'; skipped: string[]; paths: string[] } | { error: string }> =>
       ipcRenderer.invoke('assets:copy', libraryId, ids),

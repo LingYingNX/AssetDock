@@ -13,6 +13,7 @@ import { Sidebar } from './components/Sidebar'
 import { FilterBar } from './components/FilterBar'
 import { ColorStrip } from './components/ColorStrip'
 import { Grid } from './components/Grid'
+import { DropZone } from './components/DropZone'
 import { Inspector } from './components/Inspector'
 import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
@@ -30,6 +31,8 @@ export default function App(): React.JSX.Element {
   const colw = useUI((s) => s.colw)
   const sideWidth = useUI((s) => s.sideWidth)
   const inspHidden = useUI((s) => s.inspHidden)
+  const mode = useUI((s) => s.mode)
+  const lightboxId = useUI((s) => s.lightboxId)
 
   /* 启动引导:恢复库标签/激活态,加载数据;订阅主进程事件 */
   useEffect(() => {
@@ -242,6 +245,7 @@ export default function App(): React.JSX.Element {
           <FilterBar />
           <ColorStrip />
           <Grid />
+          <DropZone active={mode === 'library' && !lightboxId} />
           {/* 灯箱只覆盖工作区(侧栏与检查器保持可用),全屏时才扩到整窗 */}
           <Lightbox />
         </main>

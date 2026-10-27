@@ -28,6 +28,7 @@ import { ensureBlendPreview } from '../services/externalPreview'
 import { ensureImagePreview } from '../services/imagePreview'
 import { configuredToolPath, probeTool, type ExternalToolKey } from '../services/externalTools'
 import { countPdfPages } from '../services/aiPreview'
+import { importDroppedFiles } from '../services/fileImport'
 
 function folderParent(path: string): string {
   const index = path.lastIndexOf('/')
@@ -435,6 +436,38 @@ export function registerAssetsIpc(): void {
       return { ok: true, relPath }
     } catch (error) {
       return { error: error instanceof Error ? error.message : '重命名失败' }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('assets:importPaths', async (_e, libraryId: number, paths: string[], folder: string) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    try {
+      if (!Array.isArray(paths) || paths.length === 0) return { error: '没有可导入的文件' }
+      if (typeof folder !== 'string') return { error: '目标文件夹无效' }
+      try {
+        await assertLibraryFolder(s.libPath, folder)
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : '目标文件夹不存在' }
+      }
+      const imported = await importDroppedFiles(s.libPath, folder, paths, (done) => {
+        send('library:scan', { libraryId, done, phase: 'moving' })
+      })
+      if (imported.entries.length > 0) {
+        await withoutRootWatcher(libraryId, s.libPath, async () => {
+          upsertScanned(s.db, libraryId, imported.entries)
+        })
+      }
+      send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
+      if (imported.entries.length > 0) {
+        send('assets:changed', { libraryId })
+        queueThumbWarmup(libraryId)
+      }
+      return { imported: imported.imported, skipped: imported.skipped }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '导入素材失败' }
     } finally {
       releaseScope(s)
     }

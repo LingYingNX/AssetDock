@@ -8,6 +8,19 @@
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
 .content>*{position:relative;z-index:1}
 
+/* ---------- 系统文件投放 ---------- */
+.drop-zone{position:absolute;inset:0;z-index:70;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+.content>.drop-zone{position:absolute;inset:0;z-index:70}
+.drop-zone.is-active,.drop-zone.is-busy{opacity:1}
+.drop-zone-frame{position:absolute;inset:0;border:2px solid var(--acc);border-radius:var(--r-sm);box-shadow:inset 0 0 0 1px rgba(255,255,255,.38)}
+.drop-zone-card{display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;border:1px solid var(--line2);border-radius:var(--r-md);background:var(--menu-solid);box-shadow:var(--shadow-panel);transform:translateY(6px) scale(.98);transition:transform var(--ease-spring) var(--dur-base)}
+.drop-zone.is-active .drop-zone-card,.drop-zone.is-busy .drop-zone-card{transform:none}
+.drop-zone-icon{display:grid;place-items:center;width:var(--h-md);height:var(--h-md);border-radius:var(--r-sm);background:var(--acc);color:#fff;flex:none}
+.drop-zone-icon .ic{width:var(--ic-sm);height:var(--ic-sm)}
+.drop-zone-copy{display:flex;flex-direction:column;gap:1px;min-width:0}
+.drop-zone-copy strong{font-size:var(--fs-body);font-weight:600;color:var(--t1);line-height:1.35}
+.drop-zone-copy span{font-size:var(--fs-cap);color:var(--t3);line-height:1.35}
+
 /* ---------- 筛选条 ---------- */
 /* 空间不足时的收缩顺序:搜索框先收(72px 触底)→ 滑块次之(68px 下限) →
    按钮组 flex:none 永不变形。全都装不下时只藏被挤出条外的部分(不横滚):

@@ -84,6 +84,11 @@ export interface AssetRowsResponse {
   assets: AssetListRow[]
 }
 
+export interface AssetImportResponse {
+  imported: number
+  skipped: number
+}
+
 export interface LibraryScanPayload {
   libraryId: number
   done: number
