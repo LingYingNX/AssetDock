@@ -21,14 +21,22 @@ import {
 } from '../data/model-renderer'
 import {
   MATERIAL_TEXTURE_SLOTS,
+  fallbackMissingTextures,
   normalizeEmissive,
   normalizeTransparency,
   toStandardMaterial
 } from '../data/material-preview'
+import {
+  readFbxMaterialData,
+  resolveFbxMaterialTextures,
+  type FbxMaterialData
+} from '../data/fbx-material-connections'
 import type { AssetFormat } from '../data/types'
 
 export type ModelShade = 'solid' | 'render'
 const LOAD_TIMEOUT_MS = 20_000
+const LOAD_TIMEOUT_LARGE_MS = 120_000
+const LOAD_TIMEOUT_LARGE_BYTES = 64 * 1024 * 1024
 
 export interface Viewer3DProps {
   url: string
@@ -66,6 +74,9 @@ declare global {
       envDisposals?: number
       materials?: number
       transparent?: number
+      missingMaps?: number
+      metalnessMaps?: number
+      roughnessMaps?: number
       middlePan?: boolean
       toneMapping?: string
       toneMappingExposure?: number
@@ -560,6 +571,15 @@ export function Viewer3D({
       const res = await fetch(u)
       if (!res.ok) throw new Error(`media ${res.status}`)
       const total = Number(res.headers.get('content-length')) || 0
+      if (total > LOAD_TIMEOUT_LARGE_BYTES && loadTimer) {
+        clearTimeout(loadTimer)
+        loadTimer = setTimeout(() => {
+          if (disposed) return
+          onProgressRef.current?.(100)
+          setFailed(true)
+          onError?.()
+        }, LOAD_TIMEOUT_LARGE_MS)
+      }
       if (total > 512 * 1024 * 1024) throw new Error('model exceeds 512 MB limit')
       if (!res.body) return res.arrayBuffer()
       const reader = res.body.getReader()
@@ -593,6 +613,8 @@ export function Viewer3D({
     }
 
     let loadTimer: ReturnType<typeof setTimeout> | null = null
+    let fbxMaterials: Map<string, FbxMaterialData> | undefined
+    const fbxTextures = new Map<number, THREE.Texture>()
     fetchWithProgress(url)
       .then(async (buf) => {
         if (disposed) return
@@ -609,7 +631,28 @@ export function Viewer3D({
           return model
         }
         window.__threeStats!.preview = 'native'
-        if (format === 'FBX') return new FBXLoader().parse(buf, baseUrl)
+        if (format === 'FBX') {
+          fbxMaterials = readFbxMaterialData(buf)
+          const captured: THREE.Texture[] = []
+          const originalLoad = THREE.TextureLoader.prototype.load
+          THREE.TextureLoader.prototype.load = function (
+            this: THREE.TextureLoader,
+            ...args: Parameters<THREE.TextureLoader['load']>
+          ) {
+            const texture = originalLoad.apply(this, args)
+            captured.push(texture)
+            return texture
+          }
+          try {
+            return new FBXLoader().parse(buf, baseUrl)
+          } finally {
+            THREE.TextureLoader.prototype.load = originalLoad
+            for (const texture of captured) {
+              const fbxId = (texture as THREE.Texture & { ID?: number }).ID
+              if (fbxId) fbxTextures.set(fbxId, texture)
+            }
+          }
+        }
         if (format === 'GLB' || format === 'VRM') {
           return new Promise<THREE.Group>((res, rej) =>
             loader.parse(buf, baseUrl, (g) => res(g.scene as THREE.Group), rej)
@@ -658,10 +701,15 @@ export function Viewer3D({
         const convert = (src: THREE.Material): THREE.Material => {
           const cached = converted.get(src)
           if (cached) return cached
-          const std = toStandardMaterial(src)
+          const fbxData = fbxMaterials?.get(src.name)
+          const fbxMaps = fbxData
+            ? resolveFbxMaterialTextures(fbxData.textures, fbxTextures)
+            : undefined
+          const std = toStandardMaterial(src, fbxMaps, fbxData?.scalars)
           if (std !== src) src.dispose()
           normalizeTransparency(std)
           normalizeEmissive(std)
+          fallbackMissingTextures(std)
           converted.set(src, std)
           return std
         }
@@ -674,6 +722,9 @@ export function Viewer3D({
         rememberMaterials(model)
         const materials = new Set<THREE.Material>()
         let transparent = 0
+        let missingMaps = 0
+        let metalnessMaps = 0
+        let roughnessMaps = 0
         model.traverse((o) => {
           const mesh = o as THREE.Mesh
           if (!mesh.isMesh) return
@@ -682,10 +733,16 @@ export function Viewer3D({
             if (!material || materials.has(material)) continue
             materials.add(material)
             if (material.transparent) transparent++
+            if (!(material as THREE.MeshStandardMaterial).map) missingMaps++
+            if ((material as THREE.MeshStandardMaterial).metalnessMap) metalnessMaps++
+            if ((material as THREE.MeshStandardMaterial).roughnessMap) roughnessMaps++
           }
         })
         window.__threeStats!.materials = materials.size
         window.__threeStats!.transparent = transparent
+        window.__threeStats!.missingMaps = missingMaps
+        window.__threeStats!.metalnessMaps = metalnessMaps
+        window.__threeStats!.roughnessMaps = roughnessMaps
         applyShade(currentShade)
         onLoaded?.()
       })

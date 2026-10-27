@@ -64,6 +64,18 @@ export function ModelEnvironmentPanel({
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [open])
+
+  useEffect(() => {
     setOpen(false)
   }, [resetKey])
 
@@ -72,17 +84,9 @@ export function ModelEnvironmentPanel({
     const onPointerDown = (event: PointerEvent): void => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      setOpen(false)
-    }
     window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown, true)
     return () => {
       window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [open])
 
