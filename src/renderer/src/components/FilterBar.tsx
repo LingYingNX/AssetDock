@@ -8,7 +8,7 @@ import { Icon } from './Icons'
 import { FORMAT_GROUPS, type AssetFormat } from '../../../shared/formats'
 
 /* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
-   纵向压到 ±0.4——筛选条只有 42px 高,照抄 35px 的幅度会飞出条外。 */
+   纵向压到 ±0.4——筛选条只有 36px 高,照抄 35px 的幅度会飞出条外。 */
 const NEBULA_PARTICLES = [
   { x: '0.2', y: '-0.25' },
   { x: '0.45', y: '0.15' },
@@ -85,6 +85,9 @@ export function FilterBar(): React.JSX.Element {
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, stripColor }))
   const selectedStats = statsOf(assets.filter((asset) => selectedSet.has(asset.id)))
+  const result = selectedStats.count > 0
+    ? { label: '已选中', count: selectedStats.count, size: selectedStats.size }
+    : { label: '筛选结果', count: stats.count, size: stats.size }
 
   const paintZoom = (el: HTMLInputElement): void => {
     const p = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100
@@ -104,7 +107,7 @@ export function FilterBar(): React.JSX.Element {
       {/* 搜索框(原在已删除的工具栏里):外观照搬用户给的「星云输入框」——深色底 + 细边框 +
           聚焦紫色辉光 + 粒子,变量与关键帧见 content.css 的 .searchbox。
           按容器改了三处:去掉原设计的 width/margin 居中(位置由筛选条决定)、15px 内边距收成
-          34px 高(42px 的条里放不下 47px 的框)、放大镜与 Ctrl F 键帽按设计删掉。
+          28px 高(36px 的条里上下各留 4px)、放大镜与 Ctrl F 键帽按设计删掉。
           用户验收后又收三点:描边收细、辉光收一层、标签上浮取消;最后连占位文案也去掉,
           框里不放任何可见文字,用途交给 Ctrl F 快捷键与 aria-label。
           受控输入框:空结果态的「清空搜索」、Esc、切换库标签都会改写关键词,
@@ -129,58 +132,59 @@ export function FilterBar(): React.JSX.Element {
         className={`cbtn${cbarOpen ? ' on' : ''}`}
         id="colorBtn"
         title="颜色构造:展示当前视图图片主色,点选颜色即筛选"
+        aria-label="颜色构造"
         aria-haspopup="menu"
         aria-expanded={cbarOpen}
         onClick={toggleCbar}
       >
         <span className="cball" />
       </button>
-      {dropdowns.map((d) => (
-        <Fragment key={d.key}>
-          <button
-            className={`btn${filters[d.key] !== 'all' ? ' on' : ''}${openMenu === `m-f-${d.key}` ? ' open' : ''}`}
-            data-menu={`m-f-${d.key}`}
-            title={`按${d.label}筛选`}
-            aria-haspopup="menu"
-            aria-expanded={openMenu === `m-f-${d.key}`}
-            onClick={() => setOpenMenu(openMenu === `m-f-${d.key}` ? null : `m-f-${d.key}`)}
-          >
-            {d.key === 'tag' && filters.tag !== 'all' ? (
-              <span
-                className="dot"
-                style={{ background: assets.flatMap((a) => a.tags).find((t) => t.name === filters.tag)?.color ?? '#64748B' }}
-              />
-            ) : null}
-            {d.label}
-            <Icon name="chev-d" className="chev" />
-          </button>
-          <Dropdown
-            id={`m-f-${d.key}`}
-            items={d.items}
-            value={filters[d.key]}
-            onPick={(v) => setFilter(d.key, v)}
-          />
-        </Fragment>
-      ))}
-      <span className="vr vr-lead" />
-      <span className="fresult">
+      <div className="filter-group" role="group" aria-label="筛选条件">
+        {dropdowns.map((d) => (
+          <Fragment key={d.key}>
+            <button
+              className={`btn${filters[d.key] !== 'all' ? ' on' : ''}${openMenu === `m-f-${d.key}` ? ' open' : ''}`}
+              data-menu={`m-f-${d.key}`}
+              title={`按${d.label}筛选`}
+              aria-haspopup="menu"
+              aria-expanded={openMenu === `m-f-${d.key}`}
+              onClick={() => setOpenMenu(openMenu === `m-f-${d.key}` ? null : `m-f-${d.key}`)}
+            >
+              {d.key === 'tag' && filters.tag !== 'all' ? (
+                <span
+                  className="dot"
+                  style={{ background: assets.flatMap((a) => a.tags).find((t) => t.name === filters.tag)?.color ?? '#64748B' }}
+                />
+              ) : null}
+              {d.label}
+            </button>
+            <Dropdown
+              id={`m-f-${d.key}`}
+              items={d.items}
+              value={filters[d.key]}
+              onPick={(v) => setFilter(d.key, v)}
+            />
+          </Fragment>
+        ))}
+      </div>
+      <span className="vr" />
+      <span className="fresult" aria-live="polite">
         {scanProgress ? `${scanProgress} · ` : ''}
-        {selectedStats.count > 0 ? (
-          <>已选中 <b>{fmtCount(selectedStats.count)}</b> 项 · {selectedStats.size}</>
-        ) : (
-          <>筛选结果 <b>{fmtCount(stats.count)}</b> 项 · {stats.size}</>
-        )}
+        <span className="fresult-label">{result.label}</span>
+        <b className="fresult-count">{fmtCount(result.count)}</b>
+        <span className="fresult-unit">项 ·</span>
+        <span className="fresult-size">{result.size}</span>
       </span>
       <button
         className={`btn${openMenu === 'm-view' ? ' open' : ''}`}
         data-menu="m-view"
         title="视图模式"
+        aria-label={`视图模式：${view === 'waterfall' ? '瀑布流' : view === 'grid' ? '网格' : '列表'}`}
         aria-haspopup="menu"
         aria-expanded={openMenu === 'm-view'}
         onClick={() => setOpenMenu(openMenu === 'm-view' ? null : 'm-view')}
       >
         <Icon name={VIEW_ICONS[view]} />
-        <Icon name="chev-d" className="chev" />
       </button>
       <Dropdown
         id="m-view"
