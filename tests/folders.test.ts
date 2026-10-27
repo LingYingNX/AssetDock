@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder } from '../src/main/services/folders'
-import { listFolderOrders, replaceFolderOrders } from '../src/main/services/store'
+import { listFolderOrders, replaceFolderOrders, renameFolderOrders } from '../src/main/services/store'
 import { openMemoryDb } from '../src/main/services/db'
 
 describe('library folders', () => {
@@ -43,6 +43,12 @@ describe('library folders', () => {
     await expect(listLibraryFolders(root)).resolves.toEqual(['target', 'target/renamed', 'target/renamed/child'])
   })
 
+  it('moves a nested folder back to the library root', async () => {
+    await mkdir(join(root, 'parent', 'child', 'grandchild'), { recursive: true })
+    await expect(moveLibraryFolder(root, 'parent/child', '')).resolves.toBe('child')
+    await expect(listLibraryFolders(root)).resolves.toEqual(['child', 'child/grandchild', 'parent'])
+  })
+
   it('moves a library asset and avoids overwriting a same-named file', async () => {
     await mkdir(join(root, 'from'))
     await mkdir(join(root, 'to'))
@@ -53,6 +59,19 @@ describe('library folders', () => {
 
   it('orders each folder level independently while keeping parents first', () => {
     expect(orderLibraryFolders(['a', 'a/one', 'a/two', 'b'], new Map([['b', 0], ['a/two', 1]]))).toEqual(['b', 'a', 'a/two', 'a/one'])
+  })
+
+  it('keeps newly discovered siblings after manually ordered folders', () => {
+    expect(orderLibraryFolders(['a', 'b', 'c'], new Map([['b', 0], ['a', 1]]))).toEqual(['b', 'a', 'c'])
+  })
+
+  it('replaces stale destination order rows during a folder move', () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'Library', root)
+    replaceFolderOrders(db, 1, ['actions', 'actions/categories', 'places/actions', 'places/actions/categories'])
+    renameFolderOrders(db, 1, 'actions', 'places/actions')
+    expect([...listFolderOrders(db, 1).keys()].sort()).toEqual(['places/actions', 'places/actions/categories'])
+    db.close()
   })
 })
 

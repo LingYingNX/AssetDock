@@ -37,6 +37,34 @@ class WatchManager {
 
 export const watchManager = new WatchManager()
 
+/**
+ * Windows 上 chokidar 对子目录持有句柄,目录 rename 会被拒绝为 EPERM。
+ * 文件操作期间必须暂停整库监听,完成后再按磁盘现状重挂。并发操作按库串行,
+ * 否则后一个窗口会先重挂监听,把前一个窗口的 rename 继续挡住。
+ */
+const watcherGates = new Map<string, Promise<void>>()
+export async function withoutRootWatcher<T>(libraryId: number, root: string, run: () => Promise<T>): Promise<T> {
+  const key = `${libraryId}:root`
+  const previous = watcherGates.get(key) ?? Promise.resolve()
+  let release = (): void => {}
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const tail = previous.then(() => gate)
+  watcherGates.set(key, tail)
+  await previous
+  try {
+    const wasWatching = !!watchManager.get(key)
+    if (wasWatching) await watchManager.close(key)
+    try {
+      return await run()
+    } finally {
+      if (wasWatching) attachRootWatcher(libraryId, root)
+    }
+  } finally {
+    release()
+    if (watcherGates.get(key) === tail) watcherGates.delete(key)
+  }
+}
+
 /** 启动/迁移失败清单,渲染层经 library:takeMigrationFailures 取走;S3-8 环形缓冲 100 条防无界增长 */
 const MIGRATION_FAILURES_MAX = 100
 export const migrationFailures: string[] = []

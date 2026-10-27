@@ -232,8 +232,14 @@ function DirTree({
                   onFolderDragLeave(n.path, e)
                 }}
                 onDrop={(e) => {
-                  if (isAssetDrag(e)) onAssetDropFolder(n.path, e)
-                  else if (isFolderDrag(e) && folderDropRef.current?.target === n.path) onFolderDrop(n.path, e, folderDropRef.current.placement)
+                  if (isAssetDrag(e)) {
+                    onAssetDropFolder(n.path, e)
+                  } else if (isFolderDrag(e)) {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const placement = folderDropPlacement(e.clientY - rect.top, rect.height)
+                    const source = folderDragSource() || folderFromDrag(e)
+                    if (canDropFolder(source, n.path, placement, n.movable)) onFolderDrop(n.path, e, placement)
+                  }
                 }}
                 data-folder-path={n.path}
               >
@@ -294,6 +300,27 @@ function DirTree({
         )
       })}
     </>
+  )
+}
+
+function RootFolderDrop({ onDragOver, onDragLeave, onDrop }: {
+  onDragOver: (element: HTMLDivElement, event: React.DragEvent<HTMLDivElement>) => void
+  onDragLeave: (event: React.DragEvent<HTMLDivElement>) => void
+  onDrop: (event: React.DragEvent<HTMLDivElement>) => void
+}): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  return (
+    <div
+      ref={ref}
+      className="folder-root-drop"
+      aria-label="拖到此处移出所有父级"
+      onDragOver={(event) => {
+        if (!ref.current) return
+        onDragOver(ref.current, event)
+      }}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    />
   )
 }
 
@@ -480,8 +507,12 @@ export function Sidebar(): React.JSX.Element {
 
   useEffect(() => () => {
     folderDragPreviewRef.current?.remove()
+    folderDragPreviewRef.current = null
+    folderDragSourceRef.current = null
+    folderDropRef.current = null
+    folderDropTargetRef.current = null
     assetDropTargetRef.current?.classList.remove('drop-target')
-    setFolderDropIndicator(folderDropTargetRef.current, null)
+    setFolderDropIndicator(null, null)
   }, [])
 
   return (
@@ -565,6 +596,23 @@ export function Sidebar(): React.JSX.Element {
                   }
                 }}
                 onFolderDrop={(path, event, placement) => dropFolder(path, event, placement, physicalFolderPaths.includes(path))}
+              />
+              <RootFolderDrop
+                onDragOver={(element, e) => {
+                  if (!isFolderDrag(e)) return
+                  if (!canDropFolder(folderDragSourceRef.current || folderFromDrag(e), '', 'inside', true)) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  updateFolderDrop(element, { target: '', placement: 'after' })
+                }}
+                onDragLeave={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                  if (folderDropRef.current?.target === '') clearFolderDrop()
+                }}
+                onDrop={(e) => {
+                  if (!isFolderDrag(e)) return
+                  dropFolder('', e, 'inside', true)
+                }}
               />
             </>
           )}

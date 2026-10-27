@@ -567,10 +567,16 @@ export const useUI = create<UIState>((set, get) => {
               keep.unshift(a)
             }
           }
-          // 新行可能带来新文件夹路径,并入文件夹树(不做重排——manual 顺序由全量 reload 恢复)
-          const folderSet = new Set(s.physicalFolderPaths)
-          for (const a of rows) for (const f of a.folders) folderSet.add(f)
-          const physicalFolderPaths = [...folderSet].sort()
+          // 增量事件只追加新路径;保留数据库返回的手动顺序,禁止按字母重排已有节点。
+          const knownFolders = new Set(s.physicalFolderPaths)
+          const additions: string[] = []
+          for (const a of rows) for (const f of a.folders) {
+            if (!knownFolders.has(f)) {
+              knownFolders.add(f)
+              additions.push(f)
+            }
+          }
+          const physicalFolderPaths = [...s.physicalFolderPaths, ...additions]
           return {
             assets: keep,
             folderPaths: physicalFolderPaths,
@@ -610,6 +616,7 @@ export const useUI = create<UIState>((set, get) => {
               folderPaths,
               physicalFolderPaths,
               folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
+              collapsedFolders: s.collapsedFolders.filter((path) => folderPaths.includes(path)),
               nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav,
               mode: 'library'
             }
@@ -653,6 +660,7 @@ export const useUI = create<UIState>((set, get) => {
             folderPaths: r.paths,
             physicalFolderPaths: r.paths,
             folderEditPath: s.folderEditPath && r.paths.includes(s.folderEditPath) ? s.folderEditPath : null,
+            collapsedFolders: s.collapsedFolders.filter((path) => r.paths.includes(path)),
             nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
           }
         })
@@ -682,7 +690,10 @@ export const useUI = create<UIState>((set, get) => {
           get().refreshFolders()
           return
         }
-        set({ nav: `folder:${r.path}` as NavKey })
+        set((s) => ({
+          nav: rebaseFolderNav(s.nav, path, r.path),
+          collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, path, r.path))
+        }))
         get().refreshFolders()
       })
     },
@@ -700,6 +711,7 @@ export const useUI = create<UIState>((set, get) => {
         physicalFolderPaths: optimistic.paths,
         nav: rebaseFolderNav(s.nav, source, optimistic.path),
         folderEditPath: s.folderEditPath ? rebaseFolderPath(s.folderEditPath, source, optimistic.path) : s.folderEditPath,
+        collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, source, optimistic.path)),
         assets: s.assets.map((asset) => {
           if (asset.libraryId !== t.libraryId || !asset.relPath) return asset
           const relPath = rebaseFolderPath(asset.relPath, source, optimistic.path)
@@ -722,7 +734,10 @@ export const useUI = create<UIState>((set, get) => {
           get().reloadActiveLibrary()
           return
         }
-        set((s) => ({ nav: rebaseFolderNav(s.nav, source, r.path) }))
+        set((s) => ({
+          nav: rebaseFolderNav(s.nav, optimistic.path, r.path),
+          collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, optimistic.path, r.path))
+        }))
         get().reloadActiveLibrary()
       }).catch(() => {
         get().showToast('移动文件夹失败,请重试', 'warn')

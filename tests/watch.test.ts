@@ -6,10 +6,31 @@ import { describe, expect, it, vi } from 'vitest'
 import { openMemoryDb } from '../src/main/services/db'
 import { listAssets, upsertScanned } from '../src/main/services/store'
 import { WATCH_OPTIONS, watchLibrary } from '../src/main/services/watch'
+import { withoutRootWatcher } from '../src/main/ipc/watch'
 
 describe('library watcher', () => {
   it('uses native events instead of Windows polling', () => {
     expect(WATCH_OPTIONS.usePolling).toBe(false)
+  })
+
+  it('serializes native file operations per library', async () => {
+    const events: string[] = []
+    let releaseFirst = (): void => {}
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const first = withoutRootWatcher(9, '/library', async () => {
+      events.push('first:enter')
+      await firstBlocked
+      events.push('first:leave')
+    })
+    const second = withoutRootWatcher(9, '/library', async () => {
+      events.push('second:enter')
+    })
+
+    await Promise.resolve()
+    expect(events).toEqual(['first:enter'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(events).toEqual(['first:enter', 'first:leave', 'second:enter'])
   })
 
   it('coalesces a folder rename into one refresh', async () => {

@@ -206,11 +206,17 @@ export function listFolderOrders(d: Database, libraryId: number): Map<string, nu
 }
 
 export function renameFolderOrders(d: Database, libraryId: number, oldPath: string, newPath: string): void {
-  d.prepare(
-    `UPDATE folder_orders
-     SET path = CASE WHEN path = ? THEN ? ELSE ? || substr(path, length(?) + 1) END
-     WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)`
-  ).run(oldPath, newPath, newPath, oldPath, libraryId, oldPath, `${oldPath}/`)
+  d.transaction(() => {
+    // 物理目录已不存在的旧目标记录会与新路径触发 PRIMARY KEY 冲突;移动时以真实目录为准清掉它。
+    d.prepare(
+      'DELETE FROM folder_orders WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)'
+    ).run(libraryId, newPath, `${newPath}/`)
+    d.prepare(
+      `UPDATE folder_orders
+       SET path = CASE WHEN path = ? THEN ? ELSE ? || substr(path, length(?) + 1) END
+       WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)`
+    ).run(oldPath, newPath, newPath, oldPath, libraryId, oldPath, `${oldPath}/`)
+  })()
 }
 
 export function replaceFolderOrders(d: Database, libraryId: number, paths: readonly string[]): void {

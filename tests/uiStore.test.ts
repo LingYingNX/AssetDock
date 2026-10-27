@@ -145,6 +145,7 @@ describe('UI store', () => {
       folderPaths: ['source', 'target', 'target/existing'],
       physicalFolderPaths: ['source', 'target', 'target/existing'],
       assets: [],
+      collapsedFolders: ['source', 'source/child'],
       reloadActiveLibrary: reload
     })
 
@@ -153,6 +154,7 @@ describe('UI store', () => {
     expect(useUI.getState().folderPaths).toEqual(['target', 'target/existing', 'target/source'])
     expect(useUI.getState().physicalFolderPaths).toEqual(['target', 'target/existing', 'target/source'])
     expect(useUI.getState().nav).toBe('folder:target/source')
+    expect(useUI.getState().collapsedFolders).toEqual(['target/source', 'target/source/child'])
     expect(move).toHaveBeenCalledWith(1, 'source', 'target', 'inside')
     expect(reload).not.toHaveBeenCalled()
 

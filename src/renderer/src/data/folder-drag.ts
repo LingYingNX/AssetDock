@@ -34,13 +34,16 @@ export function optimisticFolderMove(paths: readonly string[], source: string, t
   const path = destinationParent ? `${destinationParent}/${name}` : name
   const block = paths.filter((item) => item === source || item.startsWith(`${source}/`))
   const rest = paths.filter((item) => !block.includes(item))
-  const targetIndex = rest.indexOf(target)
-  if (targetIndex < 0 || block.length === 0) return { path, paths: paths.slice(), conflict: false }
   // 目标下已有同名文件夹时磁盘侧必然失败,乐观更新不得凭空造出重复路径:
   // 重复路径 = React key 相同,树会渲染出两行并留下回收不掉的残留行与卡住的落点描边。
   // 整棵被移动子树的每个路径都要查重,不只查源自身。
   const rebasedPaths = block.map((item) => rebaseFolderPath(item, source, path))
   if (rebasedPaths.some((item) => rest.includes(item))) return { path: source, paths: paths.slice(), conflict: true }
+  if (target === '' && placement === 'inside' && block.length > 0) {
+    return { path, paths: [...rest, ...rebasedPaths], conflict: false }
+  }
+  const targetIndex = rest.indexOf(target)
+  if (targetIndex < 0 || block.length === 0) return { path, paths: paths.slice(), conflict: false }
 
   let insertAt = targetIndex
   if (placement !== 'before') {
@@ -53,5 +56,6 @@ export function optimisticFolderMove(paths: readonly string[], source: string, t
 export function canDropFolder(source: string | null, target: string, placement: FolderPlacement, targetMovable: boolean): boolean {
   if (!source || !targetMovable) return false
   if (source === target || target.startsWith(`${source}/`)) return false
+  if (target === '') return placement === 'inside' && parentPath(source) !== ''
   return placement !== 'inside' || parentPath(source) !== target
 }

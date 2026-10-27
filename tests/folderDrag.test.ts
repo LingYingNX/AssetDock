@@ -34,6 +34,26 @@ describe('folder drag', () => {
     expect(canDropFolder('source', 'eagle-folder', 'inside', false)).toBe(false)
   })
 
+  it('allows moving a folder with children onto a sibling folder child', () => {
+    expect(canDropFolder('source', 'other/child', 'after', true)).toBe(true)
+    expect(canDropFolder('source', 'other/child', 'inside', true)).toBe(true)
+  })
+
+  it('moves a nested folder to the library root and appends it after root siblings', () => {
+    expect(canDropFolder('parent/child', '', 'inside', true)).toBe(true)
+    expect(canDropFolder('root-folder', '', 'inside', true)).toBe(false)
+    expect(optimisticFolderMove(
+      ['root-a', 'root-b', 'parent', 'parent/child', 'parent/child/grandchild'],
+      'parent/child',
+      '',
+      'inside'
+    )).toEqual({
+      path: 'child',
+      paths: ['root-a', 'root-b', 'parent', 'child', 'child/grandchild'],
+      conflict: false
+    })
+  })
+
   it('never fabricates a duplicate path when the target already has a same-named child', () => {
     const moved = optimisticFolderMove(
       ['source', 'source/child', 'target', 'target/existing', 'target/source'],

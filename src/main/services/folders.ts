@@ -83,7 +83,13 @@ export function orderLibraryFolders(paths: readonly string[], positions: Readonl
   const result: string[] = []
   const visit = (parent: string): void => {
     const siblings = children.get(parent) ?? []
-    siblings.sort((a, b) => (positions.get(a) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b))
+    const originalOrder = new Map(siblings.map((path, index) => [path, index]))
+    siblings.sort((a, b) => {
+      const pa = positions.get(a)
+      const pb = positions.get(b)
+      if (pa != null || pb != null) return (pa ?? Number.MAX_SAFE_INTEGER) - (pb ?? Number.MAX_SAFE_INTEGER)
+      return (originalOrder.get(a) ?? 0) - (originalOrder.get(b) ?? 0)
+    })
     for (const path of siblings) {
       result.push(path)
       visit(path)

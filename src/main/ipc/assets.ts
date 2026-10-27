@@ -20,7 +20,7 @@ import { assetsByIds } from '../services/store'
 import { send } from '../events'
 import { absPathFor, libRootOf, releaseScope, scopeFor, win, type Scope } from './context'
 import { queueThumbWarmup } from './thumbs'
-import { attachRootWatcher, watchManager } from './watch'
+import { attachRootWatcher, watchManager, withoutRootWatcher } from './watch'
 import { needsVideoTranscode } from '../../shared/formats'
 import { realPathWithinRoot } from '../services/libResolve'
 import { ensureTranscodedVideo } from '../services/transcode'
@@ -37,6 +37,7 @@ function folderParent(path: string): string {
 function moveFolderBlock(paths: readonly string[], source: string, target: string, placement: 'before' | 'after' | 'inside'): string[] {
   const block = paths.filter((path) => path === source || path.startsWith(`${source}/`))
   const rest = paths.filter((path) => !block.includes(path))
+  if (target === '' && placement === 'inside') return [...rest, ...block]
   const targetIndex = rest.indexOf(target)
   if (targetIndex < 0) return paths.slice()
   if (placement === 'before') return [...rest.slice(0, targetIndex), ...block, ...rest.slice(targetIndex)]
@@ -65,7 +66,7 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!root || !s) return { error: '素材库不存在' }
     try {
-      const path = await createLibraryFolder(root)
+      const path = await withoutRootWatcher(libraryId, root, () => createLibraryFolder(root))
       const ordered = orderLibraryFolders(await listLibraryFolders(root), listFolderOrders(s.db, libraryId))
       replaceFolderOrders(s.db, libraryId, [path, ...ordered.filter((item) => item !== path)])
       send('assets:changed', { libraryId })
@@ -83,7 +84,7 @@ export function registerAssetsIpc(): void {
     if (!root || !s) return { error: '素材库不存在' }
     let path: string | null = null
     try {
-      path = await renameLibraryFolder(root, relPath, name)
+      path = await withoutRootWatcher(libraryId, root, () => renameLibraryFolder(root, relPath, name))
       renameAssetFolder(s.db, libraryId, relPath, path)
       renameFolderOrders(s.db, libraryId, relPath, path)
       send('assets:changed', { libraryId })
@@ -114,18 +115,27 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!root || !s) return { error: '素材库不存在' }
     if (!['before', 'after', 'inside'].includes(placement) || typeof sourcePath !== 'string') return { error: '文件夹移动参数无效' }
+    let path = sourcePath
+    let beforeOrders: string[] = []
+    let movedOnDisk = false
+    let assetsRenamed = false
+    let ordersRenamed = false
     try {
       const physical = await listLibraryFolders(root)
       if (!physical.includes(sourcePath)) return { error: '只能调整资源库中的本地文件夹' }
-      if (!physical.includes(targetPath)) return { error: '目标文件夹不存在' }
-      const destinationParent = placement === 'inside' ? targetPath : folderParent(targetPath)
+      const toRoot = targetPath === '' && placement === 'inside'
+      if (!toRoot && !physical.includes(targetPath)) return { error: '目标文件夹不存在' }
+      const destinationParent = toRoot ? '' : placement === 'inside' ? targetPath : folderParent(targetPath)
       if (destinationParent === sourcePath || destinationParent.startsWith(`${sourcePath}/`)) return { error: '不能移动到自身或子文件夹' }
 
-      let path = sourcePath
+      beforeOrders = orderLibraryFolders(physical, listFolderOrders(s.db, libraryId))
       if (folderParent(sourcePath) !== destinationParent) {
-        path = await moveLibraryFolder(root, sourcePath, destinationParent)
+        path = await withoutRootWatcher(libraryId, root, () => moveLibraryFolder(root, sourcePath, destinationParent))
+        movedOnDisk = path !== sourcePath
         renameAssetFolder(s.db, libraryId, sourcePath, path)
+        assetsRenamed = true
         renameFolderOrders(s.db, libraryId, sourcePath, path)
+        ordersRenamed = true
       }
       const ordered = moveFolderBlock(
         orderLibraryFolders(await listLibraryFolders(root), listFolderOrders(s.db, libraryId)),
@@ -142,6 +152,17 @@ export function registerAssetsIpc(): void {
       send('assets:changed', { libraryId })
       return { path }
     } catch (error) {
+      // 物理目录已移动但后续数据库/缩略图同步失败时，尽量恢复磁盘与索引一致。
+      try {
+        if (movedOnDisk && path !== sourcePath) {
+          await withoutRootWatcher(libraryId, root, () => moveLibraryFolder(root, path, sourcePath.includes('/') ? folderParent(sourcePath) : ''))
+        }
+        if (ordersRenamed) renameFolderOrders(s.db, libraryId, path, sourcePath)
+        if (assetsRenamed) renameAssetFolder(s.db, libraryId, path, sourcePath)
+        if (beforeOrders) replaceFolderOrders(s.db, libraryId, beforeOrders)
+      } catch {
+        return { error: '移动文件夹失败，且自动恢复不完整，请重新扫描素材库' }
+      }
       return { error: error instanceof Error ? error.message : '移动文件夹失败' }
     } finally {
       releaseScope(s)
@@ -406,7 +427,7 @@ export function registerAssetsIpc(): void {
         .get(id, libraryId) as { rel_path: string; fingerprint: string; missing: number; format: string } | undefined
       if (!row) return { error: '素材不存在' }
       if (row.missing) return { error: '缺失文件不能重命名' }
-      const relPath = await renameLibraryAsset(s.libPath, row.rel_path, newName)
+      const relPath = await withoutRootWatcher(libraryId, s.libPath, () => renameLibraryAsset(s.libPath, row.rel_path, newName))
       s.db.prepare('UPDATE assets SET rel_path = ? WHERE id = ? AND library_id = ?').run(relPath, id, libraryId)
       if (row.fingerprint) await retargetThumb(s.libPath, row.fingerprint, relPath)
       if (row.format === 'CSS') await renameShellAlongside(s.libPath, row.rel_path, relPath)
@@ -447,33 +468,34 @@ export function registerAssetsIpc(): void {
         if (row.missing) return { error: '缺失文件不能移动' }
       }
 
-      const commitMoved = async (items: { id: number; rel_path: string; fingerprint: string }[]): Promise<number> => {
-        const moved = applyMovedAssets(s.db, libraryId, items, newRelPaths)
-        for (const item of items) {
-          await retargetThumb(s.libPath, item.fingerprint, newRelPaths.get(item.id) ?? item.rel_path).catch(() => {})
+      // 整批只暂停一次监听:逐个关闭/重挂既慢,又会让后一个流程提前恢复句柄。
+      return await withoutRootWatcher(libraryId, s.libPath, async () => {
+        const newRelPaths = new Map<number, string>()
+        const movedItems: { id: number; rel_path: string; fingerprint: string }[] = []
+        const commitMoved = async (items: { id: number; rel_path: string; fingerprint: string }[]): Promise<number> => {
+          const moved = applyMovedAssets(s.db, libraryId, items, newRelPaths)
+          for (const item of items) {
+            await retargetThumb(s.libPath, item.fingerprint, newRelPaths.get(item.id) ?? item.rel_path).catch(() => {})
+          }
+          if (moved > 0) send('assets:changed', { libraryId, assetIds: items.map((item) => item.id) })
+          return moved
         }
-        if (moved > 0) send('assets:changed', { libraryId, assetIds: items.map((item) => item.id) })
-        return moved
-      }
-
-      // 先完成全部磁盘 rename,收集新 rel_path;任一失败立即中止并返回已移动清单
-      const newRelPaths = new Map<number, string>()
-      const movedItems: { id: number; rel_path: string; fingerprint: string }[] = []
-      for (const assetId of idList) {
-        const item = byId.get(assetId)!
-        try {
-          const relPath = await moveLibraryAsset(s.libPath, item.rel_path, targetFolder)
-          newRelPaths.set(assetId, relPath)
-          movedItems.push(item)
-        } catch (error) {
-          // 磁盘已成功移动的前缀必须先落库,否则重扫会把它们当成新素材,丢掉标签和评分。
-          const moved = await commitMoved(movedItems)
-          return { error: error instanceof Error ? error.message : '移动素材失败', moved }
+        for (const assetId of idList) {
+          const item = byId.get(assetId)!
+          try {
+            const relPath = await moveLibraryAsset(s.libPath, item.rel_path, targetFolder)
+            newRelPaths.set(assetId, relPath)
+            movedItems.push(item)
+          } catch (error) {
+            // 磁盘已成功移动的前缀必须先落库,否则重扫会把它们当成新素材,丢掉标签和评分。
+            const moved = await commitMoved(movedItems)
+            return { error: error instanceof Error ? error.message : '移动素材失败', moved }
+          }
         }
-      }
 
-      const moved = await commitMoved(movedItems)
-      return { moved }
+        const moved = await commitMoved(movedItems)
+        return { moved }
+      })
     } finally {
       releaseScope(s)
     }
