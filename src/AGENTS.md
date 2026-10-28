@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-22 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-28 -->
 
 # AGENTS.md — src
 
@@ -43,6 +43,8 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `cssPreview.ts` | CSS 预览骨架的主进程侧：定位同目录同名 `.html`（纯拼接逻辑在 `src/shared/`） |
 | `cssThumb.ts` | CSS 缩略图：离屏 `BrowserWindow` 渲染真实效果后截图 |
 | `eagle.ts` / `legacySourceMigration.ts` | Eagle 库导入；旧库一次性迁移（**只读兼容层，勿扩展**） |
+| `documentPreview.ts` | 文档只读预览唯一入口 `ensureDocumentPreview`：TXT/MD/CSV、DOC、DOCX/DOCM、XLSX/XLSM、PPTX/PPTM、XLS/XLSB/ODS/FODS、RTF、ODT/OTT、ODP；旧版 DOC 用内置 `@file-viewer/doc`，解析结果按指纹缓存在 `.mediahub/previews/documents/` |
+| `documentZip.ts` / `documentMeta.ts` | OOXML 解包与解压上限、OLE 加密识别；扫描期低成本结构探测（页数/工作表数/幻灯片数） |
 
 `src/shared/` 是跨进程共享的纯逻辑层（无 fs / 无 electron）：`types.ts` 共享类型、`cssPreview.ts` 纯字符串拼接（主进程截图与渲染层预览共用，保证两条路径视觉一致）。约定：**新文件若要被两侧同时引用，放 `src/shared/`，并确认它在两个 tsconfig 的 include 里**（当前两侧都已含 `src/shared/**/*.ts`）。
 

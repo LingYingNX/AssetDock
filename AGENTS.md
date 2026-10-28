@@ -32,12 +32,12 @@ Ponytail 技能已安装在本机，编码任务默认遵循其懒惰阶梯：YA
 ## OpenSpec 接手
 
 新会话开始处理任务前，如果项目根目录存在 `openspec/`，先运行 `openspec list --json` 和 `openspec list --specs --json` 查看当前进行中的 change 和已有 spec，结合任务判断是否需要继续某个 change 或创建新 change。已有 change 且 tasks 有未完成项时，使用 `openspec-apply-change` 继续；tasks 全部完成时提示用户归档。
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-22 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-28 -->
 
 # AGENTS.md
 
 MediaHub 素材管理器 — 本地优先的 Electron 桌面应用（Electron 44 · electron-vite 6 · React 18 · TS 5.9 · Vitest 4）。
-写给 AI 代理；架构细节见 `docs/ARCHITECTURE.md`，能力规范见 `openspec/specs/`。
+写给 AI 代理；架构细节见 `docs/ARCHITECTURE.md`，格式能力与验证记录见 `docs/FORMAT_SUPPORT.md`，能力规范见 `openspec/specs/`。
 
 **Precedence:** 离改动文件最近的 `AGENTS.md` 优先（closest AGENTS.md wins）；根文件只放全局约定。
 
@@ -53,6 +53,7 @@ MediaHub 素材管理器 — 本地优先的 Electron 桌面应用（Electron 44
 | 构建 | `npm run build` | 产物在 out/ |
 | 预览 | `npm start` | 启动 electron-vite preview |
 | 双击启动 | `启动.bat` | 先 cd 到脚本目录再跑 dev |
+| 隔离实机验证 | `$env:MEDIAHUB_TEST_USER_DATA='<tmp>'; $env:MEDIAHUB_TEST_BRIDGE_PORT=9231; npx electron . --remote-debugging-port=9222` | 独立 userData + 调试桥；token 在 `<userData>/debug-bridge-token`，用 `http://127.0.0.1:9231/<token>/<js>` 驱动渲染层 |
 
 ## Structure
 
@@ -78,6 +79,7 @@ tests/              vitest 用例   tools/ 开发与无头验证脚本   openspe
 | 窗口拖不动 / 浮层点了没反应 | 标题栏拖拽由 Titlebar.tsx 的 openMenu 决定；任何覆盖顶部 40px（`--h-title`）的浮层都会吃掉拖拽区 |
 | 改了主题却玻璃发灰 | 新表面要用 tokens.css 的 --sheen-* / --surface 令牌；用了 backdrop-filter 就得补 :root[data-theme="dark"] 对应规则 |
 | `npm run dev` 报 `Cannot read properties of undefined (reading 'registerSchemesAsPrivileged')` | 环境里带了 `ELECTRON_RUN_AS_NODE=1`，Electron 退化成纯 Node；启动前 `Remove-Item Env:ELECTRON_RUN_AS_NODE` |
+| 生产构建卡片缩略图全 403 | `file://` 页面请求 `media://` 时 Chromium 会清空 Referer；`media.ts` 仅在无 `ELECTRON_RENDERER_URL` 的生产文档允许空 Referer，dev 仍校验精确 origin |
 | 用 settings 写的 `background-image` 在菜单上不生效 | `.glass-menu` 的 `background` **简写**会把它重置成 none，且深色主题那条 `:root[data-theme="dark"] .glass-menu` 特异性更高。改用伪元素，别跟简写抢 |
 | 状态已更新但组件不出现（如右键菜单） | Hook 被放在了 `if (!x) return null` 之后——两次渲染 hook 数量不一致，React 抛错并丢弃整个子树。所有 hook 必须在早退之前 |
 | prod 构建里 `window.__ui` 是 undefined | 那是设计：`App.tsx` 用 `import.meta.env.DEV` 守卫，只在 dev 暴露 store。生产验证改走真实 UI 路径 |

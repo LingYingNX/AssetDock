@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-22 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-28 -->
 
 # AGENTS.md — tests
 
@@ -16,7 +16,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 
 | 文件 | 覆盖 |
 |------|------|
-| `scan.test.ts` / `ignore.test.ts` / `fingerprint.test.ts` | 扫描分批与进度、扩展名白名单与忽略规则、缓存指纹 |
+| `scan.test.ts` / `scanFormats.test.ts` / `ignore.test.ts` / `fingerprint.test.ts` | 扫描分批与进度、扩展名白名单与忽略规则、缓存指纹 |
 | `dbMigration.test.ts` / `libraryCreate.test.ts` | schema 迁移可重放、建库路径白名单/磁盘根拒绝/过期 |
 | `watch.test.ts` | chokidar 监听：`usePolling:false`、外部重命名后回调 |
 | `folders.test.ts` | 库内文件夹增删改移、素材移动、`exportLibraryAsset` 同名避让 |
@@ -34,6 +34,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
 | `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
 | `thumbnailDecoder.test.ts` / `imagePreview.test.ts` | 按注册表路由缩略图解码、原生失败后 ffmpeg 回退、视频关键帧失败后首帧回退、PSD/HEIC 灯箱大图缓存 |
+| `documentPreview.test.ts` / `documentMeta.test.ts` / `formats.test.ts` | 文档只读预览：TXT/MD/CSV、DOC、DOCX/DOCM、XLSX/XLSM、PPTX/PPTM、XLS/XLSB/ODS/FODS、RTF、ODT/OTT、ODP 的解析、缓存、失败分类与格式注册 |
 
 ## Setup & environment
 
