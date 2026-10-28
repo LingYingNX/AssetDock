@@ -100,8 +100,9 @@ function SheetView({ sheet, zoom }: { sheet: DocumentSheet; zoom: number }): Rea
           {sheet.rows.map((height, rowIndex) => (
             <tr key={rowIndex} style={{ height }}>
               {sheet.columns.map((_, colIndex) => {
-                const cell = byKey.get(`${rowIndex + 1}:${colIndex + 1}`)
-                if (!cell && covered.has(`${rowIndex + 1}:${colIndex + 1}`)) return null
+                const key = `${rowIndex + 1}:${colIndex + 1}`
+                if (covered.has(key)) return null
+                const cell = byKey.get(key)
                 return (
                   <td
                     key={colIndex}
