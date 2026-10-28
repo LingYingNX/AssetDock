@@ -88,7 +88,13 @@ function rootCallbacks(libraryId: number, db: () => import('better-sqlite3').Dat
   }
   return {
     onAdded: (id) => {
-      queueThumbWarmup(libraryId)
+      const row = typeof id === 'number'
+        ? db().prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND id = ?').get(libraryId, id) as
+            | { fingerprint: string }
+            | undefined
+        : undefined
+      if (row?.fingerprint) queueThumbWarmup(libraryId, [row.fingerprint])
+      else queueThumbWarmup(libraryId)
       delta(id)
     },
     onChanged: (id) => delta(id),

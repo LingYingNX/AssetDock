@@ -206,7 +206,7 @@ export function registerAssetsIpc(): void {
       // 先落库再处理缓存,否则恢复时预热仍会读到旧的 deleted_at 而跳过该素材
       if (!updateAsset(s.db, libraryId, id, clean)) return { ok: false }
       if (row && trashing) await removeThumbsIfUnused(s.libPath, s.db, libraryId, [row.fingerprint])
-      if (row && restoring) queueThumbWarmup(libraryId)
+      if (row && restoring) queueThumbWarmup(libraryId, [row.fingerprint])
       // 单素材编辑(评分/收藏/备注/回收站)走增量:渲染层只合并这一行
       send('assets:changed', { libraryId, assetIds: [id] })
       return { ok: true }
@@ -463,7 +463,7 @@ export function registerAssetsIpc(): void {
       send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
       if (imported.entries.length > 0) {
         send('assets:changed', { libraryId })
-        queueThumbWarmup(libraryId)
+        queueThumbWarmup(libraryId, imported.entries.map((entry) => entry.fingerprint))
       }
       return { imported: imported.imported, skipped: imported.skipped }
     } catch (error) {
@@ -705,7 +705,7 @@ export function registerAssetsIpc(): void {
         upsertScanned(s.db, libraryId, imported.entries)
         send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
         send('assets:changed', { libraryId })
-        queueThumbWarmup(libraryId)
+        queueThumbWarmup(libraryId, imported.entries.map((entry) => entry.fingerprint))
         return { imported: imported.imported, multiFolderAssets: imported.multiFolderAssets }
       } catch (error) {
         return { error: error instanceof Error ? error.message : '无法导入 Eagle 素材' }

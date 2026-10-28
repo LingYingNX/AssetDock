@@ -45,6 +45,11 @@
 - **WHEN** 用户双击一个包含合成图的 PSD 文件
 - **THEN** 灯箱显示合成图预览，不把 PSD 当普通 JPEG 交给 img 元素
 
+#### Scenario: 打开 SVG 素材
+
+- **WHEN** 用户打开一个 SVG 素材
+- **THEN** 灯箱以 sandbox iframe 直接读取原始 SVG，保留矢量与浏览器原生渲染能力，不显示 JPG 缩略图
+
 ### Requirement: 按当前集合翻页
 
 灯箱的上一张和下一张 SHALL 使用当前侧栏导航、搜索、五组筛选和颜色筛选结果。灯箱 SHALL NOT 进入当前视图之外的素材。

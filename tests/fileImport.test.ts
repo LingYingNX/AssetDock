@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { importDroppedFiles, normalizeDroppedPaths } from '../src/main/services/fileImport'
 import { openMemoryLibDb } from '../src/main/services/libraryDb'
 import { upsertScanned } from '../src/main/services/store'
+import { thumbJobRows } from '../src/main/services/thumbs'
 
 describe('file import', () => {
   let root = ''
@@ -87,6 +88,28 @@ describe('file import', () => {
       const row = db.prepare('SELECT rel_path, format FROM assets WHERE library_id = 1').get() as
         { rel_path: string; format: string }
       expect(row).toEqual({ rel_path: 'theme.css', format: 'CSS' })
+    } finally {
+      db.close()
+    }
+  })
+
+  it('does not eagerly rasterize imported SVG while retaining raster imports', async () => {
+    await writeFile(
+      join(outside, 'icon.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#39f"/></svg>'
+    )
+    await writeFile(
+      join(outside, 'photo.png'),
+      Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+    )
+    const db = openMemoryLibDb()
+    try {
+      const result = await importDroppedFiles(root, '', [join(outside, 'icon.svg'), join(outside, 'photo.png')])
+      expect(result.imported).toBe(2)
+      upsertScanned(db, 1, result.entries)
+
+      const jobs = thumbJobRows(db, 1, result.entries.map((entry) => entry.fingerprint))
+      expect(jobs.map((row) => row.rel_path)).toEqual(['photo.png'])
     } finally {
       db.close()
     }

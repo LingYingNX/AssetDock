@@ -451,17 +451,26 @@ export interface ThumbJobRow {
 }
 
 /**
- * Rows that need a thumbnail: raster/doc images, video keyframes, 3D models and CSS.
- * Missing files and trashed assets are excluded too.
+ * Rows that need an eager thumbnail: raster/doc images, video keyframes, 3D models and CSS.
+ * SVG is intentionally excluded because its Chromium render is expensive; it is generated
+ * lazily when a card first requests ?thumb=1. Missing and trashed assets are excluded too.
  */
-export function thumbJobRows(db: Database.Database, libraryId: number): ThumbJobRow[] {
-  return db
+export function thumbJobRows(
+  db: Database.Database,
+  libraryId: number,
+  fingerprints?: readonly string[]
+): ThumbJobRow[] {
+  const rows = db
     .prepare(
       `SELECT rel_path, fingerprint, format, mtime_ms, size_bytes FROM assets
        WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
-         AND type IN ('image', 'video', 'model', 'style') AND fingerprint <> ''`
+         AND type IN ('image', 'video', 'model', 'style')
+         AND upper(format) <> 'SVG' AND fingerprint <> ''`
     )
     .all(libraryId) as ThumbJobRow[]
+  if (!fingerprints) return rows
+  const wanted = new Set(fingerprints)
+  return rows.filter((row) => wanted.has(row.fingerprint))
 }
 
 /**

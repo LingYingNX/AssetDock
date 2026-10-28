@@ -30,10 +30,11 @@ describe('thumbnail database selection', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('selects css, bitmaps, video and 3D while excluding trash and missing', () => {
+  it('selects eager covers while excluding SVG, trash and missing; fingerprint scope narrows jobs', () => {
     const add = (relPath: string, type: string, format: string, fingerprint: string) =>
       upsertScanned(db, 1, [{ relPath, name: relPath.replace(/\.[^.]+$/, ''), type: type as never, format, sizeBytes: 10, mtimeMs: 1, fingerprint }])
     add('photo.png', 'image', 'PNG', 'fp-img')
+    add('icon.svg', 'image', 'SVG', 'fp-svg')
     add('loader.css', 'style', 'CSS', 'fp-css')
     add('clip.mp4', 'video', 'MP4', 'fp-vid')
     add('model.glb', 'model', 'GLB', 'fp-model')
@@ -43,6 +44,8 @@ describe('thumbnail database selection', () => {
     expect(thumbJobRows(db, 1).map((row) => row.rel_path).sort()).toEqual([
       'clip.mp4', 'loader.css', 'model.glb', 'photo.png'
     ])
+    expect(thumbJobRows(db, 1, ['fp-img']).map((row) => row.rel_path)).toEqual(['photo.png'])
+    expect(thumbJobRows(db, 1, ['fp-svg'])).toEqual([])
   })
 
   const entry = (relPath: string) => ({
