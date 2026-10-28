@@ -15,7 +15,11 @@ describe('database schema migration', () => {
       expect(columns).toContain('fps')
       expect(columns).toContain('source_index_id')
       expect(columns).toContain('folder_path')
-      expect(db.pragma('user_version', { simple: true })).toBe(5)
+      expect(columns).toContain('page_count')
+      expect(columns).toContain('sheet_count')
+      expect(columns).toContain('slide_count')
+      expect(columns).toContain('text_encoding')
+      expect(db.pragma('user_version', { simple: true })).toBe(6)
     } finally {
       db.close()
     }

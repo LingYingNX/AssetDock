@@ -41,6 +41,24 @@ describe('scanning expanded formats', () => {
     expect(byPath.get('photo.jpg')).toMatchObject({ type: 'image', format: 'JPG' })
   })
 
+  it('registers documents through the same registry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-scan-documents-'))
+    roots.push(root)
+    const names = ['notes.txt', 'README.md', 'data.csv', 'plan.docx', 'book.xlsx', 'deck.pptx', 'legacy.doc']
+    await Promise.all(names.map((name) => writeFile(join(root, name), name)))
+
+    const entries = await scanLibrary(root)
+    const byPath = new Map(entries.map((entry) => [entry.relPath, entry]))
+    expect(entries).toHaveLength(names.length)
+    expect(byPath.get('notes.txt')).toMatchObject({ type: 'document', format: 'TXT' })
+    expect(byPath.get('README.md')).toMatchObject({ type: 'document', format: 'MARKDOWN' })
+    expect(byPath.get('data.csv')).toMatchObject({ type: 'document', format: 'CSV' })
+    expect(byPath.get('plan.docx')).toMatchObject({ type: 'document', format: 'DOCX' })
+    expect(byPath.get('book.xlsx')).toMatchObject({ type: 'document', format: 'XLSX' })
+    expect(byPath.get('deck.pptx')).toMatchObject({ type: 'document', format: 'PPTX' })
+    expect(byPath.get('legacy.doc')).toMatchObject({ type: 'document', format: 'DOC' })
+  })
+
   it('stores canonical formats while preserving the original relative path', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mediahub-scan-canonical-'))
     roots.push(root)

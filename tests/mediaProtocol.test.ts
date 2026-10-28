@@ -15,8 +15,9 @@ describe('isAllowedMediaReferrer (S0-1)', () => {
     expect(isAllowedMediaReferrer('about:srcdoc')).toBe(true)
   })
 
-  it('rejects empty referrer', () => {
+  it('allows empty referrer only for the production file document', () => {
     expect(isAllowedMediaReferrer('')).toBe(false)
+    expect(isAllowedMediaReferrer('', true)).toBe(true)
   })
 
   it('rejects external http/https origins', () => {

@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
-import { readFile } from 'node:fs/promises'
-import { relative } from 'node:path'
-import { createHash } from 'node:crypto'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
 /**
@@ -21,7 +21,7 @@ const RENDER_TIMEOUT_MS = 5000
  * 渲染一个本地 data URL 页面并截图,返回可供 sharp 处理的 PNG Buffer。
  * 任何失败(超时、窗口创建失败、空图)都抛出,由调用方回退占位图。
  */
-async function renderPreviewPng(url: string, zoomFactor = 1): Promise<Buffer> {
+async function renderPreviewPng(url: string, zoomFactor = 1, filePath?: string): Promise<Buffer> {
   const win = new BrowserWindow({
     width: RENDER_WIDTH,
     height: RENDER_HEIGHT,
@@ -52,8 +52,10 @@ async function renderPreviewPng(url: string, zoomFactor = 1): Promise<Buffer> {
         reject(new Error('css preview failed to load'))
       })
     })
+    loaded.catch(() => undefined)
 
-    await win.loadURL(url)
+    if (filePath) await win.loadFile(filePath)
+    else await win.loadURL(url)
     if (zoomFactor !== 1) win.webContents.setZoomFactor(zoomFactor)
     await loaded
 
@@ -68,9 +70,21 @@ async function renderPreviewPng(url: string, zoomFactor = 1): Promise<Buffer> {
   }
 }
 
+/** 渲染用的一次性 HTML 落在库内 `.mediahub/tmp`,不写系统临时盘。 */
+export function libraryTempDir(libPath: string): string {
+  return join(libPath, '.mediahub', 'tmp')
+}
+
 /** 渲染预览 HTML 并截图。 */
-export async function renderCssPreviewPng(html: string): Promise<Buffer> {
-  return renderPreviewPng('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+export async function renderCssPreviewPng(html: string, tempDir: string): Promise<Buffer> {
+  await mkdir(tempDir, { recursive: true })
+  const file = join(tempDir, `${randomUUID()}.html`)
+  try {
+    await writeFile(file, html, 'utf8')
+    return await renderPreviewPng('', 1, file)
+  } finally {
+    await rm(file, { force: true }).catch(() => undefined)
+  }
 }
 
 /**
@@ -100,8 +114,8 @@ export async function renderSvgPreviewPng(absPath: string): Promise<Buffer> {
 }
 
 /** 截图 → 640px 长边 JPEG(与位图缩略图同一编码参数,便于共用缓存目录) */
-export async function renderCssThumbJpeg(html: string, size: number): Promise<Buffer> {
-  const png = await renderCssPreviewPng(html)
+export async function renderCssThumbJpeg(html: string, size: number, libPath: string): Promise<Buffer> {
+  const png = await renderCssPreviewPng(html, libraryTempDir(libPath))
   return sharp(png)
     .resize(size, size, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 84, mozjpeg: true })
@@ -119,7 +133,7 @@ export async function renderCssThumbFromFile(libPath: string, absPath: string, s
     readFile(absPath, 'utf8'),
     preview.resolvePreviewShell(libPath, relPath)
   ])
-  return renderCssThumbJpeg(preview.buildPreviewHtml(cssText, shell), size)
+  return renderCssThumbJpeg(preview.buildPreviewHtml(cssText, shell), size, libPath)
 }
 
 /**

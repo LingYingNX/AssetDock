@@ -10,7 +10,9 @@ import type { ModelShade, Viewer3DFormat } from './Viewer3D'
 import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
+import { DocumentStage, documentNavCount, DOC_ZOOM_MAX, DOC_ZOOM_MIN, stepDocZoom } from './DocumentStage'
 import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
+import type { DocumentPreview } from '../../../shared/types'
 
 let videoSessionSeq = 0
 let videoLoadSeq = 0
@@ -145,6 +147,7 @@ export function Lightbox(): React.JSX.Element | null {
   const [loadPct, setLoadPct] = useState<number | null | undefined>(undefined)
   const [realFailed, setRealFailed] = useState(false)
   const [prepareNonce, setPrepareNonce] = useState(0)
+  const forcePrepare = useRef(false)
   const [videoEpoch] = useState(() => ++videoSessionSeq)
   const [preparedMedia, setPreparedMedia] = useState<{
     id: string
@@ -153,8 +156,11 @@ export function Lightbox(): React.JSX.Element | null {
     error?: string
     message?: string
     pages?: number
+    document?: DocumentPreview
   } | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
+  const [documentPage, setDocumentPage] = useState(1)
+  const [documentZoom, setDocumentZoom] = useState(1)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
@@ -163,6 +169,7 @@ export function Lightbox(): React.JSX.Element | null {
   const isVideo = a?.type === 'video'
   const isModel = a?.type === 'model'
   const isStyle = a?.type === 'style'
+  const isDocument = a?.type === 'document'
   const spec = a ? formatSpec(a.format) : undefined
   const isEnvMap = spec?.preview === 'envmap'
   const transcodeRequired = isVideo && !!a && needsVideoTranscode(a.format)
@@ -170,7 +177,7 @@ export function Lightbox(): React.JSX.Element | null {
   const blendRequired = a?.format === 'BLEND'
   const c4dRequired = a?.format === 'C4D'
   const imagePreviewRequired = a?.format === 'PSD' || a?.format === 'HEIC'
-  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired || imagePreviewRequired
+  const prepareRequired = transcodeRequired || aiRequired || blendRequired || c4dRequired || imagePreviewRequired || isDocument
   const rawVideoSrc = isVideo && a ? (a.dbId != null ? a.originalUrl ?? '' : `/@fs/${a.previewUrl ?? ''}`) : ''
   const sourceVideo = rawVideoSrc
     ? `${rawVideoSrc}${rawVideoSrc.includes('?') ? '&' : '?'}lightbox=1&session=${videoEpoch}`
@@ -198,7 +205,9 @@ export function Lightbox(): React.JSX.Element | null {
         error: payload.error
       }))
     })
-    void window.windowApi.assets.preparePreview(libraryId, assetId).then((result) => {
+    const force = forcePrepare.current
+    forcePrepare.current = false
+    void window.windowApi.assets.preparePreview(libraryId, assetId, { force }).then((result) => {
       if (cancelled) return
       if ('error' in result) {
         setPreparedMedia({ id: a.id, error: result.error })
@@ -210,6 +219,8 @@ export function Lightbox(): React.JSX.Element | null {
         setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
       } else if (result.kind === 'pdf') {
         setPreparedMedia({ id: a.id, url: result.url, pages: result.pages })
+      } else if (result.kind === 'document') {
+        setPreparedMedia({ id: a.id, document: result.preview })
       } else if (result.kind === 'external') {
         setPreparedMedia({ id: a.id, message: result.message })
       } else {
@@ -228,6 +239,8 @@ export function Lightbox(): React.JSX.Element | null {
 
   useEffect(() => {
     setPdfPage(1)
+    setDocumentPage(1)
+    setDocumentZoom(1)
   }, [lightboxId])
 
   useEffect(() => {
@@ -360,7 +373,10 @@ export function Lightbox(): React.JSX.Element | null {
   const viewerUrl = preparedModelUrl ?? a.originalUrl ?? ''
   const viewerFormat = (a.format === 'BLEND' ? 'GLB' : a.format) as Viewer3DFormat
   const externalNotice = prepared?.error ?? prepared?.message
-  const retryPreview = (): void => setPrepareNonce((value) => value + 1)
+  const retryPreview = (): void => {
+    forcePrepare.current = true
+    setPrepareNonce((value) => value + 1)
+  }
   const openExternally = (): void => {
     if (a.libraryId == null || a.dbId == null) return
     void window.windowApi.assets.openExternal(a.libraryId, a.dbId).then((result) => {
@@ -381,7 +397,15 @@ export function Lightbox(): React.JSX.Element | null {
   const refreshedImageViewUrl = imageViewUrl
     ? `${imageViewUrl}${imageViewUrl.includes('?') ? '&' : '?'}thumbReady=${thumbRevision}`
     : ''
-  const assetMeta = formatResolution(a).replace('×', ' × ') || a.format
+  const assetMeta = isDocument
+    ? (a.sheetCount != null
+        ? `${a.sheetCount} 个工作表`
+        : a.slideCount != null
+          ? `${a.slideCount} 张幻灯片`
+          : a.pageCount != null
+            ? `${a.pageCount} 页`
+            : a.format)
+    : formatResolution(a).replace('×', ' × ') || a.format
   const hdrSettings = {
     rotation: modelHdrRotation,
     strength: modelHdrStrength,
@@ -415,7 +439,7 @@ export function Lightbox(): React.JSX.Element | null {
           <div
             className="pv-frame"
             onClick={(e) => {
-              if (isModel) return
+              if (isModel || isDocument) return
               const t = e.target as HTMLElement
               if (t.tagName === 'IMG' || t.tagName === 'VIDEO' || t.tagName === 'CANVAS' || t.tagName === 'IFRAME' || t.closest('button') || t.closest('input')) return
               closeLightbox()
@@ -537,6 +561,19 @@ export function Lightbox(): React.JSX.Element | null {
                   </label>
                 </div>
               </div>
+            ) : isDocument ? (
+              <DocumentStage
+                preview={prepared?.document}
+                name={a.name}
+                loading={!prepared || (!prepared.document && !prepared.error)}
+                error={prepared?.error}
+                page={documentPage}
+                zoom={documentZoom}
+                onPage={setDocumentPage}
+                onZoom={setDocumentZoom}
+                onRetry={retryPreview}
+                onOpenExternal={openExternally}
+              />
             ) : a.type === 'image' ? (
               prepared?.error ? (
                 <div className="pv3d">
@@ -596,7 +633,64 @@ export function Lightbox(): React.JSX.Element | null {
               <span className="sep">·</span>
               <span title={assetMeta}>{assetMeta}</span>
             </div>
-            {a.format === 'AI' && prepared?.pages ? (
+            {isDocument && prepared?.document && !prepared.document.failure ? (
+              <div className="v3-bar">
+                <button
+                  className="v3-chip"
+                  disabled={documentZoom <= DOC_ZOOM_MIN}
+                  onClick={() => setDocumentZoom((zoom) => stepDocZoom(zoom, -1))}
+                  aria-label="缩小"
+                  title="缩小（-）"
+                >
+                  <Icon name="minus" />
+                </button>
+                <button
+                  className="v3-chip"
+                  onClick={() => setDocumentZoom(1)}
+                  aria-label="适应窗口"
+                  title="适应窗口（双击内容或按 0）"
+                >
+                  <Icon name="zoom-fit" />
+                  {Math.round(documentZoom * 100)}%
+                </button>
+                <button
+                  className="v3-chip"
+                  disabled={documentZoom >= DOC_ZOOM_MAX}
+                  onClick={() => setDocumentZoom((zoom) => stepDocZoom(zoom, 1))}
+                  aria-label="放大"
+                  title="放大（+）"
+                >
+                  <Icon name="plus" />
+                </button>
+                {prepared.document.shape === 'slides' ? (() => {
+                  const document = prepared.document
+                  const total = documentNavCount(document)
+                  return (
+                    <>
+                <button
+                  className="v3-chip"
+                  disabled={documentPage <= 1}
+                  onClick={() => setDocumentPage((page) => Math.max(1, page - 1))}
+                  aria-label="上一页"
+                  title="上一页"
+                >
+                  <Icon name="arr-l" />
+                </button>
+                <span className="v3-chip">{documentPage} / {total}</span>
+                <button
+                  className="v3-chip"
+                  disabled={documentPage >= total}
+                  onClick={() => setDocumentPage((page) => Math.min(total, page + 1))}
+                  aria-label="下一页"
+                  title="下一页"
+                >
+                  <Icon name="arr-r" />
+                </button>
+                    </>
+                  )
+                })() : null}
+              </div>
+            ) : a.format === 'AI' && prepared?.pages ? (
               <div className="v3-bar">
                 <button
                   className="v3-chip"

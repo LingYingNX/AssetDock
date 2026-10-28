@@ -38,6 +38,7 @@ export function formatFullDate(iso: string): string {
 
 export function formatResolution(a: Asset): string {
   if (a.type === 'model') return ''
+  if (a.type === 'document') return '—'
   if (a.format === 'SVG') return '矢量'
   if (!a.width || !a.height) return '—'
   return `${a.width}×${a.height}`
@@ -82,8 +83,8 @@ export function paletteHasColor(a: Asset, hex: string): boolean {
 
 export interface Filters {
   format: string // 'all' | 'photo' | 'psd-ai' | 'svg-gif' | 'video' | 'glb' | 'fbx' | 'obj'
-  shape: string // 'all' | 'landscape' | 'portrait' | 'square' | 'pano'
-  size: string // 'all' | 'small' | 'medium' | 'large'
+  shape: string // 'all' | 'landscape' | 'portrait' | 'square' | 'pano' | 'none'
+  size: string // 'all' | 'small' | 'medium' | 'large' | 'none'
   rating: string // 'all' | '5' | '4up' | '3up' | 'none'
   tag: string // 'all' | 标签名
 }
@@ -151,19 +152,23 @@ function matchFilters(a: Asset, f: Filters): boolean {
     }
     if (!(legacy[f.format] ?? [f.format]).includes(fm)) return false
   }
-  if (f.shape !== 'all' && a.type !== 'model') {
+  if (f.shape !== 'all' && f.shape !== 'none' && a.type === 'document') return false
+  if (f.shape !== 'all' && f.shape !== 'none' && a.type !== 'model' && a.type !== 'document') {
     const ar = (a.width ?? 1) / (a.height ?? 1)
     if (f.shape === 'landscape' && !(ar > 1.2 && ar <= 2.2)) return false
     if (f.shape === 'portrait' && !(ar < 0.83)) return false
     if (f.shape === 'square' && !(ar >= 0.83 && ar <= 1.2)) return false
     if (f.shape === 'pano' && ar <= 2.2) return false
   }
-  if (f.size !== 'all') {
+  if (f.shape === 'none' && a.type !== 'document') return false
+  if (f.size !== 'all' && f.size !== 'none' && a.type === 'document') return false
+  if (f.size !== 'all' && f.size !== 'none' && a.type !== 'document') {
     const px = RES_PX(a)
     if (f.size === 'small' && px > 1920) return false
     if (f.size === 'medium' && !(px > 1920 && px < 3840)) return false
     if (f.size === 'large' && px < 3840 && a.type !== 'model') return false
   }
+  if (f.size === 'none' && a.type !== 'document') return false
   if (f.rating !== 'all') {
     if (f.rating === '5' && a.rating !== 5) return false
     if (f.rating === '4up' && a.rating < 4) return false
@@ -256,6 +261,26 @@ export function infoRows(a: Asset): [string, string, string?][] {
       ['来源', a.sourceUrl ? '外部链接' : '本地素材库']
     ]
   }
+  if (a.type === 'document') {
+    const structural: [string, string, string?][] = []
+    const spec = formatSpec(a.format)
+    const shape = spec && 'documentShape' in spec ? spec.documentShape : undefined
+    if (shape === 'sheet') {
+      structural.push(['工作表', a.sheetCount != null ? String(a.sheetCount) : '—'])
+    } else if (shape === 'slides') {
+      structural.push(['幻灯片', a.slideCount != null ? String(a.slideCount) : '—'])
+    } else {
+      structural.push(['页数', a.pageCount != null ? String(a.pageCount) : '—'])
+    }
+    return [
+      ['类型', `${a.format} 文档`, a.textEncoding],
+      ['能力', capability],
+      ...structural,
+      ['大小', formatBytes(a.sizeBytes)],
+      ['导入', formatFullDate(a.importedAt)],
+      ['来源', a.sourceUrl ? '外部链接' : '本地素材库']
+    ]
+  }
   const rows: [string, string, string?][] = [
     ['类型', `${a.format} ${a.type === 'video' ? '视频' : '图片'}`, a.type === 'video' ? codecLabel(a.codec) : undefined],
     ['能力', capability],
@@ -273,6 +298,8 @@ export function formatCapability(a: Asset): string {
   if (!spec) return '仅入库'
   if ('external' in spec && spec.external === 'blender') return '需 Blender'
   if ('external' in spec && spec.external === 'cinema4d') return '需 Cinema 4D'
+  if (spec.type === 'document' && spec.preview === 'external') return '需外部办公软件转换'
+  if (spec.type === 'document' && spec.preview === 'document') return '内置只读预览'
   if (spec.preview === 'envmap') return '环境图预览'
   if (spec.preview === 'pdf') return 'PDF 兼容预览'
   if (spec.preview === 'css') return '可编辑'

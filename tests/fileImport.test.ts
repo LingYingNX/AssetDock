@@ -60,11 +60,19 @@ describe('file import', () => {
   })
 
   it('imports external images while skipping unsupported and library-internal files', async () => {
-    await writeFile(join(root, 'note.txt'), 'T')
+    await writeFile(join(root, 'note.pdf'), 'T')
     await writeFile(join(outside, 'a.jpg'), 'A')
-    const result = await importDroppedFiles(root, '', [join(root, 'note.txt'), join(outside, 'a.jpg')])
+    const result = await importDroppedFiles(root, '', [join(root, 'note.pdf'), join(outside, 'a.jpg')])
     expect(result.imported).toBe(1)
     expect(result.skipped).toBe(1)
+  })
+
+  it('imports supported documents from outside the library', async () => {
+    const source = join(outside, 'notes.txt')
+    await writeFile(source, '中文笔记')
+    const result = await importDroppedFiles(root, '', [source])
+    expect(result).toMatchObject({ imported: 1, skipped: 0 })
+    expect(result.entries[0]).toMatchObject({ relPath: 'notes.txt', type: 'document', format: 'TXT' })
   })
 
   it('rejects a target folder that junction-escapes the library root', async () => {

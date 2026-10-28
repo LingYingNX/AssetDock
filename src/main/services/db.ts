@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS assets (
   face_count INTEGER,
   vertices INTEGER,
   material_info TEXT,
+  codec TEXT,
+  fps REAL,
+  page_count INTEGER,
+  sheet_count INTEGER,
+  slide_count INTEGER,
+  text_encoding TEXT,
   size_bytes INTEGER NOT NULL,
   mtime_ms INTEGER NOT NULL,
   fingerprint TEXT NOT NULL,
@@ -123,6 +129,13 @@ export function migrateSchema(d: Database.Database): void {
     if (!columns('assets').includes('folder_path')) d.exec(SCHEMA_V4)
   })
   step(5, () => { d.exec(SCHEMA_V5) })
+  step(6, () => {
+    const assetColumns = columns('assets')
+    if (!assetColumns.includes('page_count')) d.exec('ALTER TABLE assets ADD COLUMN page_count INTEGER')
+    if (!assetColumns.includes('sheet_count')) d.exec('ALTER TABLE assets ADD COLUMN sheet_count INTEGER')
+    if (!assetColumns.includes('slide_count')) d.exec('ALTER TABLE assets ADD COLUMN slide_count INTEGER')
+    if (!assetColumns.includes('text_encoding')) d.exec('ALTER TABLE assets ADD COLUMN text_encoding TEXT')
+  })
 }
 
 export function getDb(): Database.Database {
@@ -134,8 +147,6 @@ export function getDb(): Database.Database {
 export function openMemoryDb(): Database.Database {
   const d = openSqlite(':memory:')
   d.exec(SCHEMA_V1)
-  d.exec('ALTER TABLE assets ADD COLUMN codec TEXT')
-  d.exec('ALTER TABLE assets ADD COLUMN fps REAL')
   d.exec(SCHEMA_V3)
   d.exec(SCHEMA_V4)
   d.exec(SCHEMA_V5)

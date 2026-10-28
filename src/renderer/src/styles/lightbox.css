@@ -29,6 +29,41 @@
 .pv-frame img{max-width:100%;max-height:100%;border-radius:var(--r-m);box-shadow:0 24px 70px rgba(20,60,120,.25)}
 .pv-svg-doc{display:block;width:100%;height:100%;border:0;border-radius:var(--r-m);background:#fff}
 
+/* 文档舞台:白纸内容、深色工具栏;内容自身滚动,不把点击传给灯箱关闭逻辑。 */
+.doc-shell{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0;background:#fff;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden}
+.doc-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;background:#eef2f7}
+.doc-frame{display:block;width:100%;height:100%;border:0;background:#fff}
+.doc-text{margin:0;padding:30px 36px;white-space:pre-wrap;word-break:break-word;color:#1f2937;background:#fff;font:14px/1.75 "Source Han Sans CN","Microsoft YaHei",sans-serif;min-height:100%}
+.doc-sheet-tabs{display:flex;align-items:center;gap:2px;flex:none;padding:5px 7px;overflow-x:auto;border-bottom:1px solid #d4dce7;background:#f7f9fc}
+.doc-sheet-tabs button{flex:none;height:26px;padding:0 10px;border-radius:3px;color:#526174;font-size:12px;white-space:nowrap}
+.doc-sheet-tabs button:hover{background:#e9eff7;color:#1f2937}
+.doc-sheet-tabs button.on{background:#fff;color:#0a66d6;box-shadow:0 1px 3px rgba(20,50,90,.15);font-weight:600}
+.doc-sheet-wrap{padding:20px;min-width:max-content;background:#eef2f7}
+.doc-sheet-table{border-collapse:collapse;table-layout:fixed;background:#fff;color:#1f2937;font:12px/1.35 "Source Han Sans CN","Microsoft YaHei",sans-serif;box-shadow:0 3px 14px rgba(20,50,90,.12)}
+.doc-sheet-table td{min-width:28px;padding:5px 7px;overflow:hidden;text-overflow:ellipsis;white-space:pre-wrap;word-break:break-word;border:1px solid #cbd5e1;vertical-align:top}
+/* 放大后幻灯片会超出舞台:居中改用 safe 对齐,否则溢出部分滚不到左上角。 */
+.doc-slide-scroll{display:grid;place-items:safe center;padding:24px;background:#dfe6ef}
+.doc-slide-wrap{display:grid;place-items:safe center;min-width:0}
+.doc-slide{position:relative;flex:none;overflow:hidden;box-shadow:0 14px 36px rgba(15,35,70,.22);background:#fff}
+.doc-slide-el{position:absolute;display:flex;flex-direction:column;overflow:hidden;padding:4px;white-space:pre-wrap;word-break:break-word;line-height:1.28;transform-origin:center}
+.doc-slide-table{padding:0;background:#fff}
+.doc-slide-table table{border-collapse:collapse;width:100%;height:100%;table-layout:fixed;font-size:12px;color:#1f2937}
+.doc-slide-table td{padding:4px 6px;border:1px solid #cbd5e1;vertical-align:top}
+.doc-slide-nav{display:flex;align-items:center;justify-content:center;gap:6px;flex:none;padding:7px;border-top:1px solid #d4dce7;background:#f7f9fc;color:#425166;font:600 12px/1 var(--font-mono)}
+.doc-slide-nav button{display:grid;place-items:center;width:28px;height:26px;border:1px solid #ccd6e2;border-radius:3px;background:#fff;color:#425166}
+.doc-slide-nav button:hover:not(:disabled){border-color:#8aaccd;color:#0a66d6}
+.doc-slide-nav button:disabled{opacity:.4;cursor:default}
+.doc-slide-nav .ic{width:13px;height:13px}
+.doc-note{padding:6px 10px;border-top:1px solid #d4dce7;background:#fff8e8;color:#8a5b10;font-size:11px}
+.doc-truncated{padding:8px;color:#8a5b10;font-size:11px}
+.doc-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;height:100%;min-height:260px;padding:24px;color:var(--t2);text-align:center}
+.doc-state strong{color:var(--t1);font-size:14px;font-weight:600}
+.doc-state span{max-width:560px;color:var(--t3);font-size:12px;line-height:1.6}
+.doc-state .v3-bar{position:static;transform:none;margin-top:4px}
+.doc-empty{display:grid;place-items:center;min-height:240px;padding:24px;color:#68778b;background:#f7f9fc}
+.doc-spinner{width:24px;height:24px;border:2px solid rgba(80,110,150,.2);border-top-color:var(--acc);border-radius:50%;animation:doc-spin .8s linear infinite}
+@keyframes doc-spin{to{transform:rotate(360deg)}}
+
 /* 画面铺满可用舞台,由 video 自身等比缩放;留边露出软件背景色,不再用死黑或阴影框住。 */
 .pv-video-shell{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0}
 .pv-video-surface{position:relative;z-index:1;display:grid;place-items:center;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;background:#45404E;border:0;border-radius:0}
@@ -48,6 +83,8 @@
 .v3-bar{position:absolute;left:50%;bottom:12px;z-index:2;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px 5px;width:max-content;background:rgba(9,12,18,.92);border:1px solid var(--pv-line);border-radius:var(--r-sm);backdrop-filter:blur(16px);box-shadow:0 10px 28px rgba(0,0,0,.42)}
 .v3-chip{flex:none;height:var(--h-xs);padding:0 8px;border-radius:var(--r-sm);font-size:var(--fs-cap);color:#8e99aa;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .v3-chip:hover{background:rgba(255,255,255,.08);color:#f3f5f8}
+.v3-chip:disabled{opacity:.45;cursor:default}
+.v3-chip:disabled:hover{background:none;color:#8e99aa}
 .v3-chip.on{background:var(--acc-soft);border:1px solid var(--acc-line);color:var(--acc2)}
 
 /* 模型浮层:HDR 与模式条都覆盖在画布内,不挤占渲染尺寸 */
@@ -223,4 +260,7 @@ input[type=range].pv-vol-fader::-webkit-slider-thumb{-webkit-appearance:none;wid
   .pv-timecode{min-width:86px;gap:3px}
   .pv-stripbar{gap:10px;padding:8px 12px 10px}
   .pv-reel{width:84px;height:50px}
+  .doc-text{padding:20px}
+  .doc-sheet-wrap{padding:10px}
+  .doc-slide-scroll{padding:10px}
 }

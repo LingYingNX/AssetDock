@@ -38,11 +38,12 @@ describe('thumbnail database selection', () => {
     add('loader.css', 'style', 'CSS', 'fp-css')
     add('clip.mp4', 'video', 'MP4', 'fp-vid')
     add('model.glb', 'model', 'GLB', 'fp-model')
+    add('notes.docx', 'document', 'DOCX', 'fp-doc')
     add('trashed.png', 'image', 'PNG', 'fp-trash')
     db.prepare("UPDATE assets SET deleted_at = '2026-09-27T00:00:00.000Z' WHERE fingerprint = 'fp-trash'").run()
 
     expect(thumbJobRows(db, 1).map((row) => row.rel_path).sort()).toEqual([
-      'clip.mp4', 'loader.css', 'model.glb', 'photo.png'
+      'clip.mp4', 'loader.css', 'model.glb', 'notes.docx', 'photo.png'
     ])
     expect(thumbJobRows(db, 1, ['fp-img']).map((row) => row.rel_path)).toEqual(['photo.png'])
     expect(thumbJobRows(db, 1, ['fp-svg'])).toEqual([])

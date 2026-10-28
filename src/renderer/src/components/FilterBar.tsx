@@ -46,14 +46,16 @@ const SHAPE_ITEMS: MenuItem[] = [
   { id: 'landscape', label: '横图', sub: '16:9 · 3:2' },
   { id: 'portrait', label: '竖图', sub: '9:16 · 3:4' },
   { id: 'square', label: '方形', sub: '1:1' },
-  { id: 'pano', label: '全景 / 超宽' }
+  { id: 'pano', label: '全景 / 超宽' },
+  { id: 'none', label: '不适用', sub: '文档不参与形状筛选' }
 ]
 
 const SIZE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部尺寸', groupEnd: true },
   { id: 'small', label: '小', sub: '≤1080P' },
   { id: 'medium', label: '中', sub: '1080P ~ 4K' },
-  { id: 'large', label: '大', sub: '≥4K' }
+  { id: 'large', label: '大', sub: '≥4K' },
+  { id: 'none', label: '不适用', sub: '文档不参与尺寸筛选' }
 ]
 
 const RATE_ITEMS: MenuItem[] = [

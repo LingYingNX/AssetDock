@@ -7,6 +7,7 @@ import {
 } from '../services/store'
 import { hasLibDb, migrateLibrary } from '../services/libraryDb'
 import { collectOrphanThumbs, pruneMissingThumbs } from '../services/thumbs'
+import { collectOrphanDocumentPreviews } from '../services/documentPreview'
 import { watchLibrary, type FSWatcher } from '../services/watch'
 import { migrateLegacySources } from '../services/legacySourceMigration'
 import { send } from '../events'
@@ -285,6 +286,7 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
             .map((row) => row.fingerprint)
         )
         await collectOrphanThumbs(s.libPath, live).catch(() => undefined)
+        await collectOrphanDocumentPreviews(s.libPath, live).catch(() => undefined)
       } finally {
         releaseScope(s)
       }

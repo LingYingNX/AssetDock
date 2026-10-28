@@ -3,7 +3,7 @@ import sharp from 'sharp'
 import { formatSpec, type AssetFormat } from '../../shared/formats'
 import { MediaProcessError, runFfmpeg } from './ffmpeg'
 
-export type ThumbnailFailureKind = 'unsupported' | 'corrupt' | 'timeout' | 'too-large' | 'missing-tool'
+export type ThumbnailFailureKind = 'unsupported' | 'corrupt' | 'timeout' | 'too-large' | 'missing-tool' | 'encrypted'
 
 export class ThumbnailDecodeError extends Error {
   constructor(

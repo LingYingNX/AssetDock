@@ -124,7 +124,7 @@ export function Inspector(): React.JSX.Element {
               }}
             >
               <Icon name="external" />
-              <span>用 {external === 'blender' ? 'Blender' : 'Cinema 4D'} 打开</span>
+              <span>用 {external === 'blender' ? 'Blender' : external === 'office' ? '办公软件' : 'Cinema 4D'} 打开</span>
             </button>
           </div>
         ) : null}

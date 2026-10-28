@@ -21,7 +21,7 @@ import { send } from '../events'
 import { absPathFor, libRootOf, releaseScope, scopeFor, win, type Scope } from './context'
 import { queueThumbWarmup } from './thumbs'
 import { attachRootWatcher, watchManager, withoutRootWatcher } from './watch'
-import { needsVideoTranscode } from '../../shared/formats'
+import { formatSpec, needsVideoTranscode } from '../../shared/formats'
 import { realPathWithinRoot } from '../services/libResolve'
 import { ensureTranscodedVideo } from '../services/transcode'
 import { ensureBlendPreview } from '../services/externalPreview'
@@ -29,6 +29,7 @@ import { ensureImagePreview } from '../services/imagePreview'
 import { configuredToolPath, probeTool, type ExternalToolKey } from '../services/externalTools'
 import { countPdfPages } from '../services/aiPreview'
 import { importDroppedFiles } from '../services/fileImport'
+import { ensureDocumentPreview, removeDocumentPreviewIfUnused } from '../services/documentPreview'
 
 function folderParent(path: string): string {
   const index = path.lastIndexOf('/')
@@ -206,6 +207,7 @@ export function registerAssetsIpc(): void {
       // 先落库再处理缓存,否则恢复时预热仍会读到旧的 deleted_at 而跳过该素材
       if (!updateAsset(s.db, libraryId, id, clean)) return { ok: false }
       if (row && trashing) await removeThumbsIfUnused(s.libPath, s.db, libraryId, [row.fingerprint])
+      if (row && trashing) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       if (row && restoring) queueThumbWarmup(libraryId, [row.fingerprint])
       // 单素材编辑(评分/收藏/备注/回收站)走增量:渲染层只合并这一行
       send('assets:changed', { libraryId, assetIds: [id] })
@@ -215,7 +217,7 @@ export function registerAssetsIpc(): void {
     }
   })
 
-  ipcMain.handle('assets:preparePreview', async (_e, libraryId: number, id: number) => {
+  ipcMain.handle('assets:preparePreview', async (_e, libraryId: number, id: number, options?: { force?: boolean }) => {
     const s = scopeFor(libraryId)
     if (!s) return { error: '素材库不存在' }
     try {
@@ -269,6 +271,42 @@ export function registerAssetsIpc(): void {
         } catch (error) {
           return { error: error instanceof Error ? error.message : `${row.format} 预览失败` }
         }
+      }
+      if (formatSpec(row.format)?.type === 'document') {
+        const preview = await ensureDocumentPreview(s.libPath, realPath, row.fingerprint, row.format, {
+          relPath: row.rel_path,
+          mtimeMs: 0,
+          sizeBytes: 0,
+          libraryId
+        }, { force: options?.force === true })
+        if (!preview.failure) {
+          const counts = {
+            ...(preview.pageCount != null ? { page_count: preview.pageCount } : {}),
+            ...(preview.sheetCount != null ? { sheet_count: preview.sheetCount } : {}),
+            ...(preview.slideCount != null ? { slide_count: preview.slideCount } : {})
+          }
+          if (Object.keys(counts).length > 0) {
+            s.db
+              .prepare(
+                `UPDATE assets SET
+                   page_count = COALESCE(?, page_count),
+                   sheet_count = COALESCE(?, sheet_count),
+                   slide_count = COALESCE(?, slide_count)
+                 WHERE library_id = ? AND id = ?`
+              )
+              .run(
+                preview.pageCount ?? null,
+                preview.sheetCount ?? null,
+                preview.slideCount ?? null,
+                libraryId,
+                id
+              )
+            // 扫描期的结构探测是估算值(例如 DOCX 按分页符计数),与渲染解析结果可能不同;
+            // 无条件推送一次,让卡片与灯箱按解析结果校准,即使这次 UPDATE 没有改动行。
+            send('assets:changed', { libraryId, assetIds: [id] })
+          }
+        }
+        return { kind: 'document' as const, preview }
       }
       if (!needsVideoTranscode(row.format)) return { kind: 'native' as const }
 
@@ -621,6 +659,7 @@ export function registerAssetsIpc(): void {
       const purged = s.db.prepare('DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').run(libraryId).changes
       // 原图记录被清除时同步删除缩略图与清单条目
       await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
+      for (const row of doomed) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       return { ok: true, purged }
     } finally {
       releaseScope(s)
@@ -652,6 +691,7 @@ export function registerAssetsIpc(): void {
           .run(libraryId, ...batch).changes
       }
       await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
+      for (const row of doomed) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       return { ok: true, purged }
     } finally {
       releaseScope(s)
@@ -673,6 +713,7 @@ export function registerAssetsIpc(): void {
         if (!gone) continue
         s.db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
         await removeThumbsIfUnused(s.libPath, s.db, libraryId, [r.fingerprint])
+        await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, r.fingerprint)
         purged++
       }
       return { purged }

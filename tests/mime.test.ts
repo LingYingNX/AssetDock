@@ -7,6 +7,11 @@ describe('media mime map', () => {
     expect(mimeForExtension('.HTML')).toBe('text/html')
     expect(mimeForExtension('.htm')).toBe('text/html')
     expect(mimeForExtension('.txt')).toBe('text/plain')
+    expect(mimeForExtension('.md')).toBe('text/markdown')
+    expect(mimeForExtension('.csv')).toBe('text/csv')
+    expect(mimeForExtension('.docx')).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    expect(mimeForExtension('.xlsx')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    expect(mimeForExtension('.pptx')).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation')
   })
 
   it('keeps existing media types', () => {

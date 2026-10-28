@@ -7,7 +7,7 @@ import { Icon } from './Icons'
 
 /** 位图走缓存缩略图,视频直接抽首帧,三维与样式表使用类型格。 */
 function stripSrc(a: Asset): string | null {
-  if (a.type !== 'image' && a.type !== 'video') return null
+  if (a.type !== 'image' && a.type !== 'video' && a.type !== 'document') return null
   if (a.type === 'video') {
     return a.dbId != null ? (a.originalUrl ?? null) : (a.previewUrl ? `/@fs/${a.previewUrl}` : null)
   }
@@ -22,7 +22,8 @@ const TYPE_ICON: Record<Asset['type'], string> = {
   image: 'image',
   video: 'play',
   model: 'cube',
-  style: 'code'
+  style: 'code',
+  document: 'document'
 }
 
 /**
@@ -182,7 +183,7 @@ export function Filmstrip(): React.JSX.Element | null {
                       if (video.duration > 0) video.currentTime = Math.min(0.1, video.duration / 10)
                     }}
                   />
-                ) : src && a.type === 'image' ? (
+                ) : src && (a.type === 'image' || a.type === 'document') ? (
                   <img src={src} alt="" draggable={false} />
                 ) : (
                   <span className={`pv-reel-fallback ${a.type}`}>

@@ -39,6 +39,10 @@ export interface Asset {
   duration?: string
   codec?: string
   fps?: number
+  pageCount?: number
+  sheetCount?: number
+  slideCount?: number
+  textEncoding?: string
   sizeBytes: number
   importedAt: string
   rating: 0 | 1 | 2 | 3 | 4 | 5

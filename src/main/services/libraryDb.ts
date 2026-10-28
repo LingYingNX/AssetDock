@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS assets (
   material_info TEXT,
   codec TEXT,
   fps REAL,
+  page_count INTEGER,
+  sheet_count INTEGER,
+  slide_count INTEGER,
+  text_encoding TEXT,
   size_bytes INTEGER NOT NULL,
   mtime_ms INTEGER NOT NULL,
   fingerprint TEXT NOT NULL,
@@ -100,6 +104,10 @@ export function openLibDb(libPath: string): Database.Database {
   if (!columns.some((column) => column.name === 'folder_path')) db.exec('ALTER TABLE assets ADD COLUMN folder_path TEXT')
   if (!columns.some((column) => column.name === 'eagle_mtime_ms')) db.exec('ALTER TABLE assets ADD COLUMN eagle_mtime_ms INTEGER')
   if (!columns.some((column) => column.name === 'manual_order')) db.exec('ALTER TABLE assets ADD COLUMN manual_order INTEGER')
+  if (!columns.some((column) => column.name === 'page_count')) db.exec('ALTER TABLE assets ADD COLUMN page_count INTEGER')
+  if (!columns.some((column) => column.name === 'sheet_count')) db.exec('ALTER TABLE assets ADD COLUMN sheet_count INTEGER')
+  if (!columns.some((column) => column.name === 'slide_count')) db.exec('ALTER TABLE assets ADD COLUMN slide_count INTEGER')
+  if (!columns.some((column) => column.name === 'text_encoding')) db.exec('ALTER TABLE assets ADD COLUMN text_encoding TEXT')
   const indexColumns = db.pragma('table_info(index_sources)') as { name: string }[]
   if (!indexColumns.some((column) => column.name === 'kind')) db.exec("ALTER TABLE index_sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'")
   return db
@@ -138,14 +146,22 @@ export function migrateLibrary(
       const insSource = db.prepare('INSERT INTO index_sources(id, path, name, created_at) VALUES (?, ?, ?, ?)')
       for (const source of sources) insSource.run(source.id, source.path, source.name, source.created_at)
       const insAsset = db.prepare(
-        `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, face_count, vertices, material_info, codec, fps,
+        `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, face_count, vertices, material_info, codec, fps, page_count, sheet_count, slide_count, text_encoding,
           size_bytes, mtime_ms, fingerprint, rating, favorite, review_flag, note, source_url, deleted_at, missing, palette, imported_at, source_index_id, folder_path)
-         VALUES (@library_id, @rel_path, @name, @type, @format, @width, @height, @duration, @face_count, @vertices, @material_info, @codec, @fps,
+         VALUES (@library_id, @rel_path, @name, @type, @format, @width, @height, @duration, @face_count, @vertices, @material_info, @codec, @fps, @page_count, @sheet_count, @slide_count, @text_encoding,
           @size_bytes, @mtime_ms, @fingerprint, @rating, @favorite, @review_flag, @note, @source_url, @deleted_at, @missing, @palette, @imported_at, @source_index_id, @folder_path)`
       )
       const idMap = new Map<number, number>()
       for (const a of assets) {
-        const info = insAsset.run({ ...a, library_id: lib.id, folder_path: a.folder_path ?? null })
+        const info = insAsset.run({
+          ...a,
+          library_id: lib.id,
+          folder_path: a.folder_path ?? null,
+          page_count: a.page_count ?? null,
+          sheet_count: a.sheet_count ?? null,
+          slide_count: a.slide_count ?? null,
+          text_encoding: a.text_encoding ?? null
+        })
         idMap.set(a.id as number, Number(info.lastInsertRowid))
       }
       const folderOrders = globalDb.prepare('SELECT path, position FROM folder_orders WHERE library_id = ?').all(lib.id) as { path: string; position: number }[]

@@ -30,7 +30,16 @@ const MIME: Record<string, string> = {
   '.amf': 'application/x-amf', '.vrml': 'model/vrml', '.wrl': 'model/vrml',
   '.blend': 'application/octet-stream', '.c4d': 'application/octet-stream',
   // CSS 素材及其同名预览骨架经协议读取:必须是文本类型,否则 Chromium 会当二进制处理
-  '.css': 'text/css', '.html': 'text/html', '.htm': 'text/html', '.txt': 'text/plain'
+  '.css': 'text/css', '.html': 'text/html', '.htm': 'text/html', '.txt': 'text/plain',
+  '.md': 'text/markdown', '.markdown': 'text/markdown', '.csv': 'text/csv',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.doc': 'application/msword', '.xls': 'application/vnd.ms-excel', '.ppt': 'application/vnd.ms-powerpoint',
+  '.rtf': 'application/rtf', '.odt': 'application/vnd.oasis.opendocument.text',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+  '.wps': 'application/octet-stream', '.et': 'application/octet-stream', '.dps': 'application/octet-stream'
 }
 
 const CORS_HEADERS = { 'access-control-allow-origin': '*' }
@@ -82,11 +91,13 @@ export function hostToLibId(host: string): number {
  *  1. 生产环境主文档（file://）
  *  2. dev server 主文档（http://localhost:5173）
  *  3. Electron 内部 origin（app://、about: 等,理论上不出现,保守放行）
- * 渲染层任何被注入的外部内容（http/https 页面）fetch media:// 一律拒绝。
- * 纯函数,便于单测;referrer 取不到（空串）视为可疑,拒绝。
+ * 外部 http/https 页面自带的 origin 会被拒绝；只有生产 file:// 主文档
+ * 因 Chromium 清空 Referer 而走显式空 referrer 例外。
+ * 纯函数,便于单测。Chromium 从 file:// 主文档请求自定义协议时会刻意清空
+ * Referer，因此生产构建需显式允许空 referrer；dev server 仍要求精确 origin。
  */
-export function isAllowedMediaReferrer(referrer: string): boolean {
-  if (referrer === '') return false
+export function isAllowedMediaReferrer(referrer: string, allowEmpty = false): boolean {
+  if (referrer === '') return allowEmpty
   try {
     const r = new URL(referrer)
     if (r.protocol === 'file:') return true
@@ -125,9 +136,9 @@ function serveFile(path: string, type: string, immutable: boolean, size?: number
 export function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {
     try {
-      // S0-1:来源校验——referrer 非应用自身 origin/file: 的请求直接拒绝,
-      // 防注入内容借 media:// 协议静默拉取全库素材
-      if (!isAllowedMediaReferrer(request.referrer ?? '')) {
+      // S0-1:正常请求必须来自应用 origin；生产 file:// 主文档没有 Referer,
+      // 仅在未配置 dev server 时放行，避免开发环境出现同类豁免。
+      if (!isAllowedMediaReferrer(request.referrer ?? '', !process.env.ELECTRON_RENDERER_URL)) {
         return new Response('forbidden', { status: 403 })
       }
       const parsed = /^media:\/\/([^/]+)\/([^?]*)(?:\?(.*))?$/.exec(request.url)

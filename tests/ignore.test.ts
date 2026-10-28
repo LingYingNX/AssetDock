@@ -8,8 +8,8 @@ describe('ignore rules', () => {
     expect(isIgnored('x/y/c.glb')).toBe(false)
   })
   it('non-whitelist extensions are ignored', () => {
-    expect(isIgnored('a.txt')).toBe(true)
-    expect(isIgnored('b.docx')).toBe(true)
+    expect(isIgnored('a.pdf')).toBe(true)
+    expect(isIgnored('b.unknown')).toBe(true)
     expect(isIgnored('noext')).toBe(true)
   })
   it('hidden/temp/cache files are ignored even with valid ext', () => {
@@ -25,7 +25,9 @@ describe('ignore rules', () => {
     expect(detectKind('a.jpeg')?.format).toBe('JPG')
     expect(detectKind('a.mov')?.type).toBe('video')
     expect(detectKind('a.obj')).toEqual({ type: 'model', format: 'OBJ' })
-    expect(detectKind('a.txt')).toBeNull()
+    expect(detectKind('a.txt')).toEqual({ type: 'document', format: 'TXT' })
+    expect(detectKind('a.DOCX')).toEqual({ type: 'document', format: 'DOCX' })
+    expect(detectKind('a.unknown')).toBeNull()
   })
   it('css is a whitelisted style asset', () => {
     expect(isIgnored('a.css')).toBe(false)

@@ -24,14 +24,34 @@ describe('format registry', () => {
     expect(detectFormat('a.mkv')?.type).toBe('video')
     expect(detectFormat('a.ai')?.preview).toBe('pdf')
     expect(detectFormat('a.c4d')?.external).toBe('cinema4d')
+    expect(detectFormat('a.MD')?.format).toBe('MARKDOWN')
+    expect(detectFormat('a.markdown')?.format).toBe('MARKDOWN')
+    expect(detectFormat('a.docx')?.type).toBe('document')
+    expect(detectFormat('a.doc')).toMatchObject({
+      type: 'document',
+      format: 'DOC',
+      probe: 'document',
+      thumbnail: 'document',
+      preview: 'document',
+      documentShape: 'doc'
+    })
+    expect(detectFormat('a.xlsx')?.documentShape).toBe('sheet')
+    expect(detectFormat('a.pptx')?.preview).toBe('document')
+    expect(detectFormat('a.wps')?.external).toBe('office')
+    expect(detectFormat('a.rtf')?.preview).toBe('document')
+    expect(detectFormat('a.odt')?.shape).toBeUndefined()
+    expect(detectFormat('a.odt')?.documentShape).toBe('doc')
+    expect(detectFormat('a.odp')?.documentShape).toBe('slides')
+    expect(detectFormat('a.odt')?.external).toBeUndefined()
   })
 
   it('rejects unknown and extensionless paths', () => {
-    expect(detectFormat('a.txt')).toBeNull()
+    expect(detectFormat('a.unknown')).toBeNull()
     expect(detectFormat('noext')).toBeNull()
     expect(detectFormat('.hidden')).toBeNull()
     expect(isSupportedExtension('EXR')).toBe(true)
-    expect(isSupportedExtension('docx')).toBe(false)
+    expect(isSupportedExtension('docx')).toBe(true)
+    expect(isSupportedExtension('TXT')).toBe(true)
   })
 
   it('exposes one option per canonical format', () => {
@@ -43,6 +63,11 @@ describe('format registry', () => {
     expect(formats).toContain('C4D')
     expect(formats).toContain('HDR')
     expect(formats).toContain('EXR')
+    expect(formats).toContain('MARKDOWN')
+    expect(formats).toContain('DOC')
+    expect(formats).toContain('DOCX')
+    expect(formats).toContain('XLSX')
+    expect(formats).toContain('PPTX')
   })
 
   it('covers every canonical format in exactly one UI group', () => {
@@ -54,6 +79,7 @@ describe('format registry', () => {
         expect(formatSpec(format)?.type).toBe(group.type)
       }
     }
+    expect(FORMAT_GROUPS.find((group) => group.type === 'document')?.formats).toContain('DOCX')
   })
 
   it('transcodes only video containers that Chromium cannot stream directly', () => {

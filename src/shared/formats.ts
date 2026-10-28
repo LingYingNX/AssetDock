@@ -2,10 +2,12 @@ import type { AssetKind } from './types'
 
 export type { AssetKind } from './types'
 
-export type FormatProbe = 'sharp' | 'ffmpeg' | 'pdf' | 'psd' | 'heic' | 'three' | 'external' | 'none'
-export type FormatThumbnail = 'sharp' | 'ffmpeg' | 'pdf' | 'psd' | 'heic' | 'three' | 'external' | 'none'
-export type FormatPreview = 'image' | 'pdf' | 'video' | 'three' | 'envmap' | 'external' | 'none' | 'css'
-export type ExternalTool = 'blender' | 'cinema4d'
+export type FormatProbe = 'sharp' | 'ffmpeg' | 'pdf' | 'psd' | 'heic' | 'three' | 'external' | 'document' | 'none'
+export type FormatThumbnail = 'sharp' | 'ffmpeg' | 'pdf' | 'psd' | 'heic' | 'three' | 'external' | 'document' | 'none'
+export type FormatPreview = 'image' | 'pdf' | 'video' | 'three' | 'envmap' | 'external' | 'none' | 'css' | 'document'
+export type { DocumentShape } from './types'
+import type { DocumentShape } from './types'
+export type ExternalTool = 'blender' | 'cinema4d' | 'office'
 
 interface FormatSpecBase {
   ext: string
@@ -15,6 +17,7 @@ interface FormatSpecBase {
   thumbnail: FormatThumbnail
   preview: FormatPreview
   external?: ExternalTool
+  documentShape?: DocumentShape
 }
 
 /**
@@ -72,7 +75,32 @@ export const FORMAT_SPECS = [
   { ext: 'blend', type: 'model', format: 'BLEND', probe: 'external', thumbnail: 'external', preview: 'external', external: 'blender' },
   { ext: 'c4d', type: 'model', format: 'C4D', probe: 'external', thumbnail: 'external', preview: 'external', external: 'cinema4d' },
 
-  { ext: 'css', type: 'style', format: 'CSS', probe: 'none', thumbnail: 'none', preview: 'css' }
+  { ext: 'css', type: 'style', format: 'CSS', probe: 'none', thumbnail: 'none', preview: 'css' },
+
+  { ext: 'txt', type: 'document', format: 'TXT', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'text' },
+  { ext: 'md', type: 'document', format: 'MARKDOWN', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'markdown' },
+  { ext: 'markdown', type: 'document', format: 'MARKDOWN', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'markdown' },
+  { ext: 'csv', type: 'document', format: 'CSV', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'docx', type: 'document', format: 'DOCX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'docm', type: 'document', format: 'DOCX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'xlsx', type: 'document', format: 'XLSX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'xlsm', type: 'document', format: 'XLSX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'pptx', type: 'document', format: 'PPTX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'slides' },
+  { ext: 'pptm', type: 'document', format: 'PPTX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'slides' },
+
+  { ext: 'doc', type: 'document', format: 'DOC', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'xls', type: 'document', format: 'XLS', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'xlsb', type: 'document', format: 'XLSB', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'ppt', type: 'document', format: 'PPT', probe: 'external', thumbnail: 'external', preview: 'external', external: 'office', documentShape: 'slides' },
+  { ext: 'wps', type: 'document', format: 'WPS', probe: 'external', thumbnail: 'external', preview: 'external', external: 'office', documentShape: 'doc' },
+  { ext: 'et', type: 'document', format: 'ET', probe: 'external', thumbnail: 'external', preview: 'external', external: 'office', documentShape: 'sheet' },
+  { ext: 'dps', type: 'document', format: 'DPS', probe: 'external', thumbnail: 'external', preview: 'external', external: 'office', documentShape: 'slides' },
+  { ext: 'rtf', type: 'document', format: 'RTF', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'odt', type: 'document', format: 'ODT', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'ott', type: 'document', format: 'ODT', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
+  { ext: 'ods', type: 'document', format: 'ODS', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'fods', type: 'document', format: 'FODS', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
+  { ext: 'odp', type: 'document', format: 'ODP', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'slides' }
 ] as const satisfies readonly FormatSpecBase[]
 
 export type FormatSpec = (typeof FORMAT_SPECS)[number]
@@ -107,6 +135,11 @@ export const FORMAT_GROUPS: ReadonlyArray<{ type: AssetKind; label: string; form
     type: 'style',
     label: '代码',
     formats: ['CSS']
+  },
+  {
+    type: 'document',
+    label: '文档',
+    formats: ['TXT', 'MARKDOWN', 'CSV', 'DOCX', 'XLSX', 'PPTX', 'DOC', 'XLS', 'XLSB', 'PPT', 'WPS', 'ET', 'DPS', 'RTF', 'ODT', 'ODS', 'FODS', 'ODP']
   }
 ]
 

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AssetImportResponse, AssetListResponse, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
+import type { DocumentPreview } from '../shared/types'
 
 const api = {
   minimize: (): void => {
@@ -52,15 +53,16 @@ const api = {
       ipcRenderer.invoke('assets:rows', libraryId, ids),
     update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:update', libraryId, id, patch),
-    preparePreview: (libraryId: number, id: number): Promise<
+    preparePreview: (libraryId: number, id: number, options?: { force?: boolean }): Promise<
       | { kind: 'native' }
       | { kind: 'video'; url: string }
       | { kind: 'three'; url: string }
       | { kind: 'image'; url: string }
       | { kind: 'pdf'; url: string; pages: number }
+      | { kind: 'document'; preview: DocumentPreview }
       | { kind: 'external'; tool: 'cinema4d'; message: string }
       | { error: string }
-    > => ipcRenderer.invoke('assets:preparePreview', libraryId, id),
+    > => ipcRenderer.invoke('assets:preparePreview', libraryId, id, options),
     openExternal: (libraryId: number, id: number): Promise<{ ok: true } | { error: string }> =>
       ipcRenderer.invoke('assets:openExternal', libraryId, id),
     move: (libraryId: number, ids: number[], folder: string): Promise<{ moved: number } | { error: string; moved?: number }> =>

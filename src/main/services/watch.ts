@@ -5,6 +5,7 @@ import { isIgnoredWatch, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
 import { probeImageMeta } from './formatProbe'
+import { probeDocumentMeta } from './documentMeta'
 import { upsertScanned, setAssetMissing, type ScanUpsertResult } from './store'
 import type { Database } from 'better-sqlite3'
 
@@ -50,11 +51,29 @@ async function upsertOne(db: Database, libraryId: number, root: string, absPath:
   if (!kind) return null
   const state = await stat(absPath).catch(() => null)
   if (!state) return null
-  let meta: { width?: number; height?: number; duration?: number; codec?: string; fps?: number } = {}
+  let meta: {
+    width?: number
+    height?: number
+    duration?: number
+    codec?: string
+    fps?: number
+    pageCount?: number
+    sheetCount?: number
+    slideCount?: number
+    textEncoding?: string
+  } = {}
   if (kind.type === 'image') {
     meta = await probeImageMeta(absPath, relPath)
   } else if (kind.type === 'video') {
     meta = await probeVideo(absPath)
+  } else if (kind.type === 'document') {
+    const documentMeta = await probeDocumentMeta(absPath, kind.format)
+    meta = {
+      pageCount: documentMeta.pageCount,
+      sheetCount: documentMeta.sheetCount,
+      slideCount: documentMeta.slideCount,
+      textEncoding: documentMeta.textEncoding
+    }
   }
   const [result] = upsertScanned(db, libraryId, [{
     relPath,
@@ -68,7 +87,11 @@ async function upsertOne(db: Database, libraryId: number, root: string, absPath:
     height: meta.height,
     duration: meta.duration,
     codec: meta.codec,
-    fps: meta.fps
+    fps: meta.fps,
+    pageCount: meta.pageCount,
+    sheetCount: meta.sheetCount,
+    slideCount: meta.slideCount,
+    textEncoding: meta.textEncoding
   }])
   // 新增/内容变化的图片:通知渲染层前先按原文件抽好主色,失败静默保持空
   if (result && kind.type === 'image') {

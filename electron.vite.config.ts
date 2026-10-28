@@ -22,8 +22,8 @@ function dropUnusedDracoAsm(): Plugin {
 export default defineConfig({
   main: {
     build: {
-      // chokidar 5 是 ESM-only；打进主进程 bundle，避免 CJS require 失败。
-      externalizeDeps: { exclude: ['chokidar'] }
+      // ESM-only 依赖必须打进主进程 bundle，避免 CJS require 失败。
+      externalizeDeps: { exclude: ['chokidar', '@file-viewer/doc'] }
     }
   },
   preload: {},

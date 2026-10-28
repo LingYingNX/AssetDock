@@ -4,6 +4,7 @@ import { isIgnored, isIgnoredDir, detectKind } from './ignore'
 import { fingerprint } from './fingerprint'
 import { probeVideo } from './videoMeta'
 import { probeImageMeta } from './formatProbe'
+import { probeDocumentMeta } from './documentMeta'
 import type { ScanEntry } from './store'
 
 const SCAN_BATCH_SIZE = 64
@@ -33,6 +34,13 @@ async function collectEntry(absPath: string, relPath: string, sizeBytes: number,
     entry.height = meta.height
     entry.codec = meta.codec
     entry.fps = meta.fps
+  }
+  if (kind.type === 'document') {
+    const meta = await probeDocumentMeta(absPath, kind.format)
+    entry.pageCount = meta.pageCount
+    entry.sheetCount = meta.sheetCount
+    entry.slideCount = meta.slideCount
+    entry.textEncoding = meta.textEncoding
   }
   return entry
 }

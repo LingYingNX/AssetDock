@@ -260,6 +260,10 @@ export interface ScanEntry {
   duration?: number
   codec?: string
   fps?: number
+  pageCount?: number
+  sheetCount?: number
+  slideCount?: number
+  textEncoding?: string
   faceCount?: number
   vertices?: number
 }
@@ -276,12 +280,14 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
     'SELECT id, size_bytes, mtime_ms, fingerprint FROM assets WHERE library_id = ? AND rel_path = ?'
   )
   const insert = d.prepare(
-    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices, size_bytes, mtime_ms, fingerprint, imported_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices,
+       page_count, sheet_count, slide_count, text_encoding, size_bytes, mtime_ms, fingerprint, imported_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const updateScanned = d.prepare(
     `UPDATE assets
      SET name = ?, type = ?, format = ?, width = ?, height = ?, duration = ?, codec = ?, fps = ?, face_count = ?, vertices = ?,
+         page_count = ?, sheet_count = ?, slide_count = ?, text_encoding = ?,
          size_bytes = ?, mtime_ms = ?, fingerprint = ?, missing = 0
      WHERE id = ?`
   )
@@ -300,6 +306,10 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
       entry.fps ?? null,
       entry.faceCount ?? null,
       entry.vertices ?? null,
+      entry.pageCount ?? null,
+      entry.sheetCount ?? null,
+      entry.slideCount ?? null,
+      entry.textEncoding ?? null,
       entry.sizeBytes,
       entry.mtimeMs,
       entry.fingerprint,
@@ -334,6 +344,10 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
           e.fps ?? null,
           e.faceCount ?? null,
           e.vertices ?? null,
+          e.pageCount ?? null,
+          e.sheetCount ?? null,
+          e.slideCount ?? null,
+          e.textEncoding ?? null,
           e.sizeBytes,
           e.mtimeMs,
           e.fingerprint,

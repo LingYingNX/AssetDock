@@ -5,7 +5,7 @@ export interface PaletteColor {
   ratio: number
 }
 
-export type AssetKind = 'image' | 'video' | 'model' | 'style'
+export type AssetKind = 'image' | 'video' | 'model' | 'style' | 'document'
 
 export interface AssetTag {
   name: string
@@ -38,6 +38,10 @@ export interface AssetRow {
   material_info: string | null
   codec: string | null
   fps: number | null
+  page_count: number | null
+  sheet_count: number | null
+  slide_count: number | null
+  text_encoding: string | null
   size_bytes: number
   mtime_ms: number
   fingerprint: string
@@ -52,6 +56,101 @@ export interface AssetRow {
   imported_at: string
   folder_path: string | null
   tags: AssetTag[]
+}
+
+export type DocumentShape = 'text' | 'markdown' | 'sheet' | 'doc' | 'slides'
+
+export type DocumentFailureKind =
+  | 'corrupt'
+  | 'encrypted'
+  | 'missing-tool'
+  | 'too-large'
+  | 'timeout'
+  | 'unsupported'
+
+export interface DocumentCellStyle {
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  fontSize?: number
+  fontFamily?: string
+  color?: string
+  fill?: string
+  align?: 'left' | 'center' | 'right'
+  valign?: 'top' | 'middle' | 'bottom'
+  border?: string
+  numberFormat?: string
+}
+
+export interface DocumentSheetCell {
+  row: number
+  col: number
+  value: string
+  rowSpan?: number
+  colSpan?: number
+  style?: DocumentCellStyle
+}
+
+export interface DocumentSheet {
+  name: string
+  columns: number[]
+  rows: number[]
+  cells: DocumentSheetCell[]
+  truncated?: boolean
+}
+
+export interface DocumentSlideElement {
+  kind: 'text' | 'image' | 'shape' | 'table'
+  x: number
+  y: number
+  w: number
+  h: number
+  text?: string
+  src?: string
+  fill?: string
+  line?: string
+  rotation?: number
+  fontSize?: number
+  bold?: boolean
+  italic?: boolean
+  color?: string
+  align?: 'left' | 'center' | 'right'
+  valign?: 'top' | 'middle' | 'bottom'
+  table?: { columns: number[]; rows: number[]; cells: DocumentSheetCell[] }
+}
+
+export interface DocumentSlide {
+  width: number
+  height: number
+  background?: string
+  elements: DocumentSlideElement[]
+  notes?: string
+}
+
+export interface DocumentPreview {
+  rendererVersion: number
+  format: string
+  shape: DocumentShape
+  fingerprint: string
+  generatedAt: string
+  pageCount?: number
+  sheetCount?: number
+  slideCount?: number
+  textEncoding?: string
+  text?: string
+  html?: string
+  sheets?: DocumentSheet[]
+  slides?: DocumentSlide[]
+  truncated?: boolean
+  unsupported?: string[]
+  failure?: DocumentFailureKind
+  failureDetail?: string
+}
+
+export interface DocumentPreviewResult {
+  preview?: DocumentPreview
+  error?: string
+  failure?: DocumentFailureKind
 }
 
 /** assets:list 的完整响应(含 absPath 扩展列与库信息) */

@@ -48,6 +48,34 @@ describe('queryAssets', () => {
     expect(formatResolution(asset({ format: 'PSD', width: undefined, height: undefined }))).toBe('—')
   })
 
+  it('keeps documents out of image shape and size semantics', () => {
+    const doc = asset({ id: 'doc', type: 'document', format: 'DOCX', name: 'plan', pageCount: 3 })
+    const photo = asset({ id: 'photo', width: 1920, height: 1080 })
+    const assets = [doc, photo]
+
+    expect(query(assets, 'all', { shape: 'square' }).map((x) => x.id)).toEqual([])
+    expect(query(assets, 'all', { size: 'small' }).map((x) => x.id)).toEqual(['photo'])
+    expect(query(assets, 'all', { shape: 'none' }).map((x) => x.id)).toEqual(['doc'])
+    expect(query(assets, 'all', { size: 'none' }).map((x) => x.id)).toEqual(['doc'])
+    expect(formatResolution(doc)).toBe('—')
+    expect(formatCapability(doc)).toBe('内置只读预览')
+    expect(infoRows(doc).map(([k]) => k)).toEqual(['类型', '能力', '页数', '大小', '导入', '来源'])
+  })
+
+  it('does not count documents under image dimensions', () => {
+    const doc = asset({ id: 'doc', type: 'document', format: 'XLSX', name: 'book', sheetCount: 3 })
+    expect(query([doc], 'all', { size: 'medium' })).toEqual([])
+    expect(query([doc], 'all', { shape: 'pano' })).toEqual([])
+  })
+
+  it('labels built-in office documents separately from external converters', () => {
+    expect(formatCapability(asset({ type: 'document', format: 'DOC' }))).toBe('内置只读预览')
+    expect(formatCapability(asset({ type: 'document', format: 'PPT' }))).toBe('需外部办公软件转换')
+    expect(formatCapability(asset({ type: 'document', format: 'XLSX', sheetCount: 3 }))).toBe('内置只读预览')
+    expect(infoRows(asset({ type: 'document', format: 'XLS', sheetCount: 2 }))[2]).toEqual(['工作表', '2'])
+    expect(infoRows(asset({ type: 'document', format: 'FODS', sheetCount: 4 }))[2]).toEqual(['工作表', '4'])
+  })
+
   it('reports the real preview capability for external and transcoded formats', () => {
     expect(formatCapability(asset({ format: 'BLEND', type: 'model' }))).toBe('需 Blender')
     expect(formatCapability(asset({ format: 'C4D', type: 'model' }))).toBe('需 Cinema 4D')

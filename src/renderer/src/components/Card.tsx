@@ -7,6 +7,7 @@ import type { Asset } from '../data/types'
 import { MEDIA_ASSETS_DRAG_TYPE, encodeAssetDrag } from '../data/asset-drag'
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
+import { formatSpec } from '../../../shared/formats'
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -15,6 +16,18 @@ const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   GLB: '#22D3EE',
   FBX: '#22D3EE',
   OBJ: '#22D3EE'
+}
+
+function documentStructure(a: Asset): string {
+  const spec = formatSpec(a.format)
+  const shape = spec && 'documentShape' in spec ? spec.documentShape : undefined
+  if (shape === 'sheet') {
+    return a.sheetCount != null ? `${a.sheetCount} 个工作表` : '—'
+  }
+  if (shape === 'slides') {
+    return a.slideCount != null ? `${a.slideCount} 张幻灯片` : '—'
+  }
+  return a.pageCount != null ? `${a.pageCount} 页` : '—'
 }
 
 function dragPreview(count: number): HTMLDivElement {
@@ -73,6 +86,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const meta =
     a.type === 'model' || a.type === 'style'
       ? [formatBytes(a.sizeBytes)]
+      : a.type === 'document'
+        ? [documentStructure(a), formatBytes(a.sizeBytes)]
       : [formatResolution(a), formatBytes(a.sizeBytes)]
 
   const isVideo = a.type === 'video'
@@ -137,7 +152,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         className={`thumb${a.thumbClass ? ` ${a.thumbClass}` : ''}${ultraWide ? ' uw' : ''}`}
         style={ar ? ({ ['--ar' as string]: ar } as React.CSSProperties) : undefined}
         role="img"
-        aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : '图片'}缩略图:${a.name}`}
+        aria-label={`${a.type === 'model' ? '三维模型' : a.type === 'video' ? '视频' : a.type === 'style' ? '样式表' : a.type === 'document' ? '文档' : '图片'}缩略图:${a.name}`}
       >
         {previewSrc ? (
           <img
@@ -190,7 +205,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           ) : null}
         </div>
         <span className="lc lc-type">{a.format}</span>
-        <span className="lc lc-res">{a.type === 'model' ? '三维' : a.type === 'style' ? '样式' : formatResolution(a)}</span>
+        <span className="lc lc-res">{a.type === 'model' ? '三维' : a.type === 'style' ? '样式' : a.type === 'document' ? documentStructure(a) : formatResolution(a)}</span>
         <span className="lc lc-size">{formatBytes(a.sizeBytes)}</span>
         <span className="lc lc-dur">{isVideo ? (a.duration ?? '—') : '—'}</span>
         <span className="lc lc-date">{formatRelativeDate(a.importedAt)}</span>

@@ -10,6 +10,7 @@ import {
   type ThumbnailFailureKind
 } from './thumbnailDecoder'
 import { ensureBlendPreview, ExternalPreviewError } from './externalPreview'
+import { DOCUMENT_RENDERER_VERSION } from '../../shared/thumbnailConfig'
 
 /**
  * 库内缩略图缓存:<库>/.mediahub/thumbs/
@@ -212,10 +213,13 @@ export async function ensureThumb(
   const spec = formatSpec(format)
   const isModelThumb = spec?.thumbnail === 'three' ||
     (format === 'BLEND' && spec?.thumbnail === 'external')
+  const isDocumentThumb = spec?.thumbnail === 'document'
   const rendererVersion = format === 'SVG'
     ? SVG_THUMB_RENDERER
     : isModelThumb
       ? MODEL_THUMB_RENDERER
+      : isDocumentThumb
+        ? DOCUMENT_RENDERER_VERSION
       : null
   const matches = (entry: ThumbEntry | undefined): boolean => {
     if (!entry) return false
@@ -263,6 +267,14 @@ export async function ensureThumb(
         // CSS 没有可解码像素:走离屏渲染截图,产出与位图同规格的 JPEG
         const { renderCssThumbFromFile } = await import('./cssThumb')
         buf = await renderCssThumbFromFile(libPath, absPath, THUMB_SIZE)
+      } else if (isDocumentThumb) {
+        const { ensureDocumentPreview, documentThumbnailHtml } = await import('./documentPreview')
+        const preview = await ensureDocumentPreview(libPath, absPath, fingerprint, format, meta)
+        if (preview.failure) {
+          throw new ThumbnailDecodeError(preview.failureDetail ?? 'document preview failed', preview.failure)
+        }
+        const { renderCssThumbJpeg } = await import('./cssThumb')
+        buf = await renderCssThumbJpeg(documentThumbnailHtml(preview), THUMB_SIZE, libPath)
       } else {
         if (!spec) throw new ThumbnailDecodeError(`unknown format: ${format}`, 'unsupported')
         if (spec.thumbnail === 'three') {
@@ -464,7 +476,7 @@ export function thumbJobRows(
     .prepare(
       `SELECT rel_path, fingerprint, format, mtime_ms, size_bytes FROM assets
        WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
-         AND type IN ('image', 'video', 'model', 'style')
+         AND type IN ('image', 'video', 'model', 'style', 'document')
          AND upper(format) <> 'SVG' AND fingerprint <> ''`
     )
     .all(libraryId) as ThumbJobRow[]
