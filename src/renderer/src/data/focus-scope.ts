@@ -13,6 +13,8 @@
  */
 export function isEditableTarget(el: Element | null): boolean {
   for (let node: Element | null = el; node != null; node = node.parentElement) {
+    /* 事件目标不一定是元素:合成事件会把 target 设成 window/document,那里没有 getAttribute */
+    if (typeof node.getAttribute !== 'function') return false
     const tag = node.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA') return true
     if (node.getAttribute('aria-modal') === 'true') return true

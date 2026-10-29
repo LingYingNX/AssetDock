@@ -34,6 +34,11 @@ describe('keyboard focus scope', () => {
     expect(isEditableTarget(null)).toBe(false)
   })
 
+  /* 合成事件与 window 级监听会把 target 设成非元素对象,那里连 getAttribute 都没有 */
+  it('treats a non-element target such as window as not editable', () => {
+    expect(isEditableTarget({ tagName: undefined, parentElement: null } as unknown as Element)).toBe(false)
+  })
+
   it('stops at contenteditable="false" instead of inheriting the ancestor', () => {
     const inner = el('span', {}, el('div', { contenteditable: 'false' }, el('div', { contenteditable: 'true' })))
     expect(isEditableTarget(inner)).toBe(false)

@@ -226,6 +226,52 @@ describe('UI store', () => {
     expect(move).not.toHaveBeenCalled()
   })
 
+  it('clears selection state that belonged to a trashed folder tree', async () => {
+    const trash = vi.fn().mockResolvedValue({ ok: true, removedAssets: 2 })
+    const reload = vi.fn()
+    vi.stubGlobal('window', { confirm: () => true, windowApi: { folders: { trash } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
+      activeTabId: 'library-1',
+      nav: 'folder:tree',
+      folderEditPath: 'tree/child',
+      collapsedFolders: ['tree', 'tree/child', 'treehouse'],
+      assets: [
+        { id: 'a1', libraryId: 1, relPath: 'tree/a.png', type: 'image', format: 'JPG', name: 'a', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: ['tree'], note: '', palette: [] },
+        { id: 'a2', libraryId: 1, relPath: 'tree/child/b.png', type: 'image', format: 'JPG', name: 'b', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: ['tree', 'tree/child'], note: '', palette: [] },
+        { id: 'a3', libraryId: 1, relPath: 'treehouse/c.png', type: 'image', format: 'JPG', name: 'c', sizeBytes: 1, importedAt: '2026-09-05T00:00', rating: 0, favorite: false, tags: [], folders: ['treehouse'], note: '', palette: [] }
+      ],
+      selectedIds: ['a1', 'a3'],
+      selectedSet: new Set(['a1', 'a3']),
+      selectionAnchorId: 'a1',
+      activeId: 'a1',
+      focusedCardId: 'a1',
+      renaming: true,
+      lightboxId: 'a1',
+      cssDirty: true,
+      showToast: vi.fn(),
+      reloadActiveLibrary: reload
+    })
+
+    useUI.getState().trashFolder('tree')
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled())
+    const state = useUI.getState()
+    expect(trash).toHaveBeenCalledWith(1, 'tree')
+    expect(state.selectedIds).toEqual(['a3'])
+    expect([...state.selectedSet]).toEqual(['a3'])
+    expect(state.selectionAnchorId).toBeNull()
+    expect(state.activeId).toBeNull()
+    expect(state.focusedCardId).toBeNull()
+    expect(state.renaming).toBe(false)
+    expect(state.lightboxId).toBeNull()
+    expect(state.cssDirty).toBe(false)
+    expect(state.nav).toBe('all')
+    expect(state.folderEditPath).toBeNull()
+    expect(state.collapsedFolders).toEqual(['treehouse'])
+  })
+
   it('shows the storage fallback warning after creating a library', async () => {
     const toasts: string[] = []
     vi.stubGlobal('window', {

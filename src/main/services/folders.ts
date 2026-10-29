@@ -99,17 +99,51 @@ export function orderLibraryFolders(paths: readonly string[], positions: Readonl
   return result
 }
 
-export async function createLibraryFolder(root: string): Promise<string> {
+/** 把刚创建的真实目录放到父级子树末尾；物理扫描已包含它时不得重复插入。 */
+export function insertCreatedFolderPath(
+  paths: readonly string[],
+  createdPath: string,
+  parentPath: string
+): string[] {
+  const ordered = [...new Set(paths)].filter((path) => path !== createdPath)
+  let insertAt = 0
+  if (parentPath) {
+    const prefix = `${parentPath}/`
+    insertAt = ordered.reduce(
+      (last, item, index) => item === parentPath || item.startsWith(prefix) ? index + 1 : last,
+      0
+    )
+  }
+  ordered.splice(insertAt, 0, createdPath)
+  return ordered
+}
+
+export async function createLibraryFolder(root: string, parentPath = ''): Promise<string> {
+  const parent = targetFolderPath(root, parentPath)
+  await assertRealWithinRoot(root, parent.abs)
+  if (parentPath !== '') {
+    const stat = await lstat(parent.abs).catch(() => null)
+    if (!stat?.isDirectory()) fail('父文件夹不存在')
+  }
   for (let n = 1; ; n++) {
     const name = n === 1 ? DEFAULT_NAME : `${DEFAULT_NAME} (${n})`
     try {
-      await mkdir(join(root, name))
-      return name
+      await mkdir(join(parent.abs, name))
+      return parent.rel ? `${parent.rel}/${name}` : name
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
       throw error
     }
   }
+}
+
+/** 解析真实目录路径,供打开资源管理器与移入回收站前统一校验。 */
+export async function resolveLibraryFolder(root: string, relPath: string): Promise<string> {
+  const target = libraryPath(root, relPath)
+  const real = await realPathWithinRoot(root, target.abs)
+  if (!real) fail('文件夹路径越界')
+  if (!(await lstat(real)).isDirectory()) fail('文件夹不存在')
+  return real
 }
 
 export async function renameLibraryFolder(root: string, relPath: string, newName: string): Promise<string> {

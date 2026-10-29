@@ -38,8 +38,12 @@ const api = {
   folders: {
     list: (libraryId: number): Promise<FolderListResponse | { error: string }> =>
       ipcRenderer.invoke('folders:list', libraryId),
-    create: (libraryId: number): Promise<{ path: string } | { error: string }> =>
-      ipcRenderer.invoke('folders:create', libraryId),
+    create: (libraryId: number, parentPath?: string): Promise<{ path: string } | { error: string }> =>
+      ipcRenderer.invoke('folders:create', libraryId, parentPath),
+    open: (libraryId: number, path: string): Promise<{ ok: true } | { error: string }> =>
+      ipcRenderer.invoke('folders:open', libraryId, path),
+    trash: (libraryId: number, path: string): Promise<{ ok: true; removedAssets: number } | { error: string }> =>
+      ipcRenderer.invoke('folders:trash', libraryId, path),
     rename: (libraryId: number, path: string, name: string): Promise<{ path: string } | { error: string }> =>
       ipcRenderer.invoke('folders:rename', libraryId, path, name),
     move: (libraryId: number, source: string, target: string, placement: 'before' | 'after' | 'inside'): Promise<{ path: string } | { error: string }> =>

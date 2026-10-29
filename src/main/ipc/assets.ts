@@ -3,14 +3,15 @@ import { spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { getDb } from '../services/db'
 import {
-  addTag, removeTag, applyMovedAssets, renameAssetFolder, renameFolderOrders,
+  addTag, removeTag, applyMovedAssets, deleteFolderTree, renameAssetFolder, renameFolderOrders,
   listFolderOrders, replaceFolderOrders, listAssets, updateAsset, getLibrary, sanitizeAssetPatch,
   upsertScanned, getAppState, type AssetPatch
 } from '../services/store'
 import { ensureLibraryStorage, hasLibDb } from '../services/libraryDb'
 import {
-  assertLibraryFolder, createLibraryFolder, exportLibraryAsset, listLibraryFolders,
-  moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder
+  assertLibraryFolder, createLibraryFolder, exportLibraryAsset, insertCreatedFolderPath,
+  listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset,
+  renameLibraryFolder, resolveLibraryFolder
 } from '../services/folders'
 import { removeThumbsIfUnused, retargetThumb } from '../services/thumbs'
 import { readShellAsset, readTextAsset, renameShellAlongside, writeShellAsset, writeTextAsset } from '../services/textAssets'
@@ -63,18 +64,67 @@ export function registerAssetsIpc(): void {
     }
   })
 
-  ipcMain.handle('folders:create', async (_e, libraryId: number) => {
+  ipcMain.handle('folders:create', async (_e, libraryId: number, parentPath = '') => {
     const root = libRootOf(libraryId)
     const s = scopeFor(libraryId)
     if (!root || !s) return { error: '素材库不存在' }
+    if (typeof parentPath !== 'string') return { error: '父文件夹无效' }
     try {
-      const path = await withoutRootWatcher(libraryId, root, () => createLibraryFolder(root))
-      const ordered = orderLibraryFolders(await listLibraryFolders(root), listFolderOrders(s.db, libraryId))
-      replaceFolderOrders(s.db, libraryId, [path, ...ordered.filter((item) => item !== path)])
+      const path = await withoutRootWatcher(libraryId, root, () => createLibraryFolder(root, parentPath))
+      const ordered = insertCreatedFolderPath(
+        orderLibraryFolders(await listLibraryFolders(root), listFolderOrders(s.db, libraryId)),
+        path,
+        parentPath
+      )
+      replaceFolderOrders(s.db, libraryId, ordered)
       send('assets:changed', { libraryId })
       return { path }
     } catch (error) {
       return { error: error instanceof Error ? error.message : '新建文件夹失败' }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('folders:open', async (_e, libraryId: number, relPath: string) => {
+    const root = libRootOf(libraryId)
+    const s = scopeFor(libraryId)
+    if (!root || !s) return { error: '素材库不存在' }
+    try {
+      const physical = await listLibraryFolders(root)
+      if (!physical.includes(relPath)) return { error: '只能打开资源库中的本地文件夹' }
+      const real = await resolveLibraryFolder(root, relPath)
+      const fallback = await shell.openPath(real)
+      return fallback ? { error: fallback } : { ok: true }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '无法打开源目录' }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('folders:trash', async (_e, libraryId: number, relPath: string) => {
+    const root = libRootOf(libraryId)
+    const s = scopeFor(libraryId)
+    if (!root || !s) return { error: '素材库不存在' }
+    try {
+      const physical = await listLibraryFolders(root)
+      if (!physical.includes(relPath)) return { error: '只能删除资源库中的本地文件夹' }
+      const real = await resolveLibraryFolder(root, relPath)
+      let removedAssets = 0
+      await withoutRootWatcher(libraryId, root, async () => {
+        await shell.trashItem(real)
+        const deleted = deleteFolderTree(s.db, libraryId, relPath)
+        removedAssets = deleted.assets
+        await removeThumbsIfUnused(s.libPath, s.db, libraryId, deleted.fingerprints).catch(() => 0)
+        for (const fingerprint of deleted.fingerprints) {
+          await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, fingerprint).catch(() => undefined)
+        }
+      })
+      send('assets:changed', { libraryId })
+      return { ok: true, removedAssets }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '无法将文件夹移入回收站' }
     } finally {
       releaseScope(s)
     }

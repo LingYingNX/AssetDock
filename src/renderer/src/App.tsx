@@ -17,6 +17,7 @@ import { DropZone } from './components/DropZone'
 import { Inspector } from './components/Inspector'
 import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
+import { FolderContextMenu } from './components/FolderContextMenu'
 import { PreferencesDialog } from './components/PreferencesDialog'
 import { ThumbProgress } from './components/ThumbProgress'
 import { Toast } from './components/Toast'
@@ -131,6 +132,7 @@ export default function App(): React.JSX.Element {
       if (e.key === 'Escape') {
         st.setOpenMenu(null)
         st.setCtxMenu(null)
+        st.setFolderCtxMenu(null)
         if (st.lightboxId) st.closeLightbox()
         if (st.renaming) st.setRenaming(false)
         ;(document.activeElement as HTMLElement)?.blur()
@@ -187,7 +189,7 @@ export default function App(): React.JSX.Element {
         case 'F2': {
           if (st.nav.startsWith('folder:')) {
             e.preventDefault()
-            useUI.setState({ folderEditPath: st.nav.slice('folder:'.length) })
+            st.beginFolderRename(st.nav.slice('folder:'.length))
           } else if (st.activeId) {
             st.setRenaming(true)
           }
@@ -252,6 +254,7 @@ export default function App(): React.JSX.Element {
         <Inspector />
       </div>
       <ContextMenu />
+      <FolderContextMenu />
       <PreferencesDialog />
       {/* 两个浮层同处右下角:放进同一个纵向堆叠容器,进度在上、一次性提示贴住底边。
           此前两者各自 position:fixed;right:18px;bottom:16px,锚点完全相同,同时出现时

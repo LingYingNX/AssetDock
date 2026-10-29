@@ -94,7 +94,8 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 /* 展开箭头比同排图标大 20%、描边粗 15%;只改这只箭头,不放大整行图标。 */
 .folder-toggle .ic{width:19.2px;height:19.2px;stroke-width:1.955;transform:translateX(-2px);transition:transform var(--dur-press) var(--ease-out)}
 .folder-toggle.open .ic{transform:translateX(-2px) rotate(90deg)}
-.folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
+.folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left;transition:transform 100ms var(--ease-out),opacity 100ms var(--ease-out)}
+.folder-main:active:not([disabled]){transform:scale(.985);opacity:.96}
 .folder-main:hover{background:none}
 .folder-row:focus-visible{outline:none}
 /* Shift 点选不让按钮焦点画出第二个方框;键盘 Tab 焦点仍用背景给出可见反馈。 */
@@ -106,6 +107,9 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-drag-preview .ic{width:var(--ic-sm);height:var(--ic-sm);color:var(--acc2);flex:none}
 .folder-drag-preview span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+@media (prefers-reduced-motion:reduce){
+  .folder-main:active:not([disabled]){transform:none}
+}
 
 /* 减少动效时不动「时长」——glass.css 已用 *{transition:none!important} 统一移除;
    这里若再声明 transition-duration,只会把这个已被移除的过渡重新拖回来。 */

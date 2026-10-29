@@ -23,6 +23,13 @@ export interface CtxMenuState {
   assetId: string
 }
 
+export interface FolderCtxMenuState {
+  x: number
+  y: number
+  path: string
+  libraryId: number
+}
+
 
 export const mmss = (sec: number): string => {
   const total = Math.max(0, Math.round(sec))
@@ -287,10 +294,12 @@ interface UIState {
   collapsedFolders: string[]
   toggleFolderCollapsed: (path: string) => void
   refreshFolders: () => void
-  createFolder: () => void
+  createFolder: (parentPath?: string) => void
   renameFolder: (path: string, name: string) => void
   cancelFolderRename: () => void
+  beginFolderRename: (path: string) => void
   moveFolder: (source: string, target: string, placement: 'before' | 'after' | 'inside') => void
+  trashFolder: (path: string) => void
   moveAssetsToFolder: (assetIds: string[], folder: string) => void
 
   /* 导航与搜索 */
@@ -373,6 +382,9 @@ interface UIState {
   setOpenMenu: (id: string | null) => void
   ctxMenu: CtxMenuState | null
   setCtxMenu: (s: CtxMenuState | null) => void
+  folderCtxMenu: FolderCtxMenuState | null
+  openFolderContextMenu: (path: string, x: number, y: number) => void
+  setFolderCtxMenu: (s: FolderCtxMenuState | null) => void
 
   /* 灯箱 */
   lightboxId: string | null
@@ -660,16 +672,23 @@ export const useUI = create<UIState>((set, get) => {
         get().showToast('目录列表刷新失败，目录树保持原样', 'warn')
       })
     },
-    createFolder: () => {
+    createFolder: (parentPath = '') => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
-      void window.windowApi.folders.create(t.libraryId).then((r) => {
+      set({ folderCtxMenu: null })
+      void window.windowApi.folders.create(t.libraryId, parentPath).then((r) => {
         if ('error' in r) {
           get().showToast(r.error, 'warn')
           return
         }
-        set({ folderEditPath: r.path, nav: `folder:${r.path}` as NavKey })
+        set((s) => ({
+          folderEditPath: r.path,
+          nav: `folder:${r.path}` as NavKey,
+          collapsedFolders: parentPath ? s.collapsedFolders.filter((path) => path !== parentPath) : s.collapsedFolders
+        }))
         get().refreshFolders()
+      }).catch(() => {
+        get().showToast('新建子文件夹失败,请重试', 'warn')
       })
     },
     renameFolder: (path, name) => {
@@ -690,6 +709,11 @@ export const useUI = create<UIState>((set, get) => {
       })
     },
     cancelFolderRename: () => set({ folderEditPath: null }),
+    beginFolderRename: (path) => set({
+      folderEditPath: path,
+      nav: `folder:${path}` as NavKey,
+      folderCtxMenu: null
+    }),
     moveFolder: (source, target, placement) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
@@ -736,6 +760,57 @@ export const useUI = create<UIState>((set, get) => {
         get().reloadActiveLibrary()
       })
     },
+    trashFolder: (path) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      set({ folderCtxMenu: null })
+      const prefix = `${path}/`
+      const affectedAssets = get().assets.filter(
+        (asset) => asset.libraryId === t.libraryId && (asset.relPath ?? '').startsWith(prefix)
+      )
+      const affected = affectedAssets.length
+      const deletedIds = new Set(affectedAssets.map((asset) => asset.id))
+      const label = path.split('/').pop() ?? path
+      if (!window.confirm(
+        `将「${label}」及其全部内容移入系统回收站？素材库会移除该目录下 ${affected} 条素材记录与派生缓存。`
+      )) return
+
+      const clearDeletedState = (s: ReturnType<typeof useUI.getState>): Partial<ReturnType<typeof useUI.getState>> => {
+        const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+        const selectedIds = s.selectedIds.filter((id) => !deletedIds.has(id))
+        const activeId = s.activeId && deletedIds.has(s.activeId) ? null : s.activeId
+        const focusedCardId = s.focusedCardId && deletedIds.has(s.focusedCardId) ? null : s.focusedCardId
+        const selectionAnchorId =
+          s.selectionAnchorId && deletedIds.has(s.selectionAnchorId) ? null : s.selectionAnchorId
+        return {
+          ...withSelection(selectedIds),
+          activeId,
+          focusedCardId,
+          selectionAnchorId,
+          renaming: s.renaming && (!s.activeId || !deletedIds.has(s.activeId)),
+          nav: activeFolder === path || activeFolder?.startsWith(prefix) ? 'all' : s.nav,
+          folderEditPath:
+            s.folderEditPath === path || s.folderEditPath?.startsWith(prefix) ? null : s.folderEditPath,
+          collapsedFolders: s.collapsedFolders.filter((item) => item !== path && !item.startsWith(prefix)),
+          lightboxId: s.lightboxId && deletedIds.has(s.lightboxId) ? null : s.lightboxId,
+          cssDirty: s.lightboxId && deletedIds.has(s.lightboxId) ? false : s.cssDirty
+        }
+      }
+
+      void window.windowApi.folders.trash(t.libraryId, path).then((r) => {
+        if ('error' in r) {
+          get().showToast(r.error, 'warn')
+          get().reloadActiveLibrary()
+          return
+        }
+        set((s) => clearDeletedState(s))
+        get().showToast(r.removedAssets > 0 ? `已移入回收站，移除 ${r.removedAssets} 条素材记录` : '已移入回收站')
+        get().reloadActiveLibrary()
+      }).catch(() => {
+        get().showToast('删除文件夹失败,请重试', 'warn')
+        get().reloadActiveLibrary()
+      })
+    },
     moveAssetsToFolder: (assetIds, folder) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
@@ -771,7 +846,7 @@ export const useUI = create<UIState>((set, get) => {
           if (get().lightboxId) return
         }
       }
-      set({ nav })
+      set({ nav, folderCtxMenu: null })
       persistUiPrefs()
     },
     search: '',
@@ -783,13 +858,13 @@ export const useUI = create<UIState>((set, get) => {
     setStripColor: (stripColor) => set({ stripColor }),
     cbarOpen: false,
     toggleCbar: () => {
-      set((s) => ({ cbarOpen: !s.cbarOpen, openMenu: null }))
+      set((s) => ({ cbarOpen: !s.cbarOpen, openMenu: null, folderCtxMenu: null }))
       persistUiPrefs()
     },
 
     view: 'waterfall',
     setView: (view) => {
-      set({ view, openMenu: null })
+      set({ view, openMenu: null, folderCtxMenu: null })
       persistUiPrefs()
     },
     colw: 232,
@@ -1042,9 +1117,21 @@ export const useUI = create<UIState>((set, get) => {
     startRenaming: (id) => set({ activeId: id, focusedCardId: id, renaming: true }),
 
     openMenu: null,
-    setOpenMenu: (openMenu) => set(openMenu ? { openMenu, cbarOpen: false } : { openMenu }),
+    setOpenMenu: (openMenu) => set(openMenu ? { openMenu, cbarOpen: false, folderCtxMenu: null } : { openMenu }),
     ctxMenu: null,
-    setCtxMenu: (ctxMenu) => set({ ctxMenu }),
+    setCtxMenu: (ctxMenu) => set(ctxMenu ? { ctxMenu, folderCtxMenu: null } : { ctxMenu }),
+    folderCtxMenu: null,
+    openFolderContextMenu: (path, x, y) => {
+      const t = get().tabs.find((item) => item.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      set({
+        folderCtxMenu: { path, x, y, libraryId: t.libraryId },
+        ctxMenu: null,
+        openMenu: null,
+        cbarOpen: false
+      })
+    },
+    setFolderCtxMenu: (folderCtxMenu) => set({ folderCtxMenu }),
 
     lightboxId: null,
     lightboxFullscreen: false,
@@ -1061,7 +1148,8 @@ export const useUI = create<UIState>((set, get) => {
         // 从胶片带换片时保留全屏;从网格首次打开时仍从普通布局开始。
         lightboxFullscreen: s.lightboxId ? s.lightboxFullscreen : false,
         openMenu: null,
-        ctxMenu: null
+        ctxMenu: null,
+        folderCtxMenu: null
       })),
     closeLightbox: () => {
       // Esc / 关闭按钮 / 遮罩点击都经此处:未保存的 CSS 改动必须先确认

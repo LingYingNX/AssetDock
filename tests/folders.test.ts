@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { createLibraryFolder, exportLibraryAsset, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder } from '../src/main/services/folders'
-import { listFolderOrders, replaceFolderOrders, renameFolderOrders } from '../src/main/services/store'
+import { createLibraryFolder, exportLibraryAsset, insertCreatedFolderPath, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder, resolveLibraryFolder } from '../src/main/services/folders'
+import { deleteFolderTree, listFolderOrders, replaceFolderOrders, renameFolderOrders, upsertScanned } from '../src/main/services/store'
 import { openMemoryDb } from '../src/main/services/db'
+import { openMemoryLibDb } from '../src/main/services/libraryDb'
 
 describe('library folders', () => {
   let root = ''
@@ -22,6 +23,19 @@ describe('library folders', () => {
   it('creates uniquely named folders at the library root', async () => {
     await expect(createLibraryFolder(root)).resolves.toBe('未命名')
     await expect(createLibraryFolder(root)).resolves.toBe('未命名 (2)')
+  })
+
+  it('creates a uniquely named folder inside the selected parent', async () => {
+    await mkdir(join(root, 'parent'))
+    await expect(createLibraryFolder(root, 'parent')).resolves.toBe('parent/未命名')
+    await expect(createLibraryFolder(root, 'parent')).resolves.toBe('parent/未命名 (2)')
+    await expect(listLibraryFolders(root)).resolves.toEqual(['parent', 'parent/未命名', 'parent/未命名 (2)'])
+  })
+
+  it('resolves a real folder but rejects paths outside the library', async () => {
+    await mkdir(join(root, 'parent', 'child'), { recursive: true })
+    await expect(resolveLibraryFolder(root, 'parent/child')).resolves.toBe(join(root, 'parent', 'child'))
+    await expect(resolveLibraryFolder(root, '../outside')).rejects.toThrow()
   })
 
   it('keeps a newly created folder at the front when its order is persisted', async () => {
@@ -65,12 +79,49 @@ describe('library folders', () => {
     expect(orderLibraryFolders(['a', 'b', 'c'], new Map([['b', 0], ['a', 1]]))).toEqual(['b', 'a', 'c'])
   })
 
+  it('persists a newly created nested folder once after its parent subtree', () => {
+    const scanned = ['archive', 'archive/keep', 'archive/未命名', 'output', 'project']
+    expect(insertCreatedFolderPath(scanned, 'archive/未命名', 'archive')).toEqual([
+      'archive',
+      'archive/keep',
+      'archive/未命名',
+      'output',
+      'project'
+    ])
+  })
+
   it('replaces stale destination order rows during a folder move', () => {
     const db = openMemoryDb()
     db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'Library', root)
     replaceFolderOrders(db, 1, ['actions', 'actions/categories', 'places/actions', 'places/actions/categories'])
     renameFolderOrders(db, 1, 'actions', 'places/actions')
     expect([...listFolderOrders(db, 1).keys()].sort()).toEqual(['places/actions', 'places/actions/categories'])
+    db.close()
+  })
+
+  it('removes a folder subtree from the asset index and folder order', () => {
+    const db = openMemoryLibDb()
+    db.pragma('foreign_keys = ON')
+    const entries = ['tree/a.png', 'tree/child/b.png', 'treehouse/c.png'].map((relPath, index) => ({
+      relPath,
+      name: relPath.split('/').pop()!,
+      type: 'image' as const,
+      format: 'PNG',
+      sizeBytes: 1,
+      mtimeMs: index + 1,
+      fingerprint: String(index + 1).padStart(20, 'a')
+    }))
+    const [under, child, sibling] = upsertScanned(db, 1, entries)
+    db.prepare('INSERT INTO tags(id, name, color) VALUES (1, ?, ?)').run('tag', '#000000')
+    db.prepare('INSERT INTO asset_tags(asset_id, tag_id) VALUES (?, 1)').run(under.assetId)
+    replaceFolderOrders(db, 1, ['tree', 'tree/child', 'treehouse'])
+
+    const deleted = deleteFolderTree(db, 1, 'tree')
+    expect(deleted.assets).toBe(2)
+    expect(deleted.fingerprints).toHaveLength(2)
+    expect(db.prepare('SELECT rel_path FROM assets ORDER BY rel_path').all()).toEqual([{ rel_path: sibling.relPath }])
+    expect(db.prepare('SELECT 1 FROM assets WHERE id = ?').get(child.assetId)).toBeUndefined()
+    expect([...listFolderOrders(db, 1).keys()]).toEqual(['treehouse'])
     db.close()
   })
 })

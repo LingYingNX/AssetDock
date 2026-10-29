@@ -11,7 +11,9 @@ import { Card } from './Card'
 import { EmptyState } from './EmptyState'
 
 const LHEAD_COLS = ['', '文件名', '类型', '分辨率', '大小', '时长', '导入时间', '']
-const VIRTUAL_THRESHOLD = 500
+/* 文件夹切换是高频操作。原阈值 500 会让真实库中 285~319 项的目录切换重建整组卡片,
+   实测已到 210~268ms;40 项起走虚拟化,把一次切换限制在当前视口附近。 */
+const VIRTUAL_THRESHOLD = 40
 const GAP = 14
 const PAD_X = 22
 /* 卡片信息区高度:缩略图占卡片 80%、信息区占 20%(默认 232px 列宽下即 44px)。
@@ -432,7 +434,8 @@ function WaterColumn({
     count: items.length,
     getScrollElement: () => scrollEl.current,
     estimateSize: (i) => items[i].h,
-    overscan: 8
+    /* 文件夹切换会同时替换整列虚拟项;保留少量预渲染即可兼顾滚动与切目录延迟。 */
+    overscan: 4
   })
   void height
   return (

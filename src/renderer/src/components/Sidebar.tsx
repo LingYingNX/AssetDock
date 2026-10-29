@@ -48,21 +48,6 @@ function folderDragPreview(source: HTMLElement, label: string): HTMLDivElement {
   return preview
 }
 
-function pressFolder(element: HTMLElement): void {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const parts = [element.querySelector('.folder-main > .ic'), element.querySelector('.folder-label')]
-  for (const part of parts) {
-    part?.animate(
-      [
-        { transform: 'scale(1)' },
-        { transform: 'scale(.94)' },
-        { transform: 'scale(1)' }
-      ],
-      { duration: 160, easing: 'ease-out' }
-    )
-  }
-}
-
 /** 库模式:只用真实目录建树,素材路径仅用于节点计数 */
 function buildDirTree(paths: string[], assets: { folders: string[]; missing?: boolean; deletedAt?: string }[], movablePaths: Set<string>): DirNode[] {
   const counts = new Map<string, number>()
@@ -159,7 +144,8 @@ function DirTree({
   onFolderDragEnd,
   onFolderDragOver,
   onFolderDragLeave,
-  onFolderDrop
+  onFolderDrop,
+  onOpenContextMenu
 }: {
   nodes: DirNode[]
   depth: number
@@ -180,6 +166,7 @@ function DirTree({
   onFolderDragOver: (element: HTMLDivElement, path: string, placement: FolderPlacement) => void
   onFolderDragLeave: (path: string, event: React.DragEvent<HTMLDivElement>) => void
   onFolderDrop: (path: string, event: React.DragEvent<HTMLDivElement>, placement: FolderPlacement) => void
+  onOpenContextMenu: (path: string, x: number, y: number) => void
 }): React.JSX.Element {
   return (
     <>
@@ -241,6 +228,15 @@ function DirTree({
                     if (canDropFolder(source, n.path, placement, n.movable)) onFolderDrop(n.path, e, placement)
                   }
                 }}
+                onContextMenu={(event) => {
+                  if (!n.movable) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setNav(key as never)
+                  // 灯箱未保存内容取消切换时 setNav 不会落定,此时不能打开与选中态不一致的菜单。
+                  if (useUI.getState().nav !== key) return
+                  onOpenContextMenu(n.path, event.clientX, event.clientY)
+                }}
                 data-folder-path={n.path}
               >
                 {n.children.length > 0 ? (
@@ -261,8 +257,7 @@ function DirTree({
                 )}
                 <button
                   className="folder-main"
-                  onClick={(event) => {
-                    pressFolder(event.currentTarget)
+                  onClick={() => {
                     setNav(key as never)
                   }}
                   title={n.label}
@@ -294,6 +289,7 @@ function DirTree({
                 onFolderDragOver={onFolderDragOver}
                 onFolderDragLeave={onFolderDragLeave}
                 onFolderDrop={onFolderDrop}
+                onOpenContextMenu={onOpenContextMenu}
               />
             )}
           </div>
@@ -436,6 +432,7 @@ export function Sidebar(): React.JSX.Element {
   const createFolder = useUI((s) => s.createFolder)
   const renameFolder = useUI((s) => s.renameFolder)
   const cancelFolderRename = useUI((s) => s.cancelFolderRename)
+  const openFolderContextMenu = useUI((s) => s.openFolderContextMenu)
   const moveFolder = useUI((s) => s.moveFolder)
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
   const collapsedFolders = useUI((s) => s.collapsedFolders)
@@ -557,7 +554,7 @@ export function Sidebar(): React.JSX.Element {
           <div className="side-title">
             <span className="side-title-label folder-section-title"><Icon name="folder" />素材管理</span>
             {mode === 'library' && (
-              <button className="side-title-add" title="新建文件夹" aria-label="新建文件夹" onClick={createFolder}>
+              <button className="side-title-add" title="新建文件夹" aria-label="新建文件夹" onClick={() => createFolder()}>
                 <Icon name="plus" />
               </button>
             )}
@@ -596,6 +593,7 @@ export function Sidebar(): React.JSX.Element {
                   }
                 }}
                 onFolderDrop={(path, event, placement) => dropFolder(path, event, placement, physicalFolderPaths.includes(path))}
+                onOpenContextMenu={openFolderContextMenu}
               />
               <RootFolderDrop
                 onDragOver={(element, e) => {

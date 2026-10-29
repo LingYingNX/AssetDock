@@ -219,6 +219,32 @@ export function renameFolderOrders(d: Database, libraryId: number, oldPath: stri
   })()
 }
 
+export interface FolderTreeDeleteResult {
+  assets: number
+  fingerprints: string[]
+}
+
+/** 删除目录树对应的资产与排序记录;磁盘目录必须先成功移入回收站。 */
+export function deleteFolderTree(d: Database, libraryId: number, folderPath: string): FolderTreeDeleteResult {
+  if (!folderPath) return { assets: 0, fingerprints: [] }
+  const prefix = `${folderPath}/`
+  return d.transaction(() => {
+    const rows = d
+      .prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND instr(rel_path, ?) = 1')
+      .all(libraryId, prefix) as { fingerprint: string }[]
+    const removed = d
+      .prepare('DELETE FROM assets WHERE library_id = ? AND instr(rel_path, ?) = 1')
+      .run(libraryId, prefix).changes
+    d.prepare(
+      'DELETE FROM folder_orders WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)'
+    ).run(libraryId, folderPath, prefix)
+    return {
+      assets: removed,
+      fingerprints: [...new Set(rows.map((row) => row.fingerprint).filter(Boolean))]
+    }
+  })()
+}
+
 export function replaceFolderOrders(d: Database, libraryId: number, paths: readonly string[]): void {
   const clear = d.prepare('DELETE FROM folder_orders WHERE library_id = ?')
   const insert = d.prepare('INSERT INTO folder_orders(library_id, path, position) VALUES (?, ?, ?)')
