@@ -174,19 +174,31 @@ async function reconcileRoot(libraryId: number, root: string): Promise<void> {
   const s = scopeFor(libraryId)
   if (!s) return
   try {
-    const entries = await scanLibrary(root)
+    // 对账只需要发现新增/变化/缺失;未变文件只 stat,不再逐个读 64KB 算指纹、跑 sharp 探测。
+    // 否则每次启动都是全库重扫,在机械盘上会把首屏数据请求拖到几十秒。
+    const knownRows = s.db
+      .prepare('SELECT id, rel_path, size_bytes, mtime_ms, fingerprint FROM assets WHERE library_id = ? AND missing = 0')
+      .all(libraryId) as { id: number; rel_path: string; size_bytes: number; mtime_ms: number; fingerprint: string }[]
+    const known = new Map(knownRows.map((row) => [
+      row.rel_path,
+      { sizeBytes: row.size_bytes, mtimeMs: row.mtime_ms, fingerprint: row.fingerprint }
+    ]))
+    const entries = await scanLibrary(root, undefined, undefined, undefined, known)
+    let changed = 0
     if (entries.length > 0) {
       const results = upsertScanned(s.db, libraryId, entries)
       queuePaletteRefresh(s, libraryId, entries, results)
-      queueThumbWarmup(libraryId)
+      changed = results.filter((result) => result.action !== 'unchanged').length
     }
-    const known = s.db.prepare('SELECT id, rel_path FROM assets WHERE library_id = ? AND missing = 0').all(libraryId) as { id: number; rel_path: string }[]
     const onDisk = new Set(entries.map((entry) => entry.relPath))
-    for (const k of known) {
+    for (const k of knownRows) {
       if (onDisk.has(k.rel_path)) continue
-      setAssetMissing(s.db, libraryId, k.rel_path, true)
+      if (setAssetMissing(s.db, libraryId, k.rel_path, true)) changed++
     }
-    send('assets:changed', { libraryId })
+    if (changed > 0) {
+      queueThumbWarmup(libraryId)
+      send('assets:changed', { libraryId })
+    }
   } catch {
     /* 对账失败不阻塞启动 */
   } finally {

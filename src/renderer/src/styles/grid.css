@@ -113,5 +113,9 @@ figcaption{padding:7px 10px}
 .lc{display:none}
 .name-row{display:flex;align-items:baseline;gap:4px;min-width:0}
 .name{font-size:var(--fs-body);line-height:15px;font-weight:500;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.meta-row{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:var(--fs-cap);line-height:13px;color:var(--t2)}
+.meta-row{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:var(--fs-cap);line-height:13px;color:var(--t2);
+  /* 列宽下限 90px 时「1920×1080 · 131.1 MB」放不下,折行会把信息区从 44px 撑到 57px,
+     而 Grid.tsx 的 CAPTION_H 与虚拟化定位都按 44px 算,卡片会互相叠压。锁死单行、溢出裁掉。 */
+  white-space:nowrap;overflow:hidden}
+.meta-row>span{flex:none}
 .meta-row .sep2{opacity:.5}

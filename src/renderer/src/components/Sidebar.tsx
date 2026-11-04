@@ -4,6 +4,7 @@ import { fmtCount, sidebarCounts } from '../data/query'
 import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
 import { type FolderPlacement, canDropFolder, folderDropClass, folderDropPlacement } from '../data/folder-drag'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '../data/sidebar-width'
+import { tagNavKey, tagsFromNav } from '../data/tag-nav'
 import { Icon } from './Icons'
 
 interface DirNode {
@@ -437,12 +438,14 @@ export function Sidebar(): React.JSX.Element {
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
   const collapsedFolders = useUI((s) => s.collapsedFolders)
   const toggleFolderCollapsed = useUI((s) => s.toggleFolderCollapsed)
+  const [folderDragging, setFolderDragging] = useState(false)
   const assetDropTargetRef = useRef<HTMLElement | null>(null)
   const folderDragPreviewRef = useRef<HTMLDivElement | null>(null)
   const folderDropTargetRef = useRef<HTMLDivElement | null>(null)
   const folderDropRef = useRef<FolderDrop | null>(null)
   const folderDragSourceRef = useRef<string | null>(null)
   const collapsedPaths = useMemo(() => new Set(collapsedFolders), [collapsedFolders])
+  const navTags = useMemo(() => tagsFromNav(nav), [nav])
   const c = sidebarCounts(assets)
   const tagStats = assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
     if (a.missing || a.deletedAt) return acc
@@ -492,6 +495,7 @@ export function Sidebar(): React.JSX.Element {
     folderDragPreviewRef.current?.remove()
     folderDragPreviewRef.current = null
     folderDragSourceRef.current = null
+    setFolderDragging(false)
     clearFolderDrop()
   }
 
@@ -550,7 +554,7 @@ export function Sidebar(): React.JSX.Element {
           </button>
         </section>
 
-        <section className="side-sec">
+        <section className={`side-sec${folderDragging ? ' folder-dragging' : ''}`}>
           <div className="side-title">
             <span className="side-title-label folder-section-title"><Icon name="folder" />素材管理</span>
             {mode === 'library' && (
@@ -583,6 +587,7 @@ export function Sidebar(): React.JSX.Element {
                   folderDragPreviewRef.current?.remove()
                   folderDragPreviewRef.current = preview
                   folderDragSourceRef.current = path
+                  setFolderDragging(true)
                   clearFolderDrop()
                 }}
                 onFolderDragEnd={clearFolderDrag}
@@ -619,9 +624,22 @@ export function Sidebar(): React.JSX.Element {
         <section className="side-sec">
           <div className="side-title"><Icon name="tag" />标签</div>
           {Object.entries(tagStats).map(([name, info]) => {
-            const key = `tag:${name}` as const
+            const selected = navTags.includes(name)
             return (
-              <button key={name} className={`nav-item${nav === key ? ' on' : ''}`} onClick={() => setNav(key)}>
+              <button
+                key={name}
+                className={`nav-item tag-nav-item${selected ? ' on' : ''}`}
+                aria-pressed={selected}
+                title={`${name} · Shift 点击多选`}
+                onClick={(event) => {
+                  const next = event.shiftKey
+                    ? selected
+                      ? navTags.filter((tag) => tag !== name)
+                      : [...navTags, name]
+                    : [name]
+                  setNav(tagNavKey(next))
+                }}
+              >
                 <span className="dot" style={{ background: info.color }} />
                 {name}
                 <span className={`cnt${info.n > 0 ? ' has-items' : ''}`}>{fmtCount(info.n)}</span>

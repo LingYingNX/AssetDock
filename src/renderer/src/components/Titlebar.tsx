@@ -11,18 +11,8 @@ export function Titlebar(): React.JSX.Element {
   const inspHidden = useUI((s) => s.inspHidden)
   const toggleInspector = useUI((s) => s.toggleInspector)
 
-  // 只有下拉/齿轮这类浮层需要「点击标题栏其它区域关闭」,因此打开时暂停标题栏拖拽;
-  // 偏好设置是带全屏遮罩的模态对话框,不依赖点击标题栏关闭,保持标题栏可拖拽。
-  const modalOpen = openMenu === 'preferences'
-  const dragStyle = {
-    WebkitAppRegion: openMenu && !modalOpen ? 'no-drag' : 'drag'
-  } as React.CSSProperties
-
   return (
-    <header
-      className="titlebar glass-titlebar"
-      style={dragStyle}
-    >
+    <header className="titlebar glass-titlebar">
       {/* 品牌区只剩齿轮:logo 方块已删除(它是个没有文字的孤立色块,和下面的窗口控制、
           库按钮都不同尺寸,只贡献噪音)。齿轮是「创建资源库 / 资源库管理 / 偏好设置」
           的唯一入口,必须留着。 */}
@@ -43,11 +33,7 @@ export function Titlebar(): React.JSX.Element {
           这里既不挂「关闭」也不挂「新建」——它们在标题栏里就是浏览器标签页的样子,
           且一颗胶囊才 32px 高,塞进第二个图标后命中区会挤成一团。
           库的新建/关闭改由齿轮菜单承载:创建资源库 / 资源库管理 › 关闭当前素材库。 */}
-      <nav
-        className="lib-tabs"
-        style={dragStyle}
-        aria-label="素材库切换"
-      >
+      <nav className="lib-tabs" aria-label="素材库切换">
         {tabs.map((t) => {
           return (
             <button
@@ -65,11 +51,7 @@ export function Titlebar(): React.JSX.Element {
           )
         })}
       </nav>
-      <div
-        className="tb-spacer"
-        style={{ WebkitAppRegion: openMenu ? 'no-drag' : 'drag' } as React.CSSProperties}
-        onPointerDown={() => setOpenMenu(null)}
-      />
+      <div className="tb-spacer" />
       <div className="win-ctrls">
         <span className="tb-sep" />
         <button

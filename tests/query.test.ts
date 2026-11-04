@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { formatCapability, formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
+import { tagNavKey, tagsFromNav } from '../src/renderer/src/data/tag-nav'
 
-const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tag: 'all' }
+const filters: Filters = { format: 'all', shape: 'all', size: 'all', rating: 'all', tags: [] }
 const asset = (patch: Partial<Asset>): Asset => ({
   id: 'a', type: 'image', format: 'JPG', name: 'asset', sizeBytes: 1, importedAt: '2026-09-10T00:00', rating: 0,
   favorite: false, tags: [], folders: [], note: '', palette: [], ...patch
@@ -17,8 +18,29 @@ describe('queryAssets', () => {
 
   it('supports type, rating, tag and text filtering', () => {
     const assets = [asset({ id: 'photo', name: 'mountain', rating: 5, tags: [{ name: 'nature', color: '#3ECF8E' }] }), asset({ id: 'movie', type: 'video', format: 'MP4', name: 'river' })]
-    expect(query(assets, 'all', { format: 'photo', rating: '5', tag: 'nature' }).map((item) => item.id)).toEqual(['photo'])
+    expect(query(assets, 'all', { format: 'photo', rating: '5', tags: ['nature'] }).map((item) => item.id)).toEqual(['photo'])
     expect(queryAssets(assets, { nav: 'all', search: 'river', filters, stripColor: null }).map((item) => item.id)).toEqual(['movie'])
+  })
+
+  it('filters ratings from five stars down to one star', () => {
+    const assets = [5, 4, 3, 2, 1, 0].map((rating) => asset({ id: String(rating), rating: rating as Asset['rating'] }))
+    expect(query(assets, 'all', { rating: '5' }).map((item) => item.id)).toEqual(['5'])
+    expect(query(assets, 'all', { rating: '4up' }).map((item) => item.id)).toEqual(['5', '4'])
+    expect(query(assets, 'all', { rating: '3up' }).map((item) => item.id)).toEqual(['5', '4', '3'])
+    expect(query(assets, 'all', { rating: '2up' }).map((item) => item.id)).toEqual(['5', '4', '3', '2'])
+    expect(query(assets, 'all', { rating: '1up' }).map((item) => item.id)).toEqual(['5', '4', '3', '2', '1'])
+  })
+
+  it('matches any selected tag and keeps multi-tag navigation round-trippable', () => {
+    const assets = [
+      asset({ id: 'a', tags: [{ name: '人物', color: '#1' }] }),
+      asset({ id: 'b', tags: [{ name: '场景', color: '#2' }] }),
+      asset({ id: 'c', tags: [{ name: '道具', color: '#3' }] })
+    ]
+    const nav = tagNavKey(['人物', '场景'])
+    expect(tagsFromNav(nav)).toEqual(['人物', '场景'])
+    expect(query(assets, nav).map((item) => item.id)).toEqual(['a', 'b'])
+    expect(query(assets, 'all', { tags: ['场景', '道具'] }).map((item) => item.id)).toEqual(['b', 'c'])
   })
 
   it('treats css as its own format without shape/size misfires', () => {

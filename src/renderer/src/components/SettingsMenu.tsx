@@ -109,6 +109,7 @@ export function SettingsMenu(): React.JSX.Element | null {
       role="menu"
       style={{ top: position.top, left: position.left }}
       onContextMenu={(event) => event.preventDefault()}
+      onPointerLeave={() => setOpenMenu(null)}
     >
       {/* 标题栏那颗「+」已移除(它和标签页的「×」一起构成浏览器标签栏的样子),
           新建素材库的入口收在这里。createLibraryFlow 会开文件夹选择器,

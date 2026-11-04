@@ -14,6 +14,9 @@ import {
 import type { ModelShade } from '../components/Viewer3D'
 import { THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
 import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../data/sidebar-width'
+import { COLW_DEFAULT, clampColw } from '../data/colw'
+import { parseTagGroups, type TagGroupDefinition } from '../data/filter-menu'
+import { tagsFromNav } from '../data/tag-nav'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -67,6 +70,8 @@ interface UiPrefs {
   modelHdrStrength: number
   modelHdrOpacity: number
   modelHdrBlur: number
+  /** 每个库的标签总分类;键为库 id,随 uiPrefs 持久化 */
+  tagGroups: Record<string, TagGroupDefinition[]>
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -76,7 +81,7 @@ function parseNav(value: unknown): NavKey {
   if (typeof value !== 'string') return 'all'
   if ((NAV_SIMPLE as readonly string[]).includes(value)) return value as NavKey
   if (value.startsWith('folder:') && value.length > 'folder:'.length) return value as NavKey
-  if (value.startsWith('tag:') && value.length > 'tag:'.length) return value as NavKey
+  if (tagsFromNav(value as NavKey).length > 0) return value as NavKey
   return 'all'
 }
 
@@ -103,7 +108,8 @@ function persistUiPrefs(): void {
       modelHdrRotation: s.modelHdrRotation,
       modelHdrStrength: s.modelHdrStrength,
       modelHdrOpacity: s.modelHdrOpacity,
-      modelHdrBlur: s.modelHdrBlur
+      modelHdrBlur: s.modelHdrBlur,
+      tagGroups: s.tagGroups
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -164,7 +170,7 @@ export async function restoreUiPrefs(): Promise<void> {
       const hdr = parseHdrSettings(parsed as Record<string, unknown>)
       useUI.setState({
         view,
-        colw: Number.isFinite(colw) ? Math.min(320, Math.max(170, Math.round(colw))) : 232,
+        colw: clampColw(colw),
         inspHidden: parsed.inspHidden === true,
         cbarOpen: parsed.cbarOpen === true,
         nav: parseNav(parsed.nav),
@@ -175,7 +181,8 @@ export async function restoreUiPrefs(): Promise<void> {
         modelHdrRotation: hdr.rotation,
         modelHdrStrength: hdr.strength,
         modelHdrOpacity: hdr.opacity,
-        modelHdrBlur: hdr.blur
+        modelHdrBlur: hdr.blur,
+        tagGroups: parseTagGroups(parsed.tagGroups)
       })
     } catch {
       /* 界面偏好损坏:保持默认 */
@@ -307,10 +314,14 @@ interface UIState {
   setNav: (n: NavKey) => void
   search: string
   setSearch: (s: string) => void
+  /** 每个库的标签总分类,key 为库 id */
+  tagGroups: Record<string, TagGroupDefinition[]>
+  setTagGroups: (libraryId: number, groups: TagGroupDefinition[]) => void
 
   /* 筛选 */
   filters: Filters
-  setFilter: (k: keyof Filters, v: string) => void
+  setFilter: (k: Exclude<keyof Filters, 'tags'>, v: string) => void
+  setTags: (tags: string[]) => void
   stripColor: string | null
   setStripColor: (hex: string | null) => void
   cbarOpen: boolean
@@ -603,38 +614,44 @@ export const useUI = create<UIState>((set, get) => {
       /* 已被更新的请求顶替、或用户已切到别的库:这次结果(成功或失败)都不再属于当前界面 */
       const superseded = (): boolean =>
         request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId
-      void Promise.all([window.windowApi.assets.list(libraryId), window.windowApi.folders.list(libraryId)]).then(([r, folders]) => {
+      const fail = (): void => {
+        if (superseded()) return
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
+        get().showToast('素材库加载失败，请重试', 'warn')
+      }
+      /* 计数与目录树互不阻塞:侧边栏计数只依赖 assets,不再等目录递归遍历完成 */
+      void window.windowApi.assets.list(libraryId).then((r) => {
         if (superseded()) return
         const data = r as {
           library?: unknown
           assets?: Record<string, unknown>[]
         }
         const assets = data.assets
-        if (Array.isArray(assets)) {
-          set((s) => {
-            const physicalFolderPaths = 'paths' in folders ? folders.paths : []
-            const folderPaths = physicalFolderPaths
-            const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
-            return {
-              assets: assets.map(rowToAsset),
-              folderPaths,
-              physicalFolderPaths,
-              folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
-              collapsedFolders: s.collapsedFolders.filter((path) => folderPaths.includes(path)),
-              nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav,
-              mode: 'library'
-            }
-          })
+        if (!Array.isArray(assets)) {
+          /* 主进程回了结构不对的响应(例如 {error}):与请求失败同待遇,不把上次的集合当当前结果 */
+          fail()
           return
         }
-        /* 主进程回了结构不对的响应(例如 {error}):与请求失败同待遇,不把上次的集合当当前结果 */
-        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
-        get().showToast('素材库加载失败，请重试', 'warn')
-      }).catch(() => {
-        /* 失败不留过期数据:清空并进失败态,界面与磁盘真实状态保持一致 */
+        set({ assets: assets.map(rowToAsset), mode: 'library' })
+      }).catch(fail)
+      void window.windowApi.folders.list(libraryId).then((folders) => {
         if (superseded()) return
-        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
-        get().showToast('素材库加载失败，请重试', 'warn')
+        const folderPaths = 'paths' in folders ? folders.paths : []
+        set((s) => {
+          const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          return {
+            folderPaths,
+            physicalFolderPaths: folderPaths,
+            folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
+            collapsedFolders: s.collapsedFolders.filter((path) => folderPaths.includes(path)),
+            nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav
+          }
+        })
+      }).catch(() => {
+        if (superseded()) return
+        /* 目录树读失败就不展示上一棵树(可能属于别的库),素材本身照常可用 */
+        set({ folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
+        get().showToast('素材库文件夹加载失败，请重试', 'warn')
       })
     },
     folderPaths: [],
@@ -851,9 +868,21 @@ export const useUI = create<UIState>((set, get) => {
     },
     search: '',
     setSearch: (search) => set({ search }),
+    tagGroups: {},
+    setTagGroups: (libraryId, groups) => {
+      set((s) => {
+        const key = String(libraryId)
+        const next = { ...s.tagGroups }
+        if (groups.length === 0) delete next[key]
+        else next[key] = groups
+        return { tagGroups: next }
+      })
+      persistUiPrefs()
+    },
 
     filters: DEFAULT_FILTERS,
     setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
+    setTags: (tags) => set((s) => ({ filters: { ...s.filters, tags: [...new Set(tags)] } })),
     stripColor: null,
     setStripColor: (stripColor) => set({ stripColor }),
     cbarOpen: false,
@@ -867,7 +896,7 @@ export const useUI = create<UIState>((set, get) => {
       set({ view, openMenu: null, folderCtxMenu: null })
       persistUiPrefs()
     },
-    colw: 232,
+    colw: COLW_DEFAULT,
     setColw: (colw) => {
       set({ colw })
       // S2-9:Ctrl+滚轮每 tick 都到这,落库防抖 300ms(与主窗口 resize 防抖策略对齐),

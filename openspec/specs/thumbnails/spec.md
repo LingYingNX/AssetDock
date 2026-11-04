@@ -6,12 +6,7 @@
 
 ### Requirement: 640px JPG 缩略图缓存
 
-应用 SHALL 为库内可生成封面的素材生成 640px 长边、JPEG 编码的缩略图,存放于 `<库>/.mediahub/thumbs/`。封面来源 SHALL 包括位图、视频关键帧、三维模型离屏渲染和 CSS 渲染截图。网格卡片的 `previewUrl` SHALL 携带 `?thumb=1` 指向缩略图缓存;灯箱大图、视频播放与三维渲染 SHALL 继续读取原文件(`originalUrl`),SHALL NOT 使用缩略图,以保证观看清晰度与可播放性。缩略图 SHALL 在打开库时按能力注册表补齐全库缺失项,并受并发上限约束;导入、Eagle 导入、监听新增与从回收站恢复 SHALL 只按相关指纹排队生成。已生成过的指纹 SHALL 直接跳过,只补缺失项。SVG SHALL NOT 进入全库或导入预热队列。应用 SHALL 把生成进度推送给渲染层,界面以不占布局、不拦截指针的悬浮浮层展示「已完成/总数」,生成结束即隐藏。生成失败时 SHALL 落格式占位图并记录可区分的原因,不得中断网格渲染。
-
-#### Scenario: 非 SVG 素材入库即预热
-
-- **WHEN** 扫描、监听新增或 Eagle 导入把非 SVG 图片写入库
-- **THEN** 主进程按上述范围排队生成其 640px JPG 缩略图,并推送 `thumbs:progress` 进度
+应用 SHALL 为库内可生成封面的素材生成 640px 长边、JPEG 编码的缩略图,存放于 `<库>/.mediahub/thumbs/`。封面来源 SHALL 包括位图、视频关键帧、三维模型离屏渲染和 CSS 渲染截图。网格卡片的 `previewUrl` SHALL 携带 `?thumb=1` 指向缩略图缓存;灯箱大图、视频播放与三维渲染 SHALL 继续读取原文件(`originalUrl`),SHALL NOT 使用缩略图。应用 SHALL 把生成进度推送给渲染层,界面以不占布局、不拦截指针的悬浮浮层展示「已完成/总数」,生成结束即隐藏。生成失败时 SHALL 落格式占位图并记录可区分的原因,不得中断网格渲染。
 
 #### Scenario: 再次浏览同一文件夹
 
@@ -32,6 +27,20 @@
 
 - **WHEN** 一个 BLEND 文件入库但本机没有可用的 Blender
 - **THEN** 卡片显示 BLEND 占位封面，并在诊断中记录缺少外部工具
+
+### Requirement: 缩略图预热范围
+
+位图、视频、三维、CSS 与文档封面 SHALL 在打开库或新增/变化时按能力注册表排队生成,并受并发上限约束。导入动作 SHALL 只预热本次新增或变化的指纹,已生成过的指纹 SHALL 直接跳过。SVG SHALL NOT 进入全库或导入预热队列。
+
+#### Scenario: 非 SVG 素材入库即预热
+
+- **WHEN** 扫描、监听新增或 Eagle 导入把非 SVG 图片写入库
+- **THEN** 主进程仅按本次新增或变化的指纹排队生成 640px JPG 缩略图,并推送 `thumbs:progress` 进度
+
+#### Scenario: SVG 不参与批量预热
+
+- **WHEN** 导入 SVG 或打开含 SVG 的素材库
+- **THEN** 主进程不预先栅格化该 SVG
 
 ### Requirement: SVG 按需缩略图与源文件查看
 

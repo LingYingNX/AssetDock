@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
+import { mkdtemp, rm, utimes, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -45,6 +45,35 @@ describe('library scan', () => {
       expect(css?.height).toBeUndefined()
       expect(css?.duration).toBeUndefined()
       expect(css?.fingerprint).toBeTruthy()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reuses the stored fingerprint for files whose size and mtime are unchanged', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-scan-known-'))
+    try {
+      const file = join(root, 'same-size.jpg')
+      await writeFile(file, 'aaa')
+      const stamp = new Date(1_700_000_000_000)
+      await utimes(file, stamp, stamp)
+      const [first] = await scanLibrary(root)
+      // 同大小改内容但保留 mtime:对账应视为未变,不重新读文件
+      await writeFile(file, 'bbb')
+      await utimes(file, stamp, stamp)
+      const known = new Map([[first.relPath, {
+        sizeBytes: first.sizeBytes,
+        mtimeMs: first.mtimeMs,
+        fingerprint: first.fingerprint
+      }]])
+      const [second] = await scanLibrary(root, undefined, undefined, undefined, known)
+      expect(second.fingerprint).toBe(first.fingerprint)
+
+      // mtime 变了就必须重新指纹
+      const later = new Date(stamp.getTime() + 5000)
+      await utimes(file, later, later)
+      const [third] = await scanLibrary(root, undefined, undefined, undefined, known)
+      expect(third.fingerprint).not.toBe(first.fingerprint)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

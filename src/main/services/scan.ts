@@ -9,13 +9,24 @@ import type { ScanEntry } from './store'
 
 const SCAN_BATCH_SIZE = 64
 
+/** 对账用的已知行:size/mtime 一致时可直接沿用旧指纹,跳过读文件与元数据探测 */
+export interface KnownScanFile {
+  sizeBytes: number
+  mtimeMs: number
+  fingerprint: string
+}
+
+function scannedName(relPath: string): string {
+  return basename(relPath, relPath.lastIndexOf('.') > 0 ? relPath.slice(relPath.lastIndexOf('.')) : '')
+}
+
 /** 单文件元数据采集(尺寸/时长/编码/面数按类型) */
 async function collectEntry(absPath: string, relPath: string, sizeBytes: number, mtimeMs: number): Promise<ScanEntry | null> {
   const kind = detectKind(relPath)
   if (!kind) return null
   const entry: ScanEntry = {
     relPath,
-    name: basename(relPath, relPath.lastIndexOf('.') > 0 ? relPath.slice(relPath.lastIndexOf('.')) : ''),
+    name: scannedName(relPath),
     type: kind.type,
     format: kind.format,
     sizeBytes,
@@ -79,7 +90,8 @@ export async function scanLibrary(
   root: string,
   onProgress?: (done: number) => void,
   onError?: (relPath: string, error: unknown) => void,
-  onBatch?: (entries: ScanEntry[]) => void
+  onBatch?: (entries: ScanEntry[]) => void,
+  known?: ReadonlyMap<string, KnownScanFile>
 ): Promise<ScanEntry[]> {
   const entries: ScanEntry[] = []
   const queue: string[] = ['']
@@ -119,6 +131,27 @@ export async function scanLibrary(
           return null
         })
         if (!st) return
+        // 启动对账:size+mtime 未变 => 内容视为未变,沿用旧指纹,不再读 64KB/探测元数据。
+        // shortcut: 保留 size+mtime 但改了内容的文件要等监听事件才会刷新,正常写入必改 mtime。
+        const prev = known?.get(rel)
+        if (prev && prev.sizeBytes === st.size && prev.mtimeMs === st.mtimeMs) {
+          const kind = detectKind(rel)
+          if (!kind) return
+          const entry: ScanEntry = {
+            relPath: rel,
+            name: scannedName(rel),
+            type: kind.type,
+            format: kind.format,
+            sizeBytes: st.size,
+            mtimeMs: st.mtimeMs,
+            fingerprint: prev.fingerprint
+          }
+          entries.push(entry)
+          batchEntries.push(entry)
+          done++
+          if (onProgress && done % 20 === 0) onProgress(done)
+          return
+        }
         const entry = await collectEntry(abs, rel, st.size, st.mtimeMs).catch((error: unknown) => {
           errors++
           onError?.(rel, error)

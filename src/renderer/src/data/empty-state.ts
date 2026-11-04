@@ -28,7 +28,11 @@ export function emptyStateFor(input: EmptyStateInput): EmptyStateCopy {
   const filtered =
     input.search.trim() !== '' ||
     input.stripColor != null ||
-    Object.values(input.filters).some((value) => value !== 'all')
+    input.filters.tags.length > 0 ||
+    input.filters.format !== 'all' ||
+    input.filters.shape !== 'all' ||
+    input.filters.size !== 'all' ||
+    input.filters.rating !== 'all'
   if (filtered) {
     return { kind: 'results', title: '没有符合当前筛选条件的素材', action: 'clearFilters' }
   }

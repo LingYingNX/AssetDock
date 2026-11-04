@@ -110,7 +110,12 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
   if (!mounted) return null
 
   const node = (
-    <div ref={ref} className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}${shown ? ' open' : ' closing'}`} role="menu">
+    <div
+      ref={ref}
+      className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}${shown ? ' open' : ' closing'}`}
+      role="menu"
+      onPointerLeave={() => setOpenMenu(null)}
+    >
       {items.map((it) => {
         const on = it.id === value
         return (

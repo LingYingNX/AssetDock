@@ -79,6 +79,10 @@
 .filterbar .btn.open{background:var(--bg3);border-color:var(--line2);box-shadow:none;color:var(--t1)}
 /* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
 .filterbar .btn.on.open{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
+/* 标签按钮始终保留圆点槽,避免筛选状态切换时让整排控件左右跳动。 */
+.filterbar .btn.tag-filter-trigger{position:relative;justify-content:center;width:55px;padding-inline:0}
+.filterbar .btn.tag-filter-trigger>.dot{position:absolute;left:4px}
+.filterbar .btn.tag-filter-trigger>.dot.is-empty{opacity:0}
 /* 去掉箭头后只剩图标的视图下拉必须保持正方形,不能被收缩规则压成 24px 窄条。 */
 .filterbar .btn[data-menu="m-view"]{width:var(--fc-h);padding:0;justify-content:center}
 /* 中文字面没有西文下伸部,flex 几何居中会视觉偏高;补 0.13em 上内边距校正。 */
@@ -108,11 +112,12 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .vr{width:1px;height:1.28em;background:var(--line2)}
 .fresult{display:inline-flex;align-items:baseline;gap:4px;flex:0 0 auto;white-space:nowrap;font-size:var(--fs-cap);line-height:1;color:var(--t2);font-variant-numeric:tabular-nums}
 .fresult-label,.fresult-count{flex:none}
-.fresult-count{font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+.fresult-label{display:inline-block;min-width:4em}
+/* 5.5ch 容纳当前 15,169;跨到 7 位数量时自然扩槽,不裁数字。 */
+.fresult-count{display:inline-block;min-width:5.5ch;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums;text-align:right}
 .fresult-unit{flex:none}
-/* 大小占固定槽(约容 "1023.9 MB" 这种 4 位整数+1 位小数),1 KB→131.1 MB 变化不再推挤右侧按钮;
-   用 min-width 而非 width:超出槽宽(如 5 位 GB)时自然撑开,不裁字。 */
-.fresult-size{flex:none;min-width:4.9em;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+/* 4.9em 实测只有 61.25px,容不下最长的 "1023.9 MB"(62.67px);5.2em 才是真正固定槽。 */
+.fresult-size{flex:none;width:5.2em;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
 /* 旧响应式 clamp(1600px 起线性收窄)已删:收缩改由 flex-shrink 按实际可用空间进行,
    不再依赖窗口宽(基准 100vw 在检查器打开时是错的)。 */
 @container (max-width:760px){

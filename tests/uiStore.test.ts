@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { queryAssets, DEFAULT_FILTERS } from '../src/renderer/src/data/query'
+import { tagNavKey } from '../src/renderer/src/data/tag-nav'
 
 describe('UI store', () => {
   it('creates media URLs from the local library path', async () => {
@@ -425,7 +426,10 @@ describe('restoreUiPrefs', () => {
         modelHdrRotation: 45,
         modelHdrStrength: 2,
         modelHdrOpacity: 0.3,
-        modelHdrBlur: 0.8
+        modelHdrBlur: 0.8,
+        tagGroups: {
+          '7': [{ id: 'g1', name: '人物', tagNames: ['克鲁鲁'] }]
+        }
       })
     )
     expect(s.view).toBe('list')
@@ -438,6 +442,9 @@ describe('restoreUiPrefs', () => {
     expect(s.modelHdrStrength).toBe(2)
     expect(s.modelHdrOpacity).toBe(0.3)
     expect(s.modelHdrBlur).toBe(0.8)
+    expect(s.tagGroups).toEqual({
+      '7': [{ id: 'g1', name: '人物', tagNames: ['克鲁鲁'] }]
+    })
   })
 
   it('falls back to defaults when nothing is stored', async () => {
@@ -452,6 +459,7 @@ describe('restoreUiPrefs', () => {
     expect(s.modelHdrStrength).toBe(1)
     expect(s.modelHdrOpacity).toBe(0)
     expect(s.modelHdrBlur).toBe(0.5)
+    expect(s.tagGroups).toEqual({})
   })
 
   it('ignores malformed JSON instead of throwing', async () => {
@@ -508,6 +516,8 @@ describe('restoreUiPrefs: 导航记忆', () => {
   it('restores simple and tag nav keys', async () => {
     await expect(loadNav(JSON.stringify({ nav: 'fav' }))).resolves.toBe('fav')
     await expect(loadNav(JSON.stringify({ nav: 'tag:参考' }))).resolves.toBe('tag:参考')
+    const multi = tagNavKey(['壁纸', '二次元'])
+    await expect(loadNav(JSON.stringify({ nav: multi }))).resolves.toBe(multi)
   })
 
   it('falls back to all for unknown or malformed nav values', async () => {

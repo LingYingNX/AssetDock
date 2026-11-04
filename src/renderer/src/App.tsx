@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useUI, restoreUiPrefs } from './store/ui'
 import { isEditableTarget } from './data/focus-scope'
+import { COLW_MAX, COLW_MIN } from './data/colw'
 import { createFrameBatcher, mergeAssetDelta, toAssetDelta, type AssetDelta } from './data/frame-batch'
 import { SvgDefs } from './components/Icons'
 
@@ -218,7 +219,7 @@ export default function App(): React.JSX.Element {
       if (!e.ctrlKey) return
       e.preventDefault()
       const st = useUI.getState()
-      const next = Math.min(320, Math.max(170, st.colw - Math.sign(e.deltaY) * 12))
+      const next = Math.min(COLW_MAX, Math.max(COLW_MIN, st.colw - Math.sign(e.deltaY) * 12))
       st.setColw(next)
       document.documentElement.style.setProperty('--colw', `${next}px`)
     }

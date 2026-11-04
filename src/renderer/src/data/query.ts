@@ -1,5 +1,6 @@
 import type { Asset, NavKey } from './types'
 import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
+import { tagsFromNav } from './tag-nav'
 
 /* ---------- 展示格式化 ---------- */
 
@@ -85,8 +86,8 @@ export interface Filters {
   format: string // 'all' | 'photo' | 'psd-ai' | 'svg-gif' | 'video' | 'glb' | 'fbx' | 'obj'
   shape: string // 'all' | 'landscape' | 'portrait' | 'square' | 'pano' | 'none'
   size: string // 'all' | 'small' | 'medium' | 'large' | 'none'
-  rating: string // 'all' | '5' | '4up' | '3up' | 'none'
-  tag: string // 'all' | 标签名
+  rating: string // 'all' | '5' | '4up' | '3up' | '2up' | '1up' | 'none'
+  tags: string[]
 }
 
 export const DEFAULT_FILTERS: Filters = {
@@ -94,7 +95,7 @@ export const DEFAULT_FILTERS: Filters = {
   shape: 'all',
   size: 'all',
   rating: 'all',
-  tag: 'all'
+  tags: []
 }
 
 export interface QueryOptions {
@@ -129,8 +130,8 @@ function matchNav(a: Asset, nav: NavKey): boolean {
         return a.folders.includes(f)
       }
       if (nav.startsWith('tag:')) {
-        const tg = nav.slice(4)
-        return a.tags.some((x) => x.name === tg)
+        const tags = tagsFromNav(nav)
+        return tags.length > 0 && a.tags.some((x) => tags.includes(x.name))
       }
       return true
   }
@@ -173,13 +174,15 @@ function matchFilters(a: Asset, f: Filters): boolean {
     if (f.rating === '5' && a.rating !== 5) return false
     if (f.rating === '4up' && a.rating < 4) return false
     if (f.rating === '3up' && a.rating < 3) return false
+    if (f.rating === '2up' && a.rating < 2) return false
+    if (f.rating === '1up' && a.rating < 1) return false
     if (f.rating === 'none' && a.rating !== 0) return false
   }
-  if (f.tag !== 'all' && !a.tags.some((x) => x.name === f.tag)) return false
+  if (f.tags.length > 0 && !a.tags.some((x) => f.tags.includes(x.name))) return false
   return true
 }
 
-export function queryAssets(assets: Asset[], opts: QueryOptions): Asset[] {
+export function queryAssets(assets: readonly Asset[], opts: QueryOptions): Asset[] {
   const kw = opts.search.trim().toLowerCase()
   const matched = assets.filter((a) => {
     if (!matchNav(a, opts.nav)) return false

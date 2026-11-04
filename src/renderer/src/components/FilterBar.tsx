@@ -1,10 +1,12 @@
 import type { CSSProperties } from 'react'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { useUI } from '../store/ui'
 import { fmtCount, queryAssets, statsOf } from '../data/query'
-import { tagMenuItems } from '../data/filter-menu'
+import { tagMenuItemsForView } from '../data/filter-menu'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
+import { TagFilterMenu } from './TagFilterMenu'
+import { COLW_STEPS, colwToSlider, sliderToColw } from '../data/colw'
 import { FORMAT_GROUPS, type AssetFormat } from '../../../shared/formats'
 
 /* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
@@ -23,6 +25,8 @@ const VIEW_ICONS: Record<string, string> = {
   grid: 'grid',
   list: 'list'
 }
+
+const HOVER_OPEN_DELAY_MS = 50
 
 const FORMAT_LABELS: Partial<Record<AssetFormat, string>> = {
   GLB: 'GLB / glTF',
@@ -61,9 +65,10 @@ const SIZE_ITEMS: MenuItem[] = [
 const RATE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部评分', groupEnd: true },
   { id: '5', label: '★★★★★' },
-  { id: '4up', label: '★★★★ 及以上' },
-  { id: '3up', label: '★★★ 及以上' },
-  { id: 'none', label: '未评分' }
+  { id: '4up', label: '★★★★' },
+  { id: '3up', label: '★★★' },
+  { id: '2up', label: '★★' },
+  { id: '1up', label: '★' }
 ]
 
 export function FilterBar(): React.JSX.Element {
@@ -75,33 +80,52 @@ export function FilterBar(): React.JSX.Element {
   const toggleCbar = useUI((s) => s.toggleCbar)
   const filters = useUI((s) => s.filters)
   const setFilter = useUI((s) => s.setFilter)
+  const setTags = useUI((s) => s.setTags)
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const search = useUI((s) => s.search)
   const setSearch = useUI((s) => s.setSearch)
   const assets = useUI((s) => s.assets)
+  const activeLibraryId = useUI((s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.libraryId ?? null)
   const selectedSet = useUI((s) => s.selectedSet)
   const nav = useUI((s) => s.nav)
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
+  const hoverTimer = useRef<number | null>(null)
+
+  const cancelHoverOpen = (): void => {
+    if (hoverTimer.current === null) return
+    window.clearTimeout(hoverTimer.current)
+    hoverTimer.current = null
+  }
+
+  const openAfterHover = (id: string): void => {
+    cancelHoverOpen()
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = null
+      setOpenMenu(id)
+    }, HOVER_OPEN_DELAY_MS)
+  }
+
+  useEffect(() => cancelHoverOpen, [])
 
   const stats = statsOf(queryAssets(assets, { nav, search, filters, stripColor }))
   const selectedStats = statsOf(assets.filter((asset) => selectedSet.has(asset.id)))
+  const tagItems = useMemo(
+    () => tagMenuItemsForView(assets, { nav, search, filters, stripColor }),
+    [assets, nav, search, filters, stripColor]
+  )
   const result = selectedStats.count > 0
     ? { label: '已选中', count: selectedStats.count, size: selectedStats.size }
     : { label: '筛选结果', count: stats.count, size: stats.size }
 
-  const paintZoom = (el: HTMLInputElement): void => {
-    const p = ((Number(el.value) - Number(el.min)) / (Number(el.max) - Number(el.min))) * 100
-    el.style.background = `linear-gradient(90deg,var(--acc) ${p}%,rgba(255,255,255,.55) ${p}%)`
-  }
+  const zoomPct = (colwToSlider(colw) / COLW_STEPS) * 100
 
-  const dropdowns: { key: keyof typeof filters; label: string; items: MenuItem[]; dotColor?: string }[] = [
+  const dropdowns: { key: Exclude<keyof typeof filters, 'tags'>; label: string; items: MenuItem[] }[] = [
     { key: 'format', label: '格式', items: FORMAT_ITEMS },
     { key: 'shape', label: '形状', items: SHAPE_ITEMS },
     { key: 'size', label: '尺寸', items: SIZE_ITEMS },
-    { key: 'rating', label: '评分', items: RATE_ITEMS },
-    { key: 'tag', label: '标签', items: tagMenuItems(assets) }
+    { key: 'rating', label: '评分', items: RATE_ITEMS }
   ]
 
   return (
@@ -150,14 +174,13 @@ export function FilterBar(): React.JSX.Element {
               title={`按${d.label}筛选`}
               aria-haspopup="menu"
               aria-expanded={openMenu === `m-f-${d.key}`}
-              onClick={() => setOpenMenu(openMenu === `m-f-${d.key}` ? null : `m-f-${d.key}`)}
+              onPointerEnter={() => openAfterHover(`m-f-${d.key}`)}
+              onPointerLeave={cancelHoverOpen}
+              onClick={() => {
+                cancelHoverOpen()
+                setOpenMenu(`m-f-${d.key}`)
+              }}
             >
-              {d.key === 'tag' && filters.tag !== 'all' ? (
-                <span
-                  className="dot"
-                  style={{ background: assets.flatMap((a) => a.tags).find((t) => t.name === filters.tag)?.color ?? '#64748B' }}
-                />
-              ) : null}
               {d.label}
             </button>
             <Dropdown
@@ -168,6 +191,45 @@ export function FilterBar(): React.JSX.Element {
             />
           </Fragment>
         ))}
+        <button
+          className={`btn tag-filter-trigger${filters.tags.length > 0 ? ' on' : ''}${openMenu === 'm-f-tag' ? ' open' : ''}`}
+          data-menu="m-f-tag"
+          title="按标签筛选"
+          aria-haspopup="dialog"
+          aria-expanded={openMenu === 'm-f-tag'}
+          onPointerEnter={() => openAfterHover('m-f-tag')}
+          onPointerLeave={cancelHoverOpen}
+          onClick={() => {
+            cancelHoverOpen()
+            setOpenMenu('m-f-tag')
+          }}
+        >
+          <span
+            className={`dot${filters.tags.length === 0 ? ' is-empty' : ''}`}
+            aria-hidden="true"
+            style={{ background: tagItems.find((item) => item.id === filters.tags[0])?.dotColor ?? 'var(--t3)' }}
+          />
+          标签
+        </button>
+        <TagFilterMenu
+          id="m-f-tag"
+          items={tagItems}
+          value={filters.tags}
+          libraryId={activeLibraryId}
+          onPick={(tag, additive) => {
+            if (tag === 'all') {
+              setTags([])
+              return
+            }
+            if (additive) {
+              setTags(filters.tags.includes(tag)
+                ? filters.tags.filter((item) => item !== tag)
+                : [...filters.tags, tag])
+              return
+            }
+            setTags(filters.tags.length === 1 && filters.tags[0] === tag ? [] : [tag])
+          }}
+        />
       </div>
       <span className="vr" />
       <span className="fresult" aria-live="polite">
@@ -199,19 +261,17 @@ export function FilterBar(): React.JSX.Element {
         onPick={(v) => setView(v as typeof view)}
       />
       <span className="vr" />
-      <div className="zoomer" title="缩略图大小">
+      <div className="zoomer" title={`缩略图大小:${colw}px`}>
         <Icon name="image" />
         <input
           type="range"
-          min={170}
-          max={320}
-          value={colw}
+          min={0}
+          max={COLW_STEPS}
+          value={colwToSlider(colw)}
           aria-label="缩略图大小"
-          ref={(el) => { if (el) paintZoom(el) }}
-          onChange={(e) => {
-            setColw(Number(e.target.value))
-            paintZoom(e.target)
-          }}
+          aria-valuetext={`${colw}px`}
+          style={{ background: `linear-gradient(90deg,var(--acc) ${zoomPct}%,rgba(255,255,255,.55) ${zoomPct}%)` }}
+          onChange={(e) => setColw(sliderToColw(Number(e.target.value)))}
         />
       </div>
     </div>

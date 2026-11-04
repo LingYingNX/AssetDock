@@ -55,6 +55,12 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
 .nav-item.on::before{opacity:1;transform:scaleX(1)}
 .nav-item.on .ic{color:var(--acc2)}
+/* 标签项用细线框表达多选;多选时每个选中项各有一条 1px 边框。 */
+.tag-nav-item{border:1px solid transparent;border-radius:5px;padding-inline:9px}
+.tag-nav-item:hover{border-color:var(--line2)}
+.tag-nav-item.on{border-color:var(--acc-line);font-weight:500}
+.tag-nav-item.on::before{display:none}
+.tag-nav-item:focus-visible{outline:1px solid var(--acc);outline-offset:-1px}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
 .nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
 /* 计数是浏览文件夹时的决策信息(哪个目录有货),纯 --t3 太弱扫不到;
@@ -82,7 +88,8 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-row.folder-drop-before::after,.folder-row.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;height:2px;border-radius:1px;background:var(--acc);z-index:2;pointer-events:none}
 .folder-row.folder-drop-before::after{top:-1px}
 .folder-row.folder-drop-after::after{bottom:-1px}
-.folder-root-drop{position:relative;height:32px;margin-top:0}
+.folder-root-drop{position:relative;height:0;margin-top:0}
+.side-sec.folder-dragging .folder-root-drop{height:32px}
 .folder-root-drop.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;top:-1px;height:2px;border-radius:1px;background:var(--acc);pointer-events:none}
 /* 每行固定为 16px 箭头槽 + 文件夹图标 + 文字。叶子与编辑态用同宽占位,
    层级步进同为 16px,让子级箭头与父级文件夹图标同轴,整棵树不再逐层右漂。 */
