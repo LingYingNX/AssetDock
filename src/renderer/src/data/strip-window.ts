@@ -7,9 +7,13 @@
  * 抽成纯函数以便测试:窗口算错会表现为「滚到某处突然空白」,这种 bug 靠肉眼很难定位。
  */
 
-/** 单个胶片格的占宽 = 缩略图宽度 + 格间距,需与 lightbox.css 的 .pv-reel / gap 保持一致 */
-export const REEL_W = 84
-export const REEL_GAP = 6
+/**
+ * 单个胶片格的占宽 = 缩略图宽度 + 格间距,需与 lightbox.css 的 .pv-reel 保持一致。
+ * 这只是兜底值:窄屏容器查询会改 .pv-reel 宽度,所以 Filmstrip 会在运行时
+ * 实测格宽与间距再覆盖(见 Filmstrip 的 metrics),避免两边再次漂移。
+ */
+export const REEL_W = 96
+export const REEL_GAP = 7
 export const REEL_PITCH = REEL_W + REEL_GAP
 
 /** 视口外额外多渲染几格,快速滚动时不留白 */
@@ -39,25 +43,39 @@ export function stripWindow(
   viewport: number,
   total: number,
   pitch = REEL_PITCH,
-  overscan = REEL_OVERSCAN
+  overscan = REEL_OVERSCAN,
+  padStart = 0,
+  padEnd = 0
 ): StripWindow {
   if (total <= 0) return { start: 0, end: 0, padLeft: 0, padRight: 0 }
-  const first = Math.floor(Math.max(0, scrollLeft) / pitch) - overscan
-  const last = Math.ceil((Math.max(0, scrollLeft) + Math.max(0, viewport)) / pitch) + overscan
+  const first = Math.floor(Math.max(0, scrollLeft - padStart) / pitch) - overscan
+  const last = Math.ceil((Math.max(0, scrollLeft - padStart) + Math.max(0, viewport)) / pitch) + overscan
   const start = Math.max(0, Math.min(total, first))
   const end = Math.max(start, Math.min(total, last))
   return {
     start,
     end,
-    padLeft: start * pitch,
-    padRight: (total - end) * pitch
+    padLeft: padStart + start * pitch,
+    padRight: padEnd + (total - end) * pitch
   }
 }
 
-/** 让第 index 格居中的目标滚动位置(两侧不足时夹到边界) */
-export function scrollLeftForIndex(index: number, viewport: number, total: number, pitch = REEL_PITCH): number {
+/**
+ * 让第 index 格居中的目标滚动位置(两侧不足时夹到边界)。
+ *
+ * itemW 是格子的实际宽度(不等于 pitch,后者含间距),居中要对准格子中点。
+ */
+export function scrollLeftForIndex(
+  index: number,
+  viewport: number,
+  total: number,
+  pitch = REEL_PITCH,
+  itemW = pitch,
+  padStart = 0,
+  padEnd = 0
+): number {
   if (total <= 0) return 0
-  const centered = index * pitch - (Math.max(0, viewport) - pitch) / 2
-  const maxScroll = Math.max(0, total * pitch - Math.max(0, viewport))
+  const centered = padStart + index * pitch + itemW / 2 - Math.max(0, viewport) / 2
+  const maxScroll = Math.max(0, padStart + total * pitch + padEnd - Math.max(0, viewport))
   return Math.max(0, Math.min(maxScroll, centered))
 }

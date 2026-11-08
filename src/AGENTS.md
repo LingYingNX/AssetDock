@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-28 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-06 -->
 
 # AGENTS.md — src
 
@@ -48,7 +48,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 `src/shared/` 是跨进程共享的纯逻辑层（无 fs / 无 electron）：`types.ts` 共享类型、`cssPreview.ts` 纯字符串拼接（主进程截图与渲染层预览共用，保证两条路径视觉一致）。约定：**新文件若要被两侧同时引用，放 `src/shared/`，并确认它在两个 tsconfig 的 include 里**（当前两侧都已含 `src/shared/**/*.ts`）。
 
-渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs` / `showToast`）、`data/`（纯视图逻辑：`query.ts`、`empty-state.ts`、`filter-menu.ts`、`model-url.ts`、主题、预览缓存、焦点/帧批处理/框选/视口、拖拽编解码）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。`dataset.ts` 只保留标签色与推荐标签，不再提供演示素材。
+渲染层：`store/ui.ts`（zustand 单一 store，含 `restoreUiPrefs` / `showToast`）、`data/`（纯视图逻辑：`query.ts`、`empty-state.ts`、`filter-menu.ts`、`model-url.ts`、主题、预览缓存、焦点/帧批处理/框选/视口、拖拽编解码）、`components/`（每个界面块一个文件）、`styles/`（按域分 CSS，令牌在 `tokens.css`）。浮层键盘行为统一走 `components/useMenuFocus.ts`；`data/menu-focus.ts` 与 `data/pan-clamp.ts` 是不碰 DOM 的纯函数，可直接单测。`dataset.ts` 只保留标签色与推荐标签，不再提供演示素材。
 
 ## Setup & environment
 
@@ -71,6 +71,8 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 - 渲染层不直接读盘：素材一律 `media://`（`store/ui.ts` 的 `rowToAsset` 负责拼 URL）。
 - 新增界面状态默认持久化（`uiPrefs` / `preferences` / `app_state`），读取时逐字段校验、坏值回退默认。
 - 新样式用 `tokens.css` 的 `--sheen-*` / `--surface` / `--dur-*` 令牌，别写字面颜色。
+- 菜单、下拉、右键菜单、对话框一律接 `useMenuFocus`：挂载时**不主动聚焦**（悬停自动展开会抢键盘焦点），用户按 Tab/方向键才进入；Esc 只由最上层消费，关闭后焦点回到打开前的元素。
+- 仅 hover 显形的操作按钮必须同时响应 `:focus-within`；`:focus-visible` 焦点环不得被父级 `overflow` 裁掉。灯箱图片不要加 `tabindex`/`role="button"`，否则整张图外缘会出现焦点框。
 
 ## Security & safety
 
@@ -108,6 +110,8 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | IPC 层库作用域解析 | `scopeFor` / `releaseScope` | `ipc/context.ts` | 每个 handler 取到 scope 后必须在 `finally` 释放；遗漏会让库句柄无法被驱逐 |
 | 素材行 upsert | `upsertScanned(d, libraryId, entries)` | `store.ts` | 返回逐条结果数组；保留 id/标签/评分/文件夹，只更新变化字段 |
 | 预览 HTML 拼接 | `buildPreviewHtml` / `stripScripts` / `shellFromCss` | `src/shared/cssPreview.ts` | 主进程截图与渲染层预览**必须共用这一份**，否则两条路径视觉漂移 |
+| 浮层键盘导航与焦点归还 | `useMenuFocus` / `nextMenuIndex` | `renderer/src/components/useMenuFocus.ts`、`renderer/src/data/menu-focus.ts` | 挂载时不要主动聚焦；嵌套浮层的 Esc 只由栈顶消费，关闭时焦点回到触发元素 |
+| 缩放后平移的边界 | `clampPanOffset` | `renderer/src/data/pan-clamp.ts` | 变换原点不在中心时上下界不对称；`scale <= 1` 必须把偏移归零 |
 | 界面偏好持久化 | `persistUiPrefs` / `parseNav` | `renderer/src/store/ui.ts` | 模块私有函数；读取时逐字段校验、坏值回退默认 |
 
 ## 缩略图缓存约定

@@ -14,19 +14,23 @@ const LHEAD_COLS = ['', '文件名', '类型', '分辨率', '大小', '时长', 
 /* 文件夹切换是高频操作。原阈值 500 会让真实库中 285~319 项的目录切换重建整组卡片,
    实测已到 210~268ms;40 项起走虚拟化,把一次切换限制在当前视口附近。 */
 const VIRTUAL_THRESHOLD = 40
-const GAP = 14
+/* 卡片横纵间距统一;虚拟化时由 gap 补上,非虚拟化由 CSS 承担。 */
+const GAP = 12
 const PAD_X = 22
-/* 卡片信息区高度:缩略图占卡片 80%、信息区占 20%(默认 232px 列宽下即 44px)。
-   与 grid.css 的 figcaption padding (7+7) + name 行高 15 + meta 行高 13 + 行距 2
-   对齐。偏小会让瀑布流的虚拟化定位把上下两张卡叠在一起;
-   改 figcaption 内边距或 .name/.meta-row 的 line-height 时必须同步改这里。 */
-const CAPTION_H = 44
+/* 信息栏在缩略图下方,固定两档高度;必须与 grid.css 的 figcaption 高度一致。 */
+const CAPTION_H = 24
+const CAPTION_H_META = 38
 const LIST_ROW_H = 68
+
+function captionHeight(a: Asset): number {
+  return a.type === 'video' || a.type === 'document' ? CAPTION_H_META : CAPTION_H
+}
 
 /** 列内定位高度:必须与 Card 写进 --ar 的比例同源,否则卡片会错位或留下空档 */
 function estHeight(a: Asset, colw: number): number {
   const ar = thumbRatio(a.width, a.height) ?? FALLBACK_THUMB_AR
-  return Math.round(colw / ar) + CAPTION_H
+  /* 卡片有左右各 1px 边框,缩略图实际宽度是 colw-2。 */
+  return Math.round((colw - 2) / ar + 2 + captionHeight(a))
 }
 
 /** 列分配:贪心放入当前最矮列(保持列内顺序) */
@@ -176,7 +180,7 @@ export function Grid(): React.JSX.Element {
     /* 加载失败是独立状态:不能借用「这个视图下没有素材」,那句话等于说库是空的 */
     if (mode === 'error') {
       return (
-        <div className="gridwrap" ref={wrapRef}>
+        <div className="gridwrap is-empty" ref={wrapRef}>
           <EmptyState kind="library" title="素材库加载失败" actionLabel="重新加载" onAction={reloadActiveLibrary} />
         </div>
       )
@@ -196,7 +200,7 @@ export function Grid(): React.JSX.Element {
             ? () => setNav('all')
             : undefined
     return (
-      <div className="gridwrap" ref={wrapRef}>
+      <div className="gridwrap is-empty" ref={wrapRef}>
         {trashHeader}
         <EmptyState
           kind={empty.kind}
@@ -256,6 +260,7 @@ function ListRows({
   virtual: boolean
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
+  const order = useMemo(() => items.map((item) => item.id), [items])
   const rowV = useVirtualizer({
     count: virtual ? items.length : 0,
     getScrollElement: () => scrollEl.current,
@@ -274,13 +279,13 @@ function ListRows({
       <div className="grid v-list">
         {head}
         {items.map((a) => (
-          <Card key={a.id} a={a} view="list" selectionOrder={items.map((item) => item.id)} />
+          <Card key={a.id} a={a} view="list" selectionOrder={order} />
         ))}
       </div>
     )
   }
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="v-list" style={{ position: 'relative', padding: '0 12px 24px' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 5 }}>{head}</div>
       <div style={{ position: 'relative', height: rowV.getTotalSize() }}>
         {rowV.getVirtualItems().map((vi) => (
@@ -290,7 +295,7 @@ function ListRows({
             ref={rowV.measureElement}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}
           >
-            <Card a={items[vi.index]} view="list" selectionOrder={items.map((item) => item.id)} />
+            <Card a={items[vi.index]} view="list" selectionOrder={order} />
           </div>
         ))}
       </div>
@@ -313,44 +318,47 @@ function CardRows({
   virtual: boolean
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
+  const order = useMemo(() => items.map((item) => item.id), [items])
   if (!virtual) {
     return (
       <div className="grid v-grid">
         {items.map((a) => (
-          <Card key={a.id} a={a} view="grid" selectionOrder={items.map((item) => item.id)} />
+          <Card key={a.id} a={a} view="grid" selectionOrder={order} />
         ))}
       </div>
     )
   }
   const avail = Math.max(wrapW - PAD_X * 2, colw)
-  const perRow = Math.max(1, Math.floor((avail + 12) / (colw + 12)))
-  const rowH = Math.round((colw * 3) / 4) + CAPTION_H
+  const perRow = Math.max(1, Math.floor((avail + GAP) / (colw + GAP)))
   const rows: Asset[][] = []
   for (let i = 0; i < items.length; i += perRow) rows.push(items.slice(i, i + perRow))
-  return <GridVirtualRows rows={rows} rowH={rowH} colw={colw} perRow={perRow} scrollEl={scrollEl} />
+  const rowHs = rows.map((row) => Math.round((colw - 2) * 3 / 4 + 2 + Math.max(...row.map(captionHeight))))
+  return <GridVirtualRows rows={rows} rowHs={rowHs} colw={colw} perRow={perRow} scrollEl={scrollEl} />
 }
 
 function GridVirtualRows({
   rows,
-  rowH,
+  rowHs,
   colw,
   perRow,
   scrollEl
 }: {
   rows: Asset[][]
-  rowH: number
+  rowHs: number[]
   colw: number
   perRow: number
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
+  const order = useMemo(() => rows.flat().map((item) => item.id), [rows])
   const v = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollEl.current,
-    estimateSize: () => rowH,
+    estimateSize: (i) => rowHs[i],
+    gap: GAP,
     overscan: 6
   })
   return (
-    <div style={{ position: 'relative', padding: `16px ${PAD_X}px 32px` }}>
+    <div className="v-grid" style={{ position: 'relative', padding: `16px ${PAD_X}px 32px` }}>
       <div style={{ position: 'relative', height: v.getTotalSize() }}>
         {v.getVirtualItems().map((vi) => (
           <div
@@ -359,10 +367,10 @@ function GridVirtualRows({
             ref={v.measureElement}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}
           >
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', gap: GAP }}>
               {rows[vi.index].map((a) => (
                 <div key={a.id} style={{ width: colw, flex: `0 0 ${colw}px` }}>
-                  <Card a={a} view="grid" selectionOrder={rows.flat().map((item) => item.id)} />
+                  <Card a={a} view="grid" selectionOrder={order} />
                 </div>
               ))}
             </div>
@@ -388,11 +396,12 @@ function Waterfall({
   virtual: boolean
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
+  const order = useMemo(() => items.map((item) => item.id), [items])
   if (!virtual) {
     return (
       <div className="grid">
         {items.map((a) => (
-          <Card key={a.id} a={a} view="waterfall" selectionOrder={items.map((item) => item.id)} />
+          <Card key={a.id} a={a} view="waterfall" selectionOrder={order} />
         ))}
       </div>
     )
@@ -407,6 +416,7 @@ function Waterfall({
         <WaterColumn
           key={i}
           items={c.col}
+          order={order}
           left={i * (colw + GAP)}
           width={colw}
           height={c.h}
@@ -419,12 +429,14 @@ function Waterfall({
 
 function WaterColumn({
   items,
+  order,
   left,
   width,
   height,
   scrollEl
 }: {
   items: { a: Asset; h: number }[]
+  order: string[]
   left: number
   width: number
   height: number
@@ -434,6 +446,7 @@ function WaterColumn({
     count: items.length,
     getScrollElement: () => scrollEl.current,
     estimateSize: (i) => items[i].h,
+    gap: GAP,
     /* 文件夹切换会同时替换整列虚拟项;保留少量预渲染即可兼顾滚动与切目录延迟。 */
     overscan: 4
   })
@@ -447,7 +460,7 @@ function WaterColumn({
             data-index={vi.index}
             style={{ position: 'absolute', top: 0, left: 0, width, transform: `translateY(${vi.start}px)` }}
           >
-            <Card a={items[vi.index].a} view="waterfall" selectionOrder={items.map((item) => item.a.id)} />
+            <Card a={items[vi.index].a} view="waterfall" selectionOrder={order} />
           </div>
         ))}
       </div>

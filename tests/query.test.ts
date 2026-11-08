@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCapability, formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
+import { formatCapability, formatFullDate, formatRelativeDate, formatResolution, infoRows, queryAssets, queryLightboxAssets, sidebarCounts, statsOf, type Filters } from '../src/renderer/src/data/query'
 import type { Asset, NavKey } from '../src/renderer/src/data/types'
 import { tagNavKey, tagsFromNav } from '../src/renderer/src/data/tag-nav'
 
@@ -113,7 +113,7 @@ describe('queryAssets', () => {
 
   it('reports the count and total size for the current result set', () => {
     const assets = [asset({ id: 'one', sizeBytes: 1024 }), asset({ id: 'two', sizeBytes: 2048 })]
-    expect(statsOf(query(assets))).toEqual({ count: 2, size: '3 KB' })
+    expect(statsOf(query(assets))).toEqual({ count: 2, size: '3\u00A0KB' })
   })
 
   it('keeps lightbox navigation in the current view and falls back when needed', () => {
@@ -125,5 +125,20 @@ describe('queryAssets', () => {
 
     expect(queryLightboxAssets(assets, opts, favorite.id).map((item) => item.id)).toEqual(['fav'])
     expect(queryLightboxAssets(assets, opts, normal.id).map((item) => item.id)).toEqual(['fav', 'normal'])
+  })
+})
+
+describe('date formatting', () => {
+  it('keeps today and yesterday relative to the supplied clock', () => {
+    const now = new Date(2026, 10, 5, 12, 0)
+    expect(formatRelativeDate(new Date(2026, 10, 5, 9, 7).toISOString(), now)).toBe('今天 09:07')
+    expect(formatRelativeDate(new Date(2026, 10, 4, 23, 59).toISOString(), now)).toBe('昨天 23:59')
+    expect(formatRelativeDate(new Date(2026, 10, 3, 8, 0).toISOString(), now)).toBe('11月3日')
+  })
+
+  it('formats the full timestamp through the locale formatter', () => {
+    const formatted = formatFullDate(new Date(2026, 7, 30, 10, 24).toISOString())
+    expect(formatted).toContain('2026')
+    expect(formatted).toContain('10:24')
   })
 })

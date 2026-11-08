@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-10-28 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-06 -->
 
 # AGENTS.md — tests
 
@@ -25,6 +25,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `store` 相关（`eagle` / `legacySourceMigration`） | Eagle 导入与旧库一次性迁移 |
 | `palette.test.ts` / `meta.test.ts` | k-means 主色、ffmpeg 文本解析（纯函数） |
 | `query.test.ts` / `folderDrag.test.ts` / `uiStore.test.ts` | 渲染层纯函数、筛选/灯箱导航与 `rowToAsset` 的 URL 拼装 |
+| `menuFocus.test.ts` / `panClamp.test.ts` / `assetDrag.test.ts` | 菜单方向键落点与越界循环、缩放平移的双向边界、Windows/UNC 路径到 Chromium DownloadURL 的编码 |
 | `emptyState.test.ts` / `filterBar.test.ts` / `duration.test.ts` / `modelUrl.test.ts` | 空态出口、标签菜单、时长进位、glTF 外部资源基准 URL |
 | `cssPreview.test.ts` | 预览 HTML 拼接：脚本剥离、CSP 注入、`</style>` 转义、由选择器反推骨架、同名 HTML 优先、内置骨架兜底 |
 | `cssThumb.test.ts` | CSS 缩略图分支：用 `vi.mock` 替掉离屏渲染器，断言「CSS 走渲染器而非 sharp」与失败回退占位图 |

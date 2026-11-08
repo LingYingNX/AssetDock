@@ -49,7 +49,7 @@ export function ThumbProgress(): React.JSX.Element | null {
           {last.done} / {last.total}
         </span>
       </div>
-      <div className="tp-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className="tp-track" role="progressbar" aria-label="缩略图生成进度" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className="tp-fill" style={{ width: `${pct}%` }} />
       </div>
     </div>

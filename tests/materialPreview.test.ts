@@ -145,4 +145,27 @@ describe('material preview', () => {
     expect(fallbackMissingTextures(normalOnly)).toBe(false)
   })
 
+  it('preserves an explicit colored base material without textures', () => {
+    const material = new THREE.MeshStandardMaterial({ color: 0x2e7cf6 })
+    const before = material.color.getHex()
+
+    expect(fallbackMissingTextures(material)).toBe(false)
+    expect(material.color.getHex()).toBe(before)
+  })
+
+  it('falls back for a default white material without textures', () => {
+    const material = new THREE.MeshStandardMaterial()
+
+    expect(fallbackMissingTextures(material)).toBe(true)
+    expect(material.color.r).toBeCloseTo(0.48)
+    expect(material.color.g).toBeCloseTo(0.52)
+    expect(material.color.b).toBeCloseTo(0.57)
+  })
+
+  it('preserves white materials that carry vertex colors', () => {
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true })
+
+    expect(fallbackMissingTextures(material)).toBe(false)
+    expect(material.color.getHex()).toBe(0xffffff)
+  })
 })

@@ -267,6 +267,7 @@ interface UIState {
   libraries: { id: number; name: string; path: string }[]
   setLibraries: (list: { id: number; name: string; path: string }[]) => void
   createLibraryFlow: (name?: string, folderPath?: string) => Promise<boolean>
+  importAssetFilesFlow: () => void
   importEagleFlow: () => void
   openLibrary: (libraryId: number, name: string) => void
 
@@ -363,9 +364,12 @@ interface UIState {
   setNote: (id: string, note: string) => void
   setSourceUrl: (id: string, url: string) => void
   trashAsset: (id: string) => void
+  /** 批量移入回收站:删除入口统一走这里,避免只处理 activeId */
+  trashAssets: (ids: string[]) => void
   restoreAsset: (id: string) => void
   emptyTrash: () => void
   purgeAsset: (id: string) => void
+  purgeAssets: (ids: string[]) => void
 
   /* 选中与焦点 */
   selectedIds: string[]
@@ -426,6 +430,63 @@ export const useUI = create<UIState>((set, get) => {
     }
   }
 
+  /** 视图条件变化后,选中/焦点/灯箱只能指向仍然可见的素材。 */
+  const applyViewChange = (
+    next: Partial<{ nav: NavKey; search: string; filters: Filters; stripColor: string | null }>,
+    persist: boolean
+  ): boolean => {
+    const s = get()
+    const view = {
+      nav: next.nav ?? s.nav,
+      search: next.search ?? s.search,
+      filters: next.filters ?? s.filters,
+      stripColor: next.stripColor === undefined ? s.stripColor : next.stripColor
+    }
+    const visible = queryAssets(s.assets, view)
+    const visibleIds = new Set(visible.map((a) => a.id))
+    const closingLightbox = s.lightboxId != null && !visibleIds.has(s.lightboxId)
+    if (closingLightbox && s.cssDirty && !window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')) return false
+
+    const selectedIds = s.selectedIds.filter((id) => visibleIds.has(id))
+    const focusedCardId = s.focusedCardId && visibleIds.has(s.focusedCardId)
+      ? s.focusedCardId
+      : (selectedIds[selectedIds.length - 1] ?? null)
+    const activeId = s.activeId && visibleIds.has(s.activeId) ? s.activeId : focusedCardId
+    const selectionAnchorId = s.selectionAnchorId && visibleIds.has(s.selectionAnchorId) ? s.selectionAnchorId : null
+    set({
+      ...view,
+      ...withSelection(selectedIds),
+      selectionAnchorId,
+      activeId,
+      focusedCardId,
+      renaming: s.renaming && activeId != null,
+      folderCtxMenu: null,
+      lightboxId: closingLightbox ? null : s.lightboxId,
+      cssDirty: closingLightbox ? false : s.cssDirty,
+      lightboxFullscreen: closingLightbox ? false : s.lightboxFullscreen
+    })
+    if (persist) persistUiPrefs()
+    return true
+  }
+
+  /** 切库:上一个库的选中、检查器与灯箱都不得带进新库。 */
+  const clearedAssetView = (): Partial<UIState> => ({
+    ...withSelection([]),
+    selectionAnchorId: null,
+    activeId: null,
+    focusedCardId: null,
+    renaming: false,
+    lightboxId: null,
+    cssDirty: false,
+    lightboxFullscreen: false,
+    ctxMenu: null,
+    folderCtxMenu: null,
+    openMenu: null
+  })
+
+  const canLeaveLightbox = (): boolean =>
+    !get().cssDirty || window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')
+
   return {
     libraries: [],
     setLibraries: (libraries) => set({ libraries }),
@@ -447,6 +508,33 @@ export const useUI = create<UIState>((set, get) => {
       if (r.warning) get().showToast(r.warning, 'warn')
       get().openLibrary(r.id, r.name)
       return true
+    },
+    importAssetFilesFlow: () => {
+      const tab = get().tabs.find((x) => x.id === get().activeTabId)
+      const libraryId = tab?.libraryId
+      if (libraryId == null) {
+        get().showToast('请先打开一个资源库', 'warn')
+        return
+      }
+      get().setOpenMenu(null)
+      void (async () => {
+        try {
+          const paths = await window.windowApi.pickAssetFiles()
+          if (paths.length === 0) return
+          const nav = get().nav
+          const folder = nav.startsWith('folder:') ? nav.slice('folder:'.length) : ''
+          const result = await window.windowApi.assets.importPaths(libraryId, paths, folder)
+          if ('error' in result) {
+            get().showToast(result.error, 'warn')
+            return
+          }
+          const skipped = result.skipped > 0 ? `，跳过 ${result.skipped} 个不支持或库内文件` : ''
+          get().showToast(`已导入 ${result.imported} 个素材${skipped}`, result.skipped > 0 ? 'warn' : 'ok')
+          get().reloadActiveLibrary()
+        } catch {
+          get().showToast('导入素材失败，请重试', 'warn')
+        }
+      })()
     },
     importEagleFlow: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
@@ -478,9 +566,12 @@ export const useUI = create<UIState>((set, get) => {
       set({ scanProgress: null })
       const open = get().tabs.find((t) => t.libraryId === libraryId)
       if (open) {
-        set({ activeTabId: open.id })
-        void window.windowApi.library.open(libraryId)
-        get().reloadActiveLibrary()
+        if (open.id === get().activeTabId) {
+          void window.windowApi.library.open(libraryId)
+          get().reloadActiveLibrary()
+        } else {
+          get().openTab(open.id)
+        }
       } else {
         get().createLibraryTab(libraryId, name)
       }
@@ -489,7 +580,9 @@ export const useUI = create<UIState>((set, get) => {
     tabs: [],
     activeTabId: '',
     openTab: (id) => {
-      set({ activeTabId: id })
+      const switching = id !== get().activeTabId
+      if (switching && !canLeaveLightbox()) return
+      set({ activeTabId: id, ...(switching ? clearedAssetView() : {}) })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === id)
       if (t?.libraryId != null) {
@@ -504,7 +597,9 @@ export const useUI = create<UIState>((set, get) => {
       const rest = tabs.filter((t) => t.id !== id)
       if (rest.length === 0) return
       const nextActive = id === activeTabId ? (rest[Math.max(0, idx - 1)] ?? rest[0]).id : activeTabId
-      set({ tabs: rest, activeTabId: nextActive })
+      const switching = id === activeTabId
+      if (switching && !canLeaveLightbox()) return
+      set({ tabs: rest, activeTabId: nextActive, ...(switching ? clearedAssetView() : {}) })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === nextActive)
       if (t?.libraryId != null) {
@@ -514,9 +609,10 @@ export const useUI = create<UIState>((set, get) => {
       else set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     createLibraryTab: (libraryId, name) => {
+      if (!canLeaveLightbox()) return
       tabSeq++
       const tab: LibraryTab = { id: `dblib-${libraryId}-${tabSeq}`, name, libraryId }
-      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id, ...clearedAssetView() }))
       get().persistTabs()
       void window.windowApi.library.open(libraryId)
       get().reloadActiveLibrary()
@@ -852,22 +948,15 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     nav: 'all',
+    // 当前灯箱素材不在新视图时退出；选中/焦点同样只保留仍可见的项。
+    // 否则切换目录后 Del 会作用在屏幕上看不到的旧素材上。
     setNav: (nav) => {
-      // 当前灯箱素材不在新视图时必须退出；否则胶片带会回退成全库，与侧栏计数不符。
-      const s = get()
-      if (s.lightboxId) {
-        const next = queryAssets(s.assets, { nav, search: s.search, filters: s.filters, stripColor: s.stripColor })
-        if (!next.some((asset) => asset.id === s.lightboxId)) {
-          s.closeLightbox()
-          // 用户取消「丢弃未保存 CSS」确认时保持原视图，不把导航改到空集合。
-          if (get().lightboxId) return
-        }
-      }
-      set({ nav, folderCtxMenu: null })
-      persistUiPrefs()
+      applyViewChange({ nav }, true)
     },
     search: '',
-    setSearch: (search) => set({ search }),
+    setSearch: (search) => {
+      applyViewChange({ search }, false)
+    },
     tagGroups: {},
     setTagGroups: (libraryId, groups) => {
       set((s) => {
@@ -881,10 +970,16 @@ export const useUI = create<UIState>((set, get) => {
     },
 
     filters: DEFAULT_FILTERS,
-    setFilter: (k, v) => set((s) => ({ filters: { ...s.filters, [k]: v } })),
-    setTags: (tags) => set((s) => ({ filters: { ...s.filters, tags: [...new Set(tags)] } })),
+    setFilter: (k, v) => {
+      applyViewChange({ filters: { ...get().filters, [k]: v } }, false)
+    },
+    setTags: (tags) => {
+      applyViewChange({ filters: { ...get().filters, tags: [...new Set(tags)] } }, false)
+    },
     stripColor: null,
-    setStripColor: (stripColor) => set({ stripColor }),
+    setStripColor: (stripColor) => {
+      applyViewChange({ stripColor }, false)
+    },
     cbarOpen: false,
     toggleCbar: () => {
       set((s) => ({ cbarOpen: !s.cbarOpen, openMenu: null, folderCtxMenu: null }))
@@ -1045,15 +1140,37 @@ export const useUI = create<UIState>((set, get) => {
     },
     setNote: (id, note) => edit(id, { note }, (a) => ({ ...a, note })),
     setSourceUrl: (id, url) => edit(id, { source_url: url || null }, (a) => ({ ...a, sourceUrl: url || undefined })),
-    trashAsset: (id) => {
+    trashAsset: (id) => get().trashAssets([id]),
+    trashAssets: (ids) => {
+      const requested = new Set(ids)
+      const targets = get().assets.filter((a) => requested.has(a.id) && !a.deletedAt)
+      if (targets.length === 0) return
       const now = new Date().toISOString()
-      edit(id, { deleted_at: now }, (a) => ({ ...a, deletedAt: now, previewUrl: a.originalUrl }))
+      const deletedIds = new Set(targets.map((a) => a.id))
       set((s) => ({
-        ...withSelection(s.selectedIds.filter((x) => x !== id)),
-        activeId: s.activeId === id ? null : s.activeId,
-        lightboxId: s.lightboxId === id ? null : s.lightboxId,
+        assets: s.assets.map((a) => deletedIds.has(a.id)
+          ? { ...a, deletedAt: now, previewUrl: a.originalUrl }
+          : a),
+        ...withSelection(s.selectedIds.filter((x) => !deletedIds.has(x))),
+        activeId: s.activeId && deletedIds.has(s.activeId) ? null : s.activeId,
+        focusedCardId: s.focusedCardId && deletedIds.has(s.focusedCardId) ? null : s.focusedCardId,
+        selectionAnchorId: s.selectionAnchorId && deletedIds.has(s.selectionAnchorId) ? null : s.selectionAnchorId,
+        renaming: s.renaming && (!s.activeId || !deletedIds.has(s.activeId)),
+        lightboxId: s.lightboxId && deletedIds.has(s.lightboxId) ? null : s.lightboxId,
+        cssDirty: s.lightboxId && deletedIds.has(s.lightboxId) ? false : s.cssDirty,
         ctxMenu: null
       }))
+      const writes = targets
+        .filter((a) => a.dbId != null && a.libraryId != null)
+        .map((a) => window.windowApi.assets.update(a.libraryId as number, a.dbId as number, { deleted_at: now })
+          .then((r) => r?.ok === true)
+          .catch(() => false))
+      void Promise.all(writes).then((results) => {
+        const failed = results.filter((ok) => !ok).length
+        if (failed === 0) return
+        get().showToast(`有 ${failed} 个素材未能移入回收站,请重试`, 'warn')
+        get().reloadActiveLibrary()
+      })
     },
       restoreAsset: (id) => edit(id, { deleted_at: null }, (a) => ({ ...a, deletedAt: undefined, previewUrl: a.originalUrl ? thumbUrl(a.originalUrl) : a.previewUrl })),
     emptyTrash: () => {
@@ -1070,15 +1187,22 @@ export const useUI = create<UIState>((set, get) => {
         .then((r) => done(r?.ok === true))
         .catch(() => done(false))
     },
-    purgeAsset: (id) => {
-      const a = get().assets.find((x) => x.id === id)
-      if (a?.dbId == null || a.libraryId == null) return
-      if (!window.confirm(`彻底删除「${a.name}」会移除 1 条素材的数据库记录与缩略图缓存,不删除磁盘原文件。确定继续吗?`)) return
+    purgeAsset: (id) => get().purgeAssets([id]),
+    purgeAssets: (ids) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      if (t?.libraryId == null) return
+      const requested = new Set(ids)
+      const targets = get().assets.filter((a) =>
+        requested.has(a.id) && a.deletedAt != null && a.dbId != null && a.libraryId === t.libraryId
+      )
+      const dbIds = targets.map((a) => a.dbId as number)
+      if (dbIds.length === 0) return
+      if (!window.confirm(`彻底删除选中的 ${dbIds.length} 条素材会移除数据库记录与缩略图缓存,不删除磁盘原文件。确定继续吗?`)) return
       const done = (ok: boolean): void => {
         if (!ok) get().showToast('彻底删除失败，记录未被清除', 'warn')
         void get().reloadActiveLibrary()
       }
-      void window.windowApi.assets.purge(a.libraryId, [a.dbId])
+      void window.windowApi.assets.purge(t.libraryId, dbIds)
         .then((r) => done(r?.ok === true))
         .catch(() => done(false))
     },
@@ -1130,10 +1254,14 @@ export const useUI = create<UIState>((set, get) => {
         const lastId = selectedIds[selectedIds.length - 1] ?? null
         return { ...withSelection(selectedIds), selectionAnchorId: lastId, activeId: lastId, focusedCardId: lastId }
       }),
-    setSelectedIds: (ids) =>
-      set({ ...withSelection(ids), selectionAnchorId: ids[ids.length - 1] ?? null }),
+    // 框选拖动会连续调用这里:焦点与检查器必须跟着选区走,不能停在框选前那张。
+    setSelectedIds: (ids) => {
+      const last = ids[ids.length - 1] ?? null
+      set({ ...withSelection(ids), selectionAnchorId: last, activeId: last, focusedCardId: last })
+    },
     setFocusedCard: (focusedCardId) => set({ focusedCardId }),
-    clearSelection: () => set({ ...withSelection([]), selectionAnchorId: null }),
+    clearSelection: () =>
+      set({ ...withSelection([]), selectionAnchorId: null, activeId: null, focusedCardId: null }),
 
     renaming: false,
     setRenaming: (renaming) => set({ renaming }),
@@ -1167,19 +1295,24 @@ export const useUI = create<UIState>((set, get) => {
     setLightboxFullscreen: (v) => set({ lightboxFullscreen: v }),
     cssDirty: false,
     setCssDirty: (v) => set({ cssDirty: v }),
-    openLightbox: (id) =>
+    openLightbox: (id) => {
+      const s = get()
+      // 胶片带换片走这里,与 closeLightbox/stepLightbox 共用同一套未保存 CSS 确认。
+      if (s.lightboxId && s.lightboxId !== id && s.cssDirty &&
+        !window.confirm('CSS 有未保存的修改,切换素材将丢弃这些改动。')) return
       // 同步 activeId:右侧已有的检查器渲染的就是它,这样灯箱里看的那张与检查器显示的始终一致
-      set((s) => ({
+      set((state) => ({
         lightboxId: id,
         activeId: id,
         focusedCardId: id,
         cssDirty: false,
         // 从胶片带换片时保留全屏;从网格首次打开时仍从普通布局开始。
-        lightboxFullscreen: s.lightboxId ? s.lightboxFullscreen : false,
+        lightboxFullscreen: state.lightboxId ? state.lightboxFullscreen : false,
         openMenu: null,
         ctxMenu: null,
         folderCtxMenu: null
-      })),
+      }))
+    },
     closeLightbox: () => {
       // Esc / 关闭按钮 / 遮罩点击都经此处:未保存的 CSS 改动必须先确认
       if (get().cssDirty && !window.confirm('CSS 有未保存的修改,关闭将丢弃这些改动。')) return

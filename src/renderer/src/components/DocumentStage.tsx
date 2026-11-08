@@ -246,11 +246,44 @@ export function DocumentStage({
         {sheets.length > 1 ? (
           <div className="doc-sheet-tabs" role="tablist" aria-label="工作表">
             {sheets.map((item, index) => (
-              <button key={`${item.name}-${index}`} className={index === sheetIndex ? 'on' : ''} role="tab" aria-selected={index === sheetIndex} onClick={() => setSheetIndex(index)}>{item.name}</button>
+              <button
+                key={`${item.name}-${index}`}
+                id={`doc-sheet-tab-${index}`}
+                className={index === sheetIndex ? 'on' : ''}
+                role="tab"
+                aria-selected={index === sheetIndex}
+                aria-controls="doc-sheet-panel"
+                tabIndex={index === sheetIndex ? 0 : -1}
+                onClick={() => setSheetIndex(index)}
+                onKeyDown={(event) => {
+                  const next = event.key === 'ArrowLeft'
+                    ? (index - 1 + sheets.length) % sheets.length
+                    : event.key === 'ArrowRight'
+                      ? (index + 1) % sheets.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? sheets.length - 1
+                          : null
+                  if (next == null) return
+                  event.preventDefault()
+                  setSheetIndex(next)
+                  requestAnimationFrame(() => document.getElementById(`doc-sheet-tab-${next}`)?.focus())
+                }}
+              >
+                {item.name}
+              </button>
             ))}
           </div>
         ) : null}
-        <div className="doc-scroll" onDoubleClick={() => onZoom(1)}>
+        <div
+          id="doc-sheet-panel"
+          className="doc-scroll"
+          role={sheets.length > 1 ? 'tabpanel' : undefined}
+          aria-labelledby={sheets.length > 1 ? `doc-sheet-tab-${sheetIndex}` : undefined}
+          tabIndex={sheets.length > 1 ? 0 : undefined}
+          onDoubleClick={() => onZoom(1)}
+        >
           {sheet ? <SheetView sheet={sheet} zoom={zoom} /> : <div className="doc-empty">空工作表</div>}
         </div>
         {preview.truncated ? <div className="doc-note">内容超过预览上限，已截断。</div> : null}

@@ -92,25 +92,53 @@ export function FilterBar(): React.JSX.Element {
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
   const hoverTimer = useRef<number | null>(null)
+  const hoverCloseTimer = useRef<number | null>(null)
 
   const cancelHoverOpen = (): void => {
     if (hoverTimer.current === null) return
     window.clearTimeout(hoverTimer.current)
     hoverTimer.current = null
   }
+  const cancelHoverClose = (): void => {
+    if (hoverCloseTimer.current === null) return
+    window.clearTimeout(hoverCloseTimer.current)
+    hoverCloseTimer.current = null
+  }
+  const keepHoverOpen = (): void => {
+    cancelHoverOpen()
+    cancelHoverClose()
+  }
+  /* 悬停展开后指针移开要收回;留 180ms 给「从触发按钮移进下拉面板」这段缝隙 */
+  const scheduleHoverClose = (): void => {
+    cancelHoverOpen()
+    cancelHoverClose()
+    hoverCloseTimer.current = window.setTimeout(() => {
+      hoverCloseTimer.current = null
+      setOpenMenu(null)
+    }, 180)
+  }
 
   const openAfterHover = (id: string): void => {
-    cancelHoverOpen()
+    keepHoverOpen()
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = null
       setOpenMenu(id)
     }, HOVER_OPEN_DELAY_MS)
   }
 
-  useEffect(() => cancelHoverOpen, [])
+  useEffect(() => () => {
+    cancelHoverOpen()
+    cancelHoverClose()
+  }, [])
 
-  const stats = statsOf(queryAssets(assets, { nav, search, filters, stripColor }))
-  const selectedStats = statsOf(assets.filter((asset) => selectedSet.has(asset.id)))
+  const stats = useMemo(
+    () => statsOf(queryAssets(assets, { nav, search, filters, stripColor })),
+    [assets, nav, search, filters, stripColor]
+  )
+  const selectedStats = useMemo(
+    () => statsOf(assets.filter((asset) => selectedSet.has(asset.id))),
+    [assets, selectedSet]
+  )
   const tagItems = useMemo(
     () => tagMenuItemsForView(assets, { nav, search, filters, stripColor }),
     [assets, nav, search, filters, stripColor]
@@ -144,6 +172,9 @@ export function FilterBar(): React.JSX.Element {
           type="text"
           value={search}
           aria-label="搜索名称、标签、备注、扩展名"
+          name="asset-search"
+          autoComplete="off"
+          spellCheck={false}
           onChange={(e) => setSearch(e.target.value)}
         />
         {NEBULA_PARTICLES.map((p) => (
@@ -175,7 +206,7 @@ export function FilterBar(): React.JSX.Element {
               aria-haspopup="menu"
               aria-expanded={openMenu === `m-f-${d.key}`}
               onPointerEnter={() => openAfterHover(`m-f-${d.key}`)}
-              onPointerLeave={cancelHoverOpen}
+              onPointerLeave={scheduleHoverClose}
               onClick={() => {
                 cancelHoverOpen()
                 setOpenMenu(`m-f-${d.key}`)
@@ -188,6 +219,7 @@ export function FilterBar(): React.JSX.Element {
               items={d.items}
               value={filters[d.key]}
               onPick={(v) => setFilter(d.key, v)}
+              onPointerEnter={keepHoverOpen}
             />
           </Fragment>
         ))}
@@ -198,7 +230,7 @@ export function FilterBar(): React.JSX.Element {
           aria-haspopup="dialog"
           aria-expanded={openMenu === 'm-f-tag'}
           onPointerEnter={() => openAfterHover('m-f-tag')}
-          onPointerLeave={cancelHoverOpen}
+          onPointerLeave={scheduleHoverClose}
           onClick={() => {
             cancelHoverOpen()
             setOpenMenu('m-f-tag')
@@ -216,6 +248,7 @@ export function FilterBar(): React.JSX.Element {
           items={tagItems}
           value={filters.tags}
           libraryId={activeLibraryId}
+          onPointerEnter={keepHoverOpen}
           onPick={(tag, additive) => {
             if (tag === 'all') {
               setTags([])

@@ -6,11 +6,11 @@ import { tagsFromNav } from './tag-nav'
 
 export function formatBytes(bytes: number): string {
   const fmt = (n: number, unit: string): string =>
-    `${n.toFixed(1).replace(/\.0$/, '')} ${unit}`
+    `${n.toFixed(1).replace(/\.0$/, '')}\u00A0${unit}`
   if (bytes >= 1024 ** 3) return fmt(bytes / 1024 ** 3, 'GB')
   if (bytes >= 1024 ** 2) return fmt(bytes / 1024 ** 2, 'MB')
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${bytes} B`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)}\u00A0KB`
+  return `${bytes}\u00A0B`
 }
 
 /** 计数千分位:侧栏与筛选条共用,避免同屏出现「4,084」与「4084」两种口径。
@@ -19,22 +19,26 @@ export function fmtCount(n: number): string {
   return n.toLocaleString('en-US')
 }
 
+const TIME_FORMAT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+const MONTH_DAY_FORMAT = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' })
+const FULL_DATE_FORMAT = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+})
+
 /** 相对日期:今天 HH:mm / 昨天 HH:mm / M月D日 */
-export function formatRelativeDate(iso: string): string {
+export function formatRelativeDate(iso: string, now = new Date()): string {
   const d = new Date(iso)
-  const now = new Date()
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const diffDays = Math.round((day(now) - day(d)) / 86_400_000)
-  const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  if (diffDays <= 0) return `今天 ${hhmm}`
+  const hhmm = TIME_FORMAT.format(d)
+  if (diffDays === 0) return `今天 ${hhmm}`
   if (diffDays === 1) return `昨天 ${hhmm}`
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  return MONTH_DAY_FORMAT.format(d)
 }
 
 /** 完整时间:2026-08-30 10:24 */
 export function formatFullDate(iso: string): string {
-  // S2-6:底层保留毫秒精度,展示层截断到分钟
-  return iso.replace('T', ' ').slice(0, 16)
+  return FULL_DATE_FORMAT.format(new Date(iso))
 }
 
 export function formatResolution(a: Asset): string {

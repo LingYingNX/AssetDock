@@ -42,6 +42,8 @@ export function EnvMapViewer({ url, format, exposure, onError }: EnvMapViewerPro
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
     renderer.domElement.style.cursor = 'grab'
+    renderer.domElement.tabIndex = 0
+    renderer.domElement.setAttribute('aria-label', `${format} 环境贴图预览。拖拽旋转视角。`)
     host.appendChild(renderer.domElement)
     rendererRef.current = renderer
 

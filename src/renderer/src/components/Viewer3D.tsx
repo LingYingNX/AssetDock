@@ -340,7 +340,8 @@ export function Viewer3D({
     renderer.setClearColor(0x000000, 0)
     renderer.domElement.style.width = '100%'
     renderer.domElement.style.height = '100%'
-    renderer.domElement.style.outline = 'none'
+    renderer.domElement.tabIndex = 0
+    renderer.domElement.setAttribute('aria-label', '3D 模型预览。拖拽旋转，中键或右键平移，滚轮缩放。')
     host.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -677,14 +678,14 @@ export function Viewer3D({
         addGround(size)
         const alongX = dimensions.x <= dimensions.y && dimensions.x <= dimensions.z
         const alongY = !alongX && dimensions.y <= dimensions.z
-        const horizontal = alongX ? dimensions.z : dimensions.x
-        const vertical = alongY ? dimensions.z : dimensions.y
-        const verticalTan = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
+        const radius = box.getBoundingSphere(new THREE.Sphere()).radius
+        const verticalHalf = THREE.MathUtils.degToRad(camera.fov) / 2
+        const horizontalHalf = Math.atan(Math.tan(verticalHalf) * camera.aspect)
         const dist = Math.max(
-          vertical / (2 * verticalTan),
-          horizontal / (2 * verticalTan * camera.aspect),
+          radius / Math.sin(verticalHalf),
+          radius / Math.sin(horizontalHalf),
           size / 100
-        ) * 1.18
+        ) * 1.12
         camera.near = Math.max(size / 200, 0.01)
         camera.far = Math.max(size * 30, dist * 3)
         camera.updateProjectionMatrix()

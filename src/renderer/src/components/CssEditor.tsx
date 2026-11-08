@@ -134,6 +134,7 @@ export function CssEditor({ a }: { a: Asset }): React.JSX.Element {
 
   const codeProps = {
     spellCheck: false,
+    autoComplete: 'off',
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // 保持「像记事本」的手感:Tab 插入两个空格而不是切走焦点
       if (e.key !== 'Tab') return
@@ -162,7 +163,7 @@ export function CssEditor({ a }: { a: Asset }): React.JSX.Element {
               <Icon name="markup" />HTML{htmlDirty && <i className="css-dot" />}
             </button>
           </div>
-          <span className={`css-state${dirty ? ' dirty' : ''}`}>
+          <span className={`css-state${dirty ? ' dirty' : ''}`} role="status" aria-live="polite">
             {dirty ? '未保存' : saveState.kind === 'saved' ? '已保存' : ''}
           </span>
           <button
@@ -172,7 +173,7 @@ export function CssEditor({ a }: { a: Asset }): React.JSX.Element {
             onClick={() => void save()}
           >
             <Icon name="save" />
-            {saveState.kind === 'saving' ? '保存中' : '保存'}
+            {saveState.kind === 'saving' ? '保存中…' : '保存'}
           </button>
         </div>
         {loadError ? (
@@ -181,6 +182,7 @@ export function CssEditor({ a }: { a: Asset }): React.JSX.Element {
           <textarea
             ref={areaRef}
             className="css-code"
+            name="asset-css"
             aria-label="CSS 代码"
             value={css ?? ''}
             placeholder={css == null ? '读取中…' : ''}
@@ -191,6 +193,7 @@ export function CssEditor({ a }: { a: Asset }): React.JSX.Element {
           <>
             <textarea
               className="css-code"
+              name="asset-html"
               aria-label="HTML 骨架"
               value={html}
               onChange={(e) => setHtml(e.target.value)}

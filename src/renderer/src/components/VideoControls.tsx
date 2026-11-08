@@ -255,6 +255,9 @@ function Scrubber({
       }}
       onPointerLeave={() => setHoverTime(null)}
       onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        e.stopPropagation()
         if (e.key === 'ArrowLeft') onSeek(current - 5)
         if (e.key === 'ArrowRight') onSeek(current + 5)
       }}

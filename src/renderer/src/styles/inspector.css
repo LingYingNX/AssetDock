@@ -23,7 +23,7 @@
 .fname .rename-btn:hover{color:var(--t1);background:var(--bg3)}
 .fname .rename-btn .ic{width:var(--ic-sm);height:var(--ic-sm);color:inherit}
 .rate{display:inline-flex;gap:1px}
-.rate .star{width:var(--ic-xs);height:var(--ic-xs);color:var(--star-off);cursor:pointer}
+.rate .star{width:var(--ic-xs);height:var(--ic-xs);padding:0;border:0;background:none;color:var(--star-off);cursor:pointer}
 .rate .star svg{width:var(--ic-xs);height:var(--ic-xs);fill:none;stroke:currentColor;stroke-width:1.8}
 .rate .star.fill{color:var(--star)}
 .rate .star.fill svg{fill:var(--star);stroke:var(--star)}
@@ -35,22 +35,22 @@
 .tag{display:inline-flex;align-items:center;gap:6px;height:var(--h-xs);padding:0 9px;border-radius:var(--r-pill);font-size:var(--fs-cap);background:var(--bg3);border:1px solid var(--line);color:var(--t2)}
 .tag:hover{border-color:var(--line2);color:var(--t1)}
 .tag .dot{width:7px;height:7px}
-.tag .x{width:var(--ic-xs);height:var(--ic-xs);opacity:.5;cursor:pointer}
+.tag .x{display:grid;place-items:center;width:var(--ic-xs);height:var(--ic-xs);padding:0;border:0;background:none;color:inherit;opacity:.5;cursor:pointer}
 .tag .x:hover{opacity:1;color:var(--t1)}
 .tagin{display:flex;align-items:center;gap:6px;margin-top:8px;height:var(--h-sm);padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body)}
 .tagin:focus-within{border-color:var(--acc-line)}
 .tagin input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--t1);font-size:var(--fs-body)}
 .tagin kbd{font-size:var(--fs-micro);padding:1px 4px}
 .sugg{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.sugg span{font-size:var(--fs-cap);color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:var(--r-pill);cursor:pointer}
-.sugg span:hover{color:var(--acc2);border-color:var(--acc)}
-.sugg span.used{opacity:.3;pointer-events:none}
+.sugg button{font-size:var(--fs-cap);color:var(--t3);padding:2px 8px;border:1px dashed var(--line2);border-radius:var(--r-pill);cursor:pointer}
+.sugg button:hover:not([disabled]){color:var(--acc2);border-color:var(--acc)}
+.sugg button.used{opacity:.3;cursor:default}
 /* 颜色构造 */
 .palette{display:flex;gap:6px}
 .palette .pal{flex:1;min-width:0;height:42px;border-radius:var(--r-sm);display:flex;flex-direction:column;justify-content:flex-end;padding:4px 6px;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .palette .pal:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
-.palette .pal em{font:600 10px/1.3 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
-.palette .pal span{font:9px/1.3 var(--font-mono);color:rgba(255,255,255,.78);text-shadow:0 1px 3px rgba(0,0,0,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.palette .pal em{font:600 var(--fs-cap)/1.3 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+.palette .pal span{font:var(--fs-cap)/1.3 var(--font-mono);color:rgba(255,255,255,.9);text-shadow:0 1px 3px rgba(0,0,0,.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 本机目录 */
 .dirin{display:flex;align-items:center;gap:6px;width:100%;min-width:0;height:var(--h-sm);padding:0 9px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--t2);font-size:var(--fs-body);text-align:left}
 .dirin:hover{border-color:var(--acc-line);color:var(--t1);background:var(--bg3)}

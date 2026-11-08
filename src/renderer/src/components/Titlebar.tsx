@@ -40,6 +40,7 @@ export function Titlebar(): React.JSX.Element {
               key={t.id}
               className={`lib-tab${t.id === activeTabId ? ' on' : ''}`}
               title={`${t.name} · 本地库`}
+              aria-current={t.id === activeTabId ? 'page' : undefined}
               onClick={() => {
                 setOpenMenu(null)
                 openTab(t.id)
@@ -63,13 +64,13 @@ export function Titlebar(): React.JSX.Element {
         >
           <Icon name="panel-r" />
         </button>
-        <button className="tb-btn" title="最小化" onClick={() => window.windowApi.minimize()}>
+        <button className="tb-btn" title="最小化" aria-label="最小化窗口" onClick={() => window.windowApi.minimize()}>
           <Icon name="minus" />
         </button>
-        <button className="tb-btn" title="最大化" onClick={() => window.windowApi.maximize()}>
+        <button className="tb-btn" title="最大化" aria-label="最大化窗口" onClick={() => window.windowApi.maximize()}>
           <Icon name="sq" />
         </button>
-        <button className="tb-btn close" title="关闭" onClick={() => window.windowApi.close()}>
+        <button className="tb-btn close" title="关闭" aria-label="关闭窗口" onClick={() => window.windowApi.close()}>
           <Icon name="x" />
         </button>
       </div>

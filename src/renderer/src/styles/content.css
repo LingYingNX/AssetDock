@@ -52,7 +52,7 @@
    触底后才轮到按钮往左挤;挤不下即 1024px 窗口最小宽度,那是设计边界。 */
 .searchbox{position:relative;display:block;flex:0 1 auto;min-width:72px;width:382px;height:var(--fc-h);
   --nb-bg:rgba(0,0,15,.3);--nb-border:#2a2a3a;--nb-fg:#fff}
-:root:not([data-theme="dark"]) .searchbox{--nb-bg:var(--bg2);--nb-border:var(--line);--nb-fg:var(--t1)}
+:root:not([data-theme="dark"]) .searchbox{--nb-bg:var(--bg2);--nb-border:var(--ctl-line);--nb-fg:var(--t1)}
 .searchbox .input{width:100%;height:100%;padding:0 .96em;border:max(1px,.16em) solid var(--nb-border);background:var(--nb-bg);color:var(--nb-fg);outline:none;border-radius:var(--fc-radius);transition:border-color var(--dur-press) var(--ease-out),box-shadow var(--dur-press) var(--ease-out)}
 .searchbox .input:focus{border-width:var(--fc-border);border-color:#b56aff;box-shadow:0 4px 14px rgba(181,106,255,.22)}
 .nebula-particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;opacity:0;top:50%;left:10px;filter:blur(.8px);mix-blend-mode:screen;transition:opacity .3s ease}
@@ -70,13 +70,13 @@
    筛选按钮的悬停/选中/展开三种状态都要有过渡:原来只有 tokens.css 的 button{transition:opacity},
    所以描边/颜色/背景的变化是瞬间跳变,鼠标扫过整排按钮像在闪。
    时长用 --dur-hover(110ms):悬停是一天几十次的高频反馈,必须比按压(160ms)更短。 */
-.filterbar .btn{height:var(--fc-h);padding:0 var(--fc-pad-x);font-weight:500;line-height:1.25;background:var(--bg2);border:var(--fc-border) solid var(--line);border-radius:var(--fc-radius);display:inline-flex;align-items:center;gap:var(--fc-gap);color:var(--t2);white-space:nowrap;
+.filterbar .btn{height:var(--fc-h);padding:0 var(--fc-pad-x);font-weight:500;line-height:1.25;background:var(--bg2);border:var(--fc-border) solid var(--ctl-line);border-radius:var(--fc-radius);display:inline-flex;align-items:center;gap:var(--fc-gap);color:var(--t2);white-space:nowrap;
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
-.filterbar .btn:hover{border-color:var(--line2);color:var(--t1)}
+.filterbar .btn:hover{border-color:var(--ctl-line-hover);color:var(--t1)}
 .filterbar .btn.on{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 菜单展开时按钮必须自己给出反馈。原来 .on 只跟随筛选值(不等于 all),菜单开着按钮却毫无变化,
    用户看不出「这个按钮的菜单正开着」。用独立的 .open,不与筛选值语义混用。 */
-.filterbar .btn.open{background:var(--bg3);border-color:var(--line2);box-shadow:none;color:var(--t1)}
+.filterbar .btn.open{background:var(--bg3);border-color:var(--ctl-line-hover);box-shadow:none;color:var(--t1)}
 /* 两种状态叠加时让「筛选值已生效」优先:筛选了评分又展开菜单,按钮不该丢掉强调色。 */
 .filterbar .btn.on.open{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 标签按钮始终保留圆点槽,避免筛选状态切换时让整排控件左右跳动。 */
@@ -87,14 +87,14 @@
 .filterbar .btn[data-menu="m-view"]{width:var(--fc-h);padding:0;justify-content:center}
 /* 中文字面没有西文下伸部,flex 几何居中会视觉偏高;补 0.13em 上内边距校正。 */
 .filter-group>.btn{padding-top:.13em}
-.cbtn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);display:grid;place-items:center;background:var(--bg2);border:var(--fc-border) solid var(--line);
+.cbtn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);display:grid;place-items:center;background:var(--bg2);border:var(--fc-border) solid var(--ctl-line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cbtn:hover{border-color:var(--line2)}
 .cbtn.on{border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc)}
 .cball{width:1.28em;height:1.28em;border-radius:50%;background:var(--grad-rainbow);border:var(--fc-border) solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
-.filterbar .tb-btn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);background:var(--bg2);border:var(--fc-border) solid var(--line);
+.filterbar .tb-btn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);background:var(--bg2);border:var(--fc-border) solid var(--ctl-line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
-.filterbar .tb-btn:hover{border-color:var(--line2);color:var(--t1)}
+.filterbar .tb-btn:hover{border-color:var(--ctl-line-hover);color:var(--t1)}
 .filterbar .tb-btn.on{border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 右端(视图·缩放·面板按钮)留在条内:窄窗不折行,而是让搜索框先收、滑块次之、
     按钮组往左补齐。收缩顺序:搜索框 120px 触底 → 滑块 96px 下限 → 按钮组
@@ -136,7 +136,7 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .color-grid{display:grid;grid-template-columns:repeat(4,46px);gap:6px}
 .cs{position:relative;width:46px;height:var(--h-md);border-radius:var(--r-sm);border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cs:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
-.cs em{font:600 9px/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
+.cs em{font:600 var(--fs-cap)/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
 .cs.on{box-shadow:0 0 0 2px var(--menu-solid),0 0 0 3.5px var(--acc)}
 .color-menu-clear{margin-top:7px;width:100%;height:var(--h-sm);border-radius:var(--r-sm);font-size:var(--fs-body);color:var(--acc2);background:var(--acc-soft)}
 .color-menu-clear:hover{color:var(--t1)}

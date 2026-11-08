@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
+import { useMenuFocus } from './useMenuFocus'
 
 export interface MenuItem {
   id: string
@@ -23,13 +24,15 @@ interface DropdownProps {
   value: string
   compact?: boolean
   onPick: (id: string) => void
+  /** 悬停打开的菜单:指针进入面板时取消触发器的延迟关闭 */
+  onPointerEnter?: () => void
 }
 
 /**
  * 单选下拉菜单:定位到触发按钮下方,宽度按内容收缩。
  * 选中项以左缘蓝条 + 加粗蓝字标识(不用勾选列,避免撑宽菜单)。
  */
-export function Dropdown({ id, items, value, compact = false, onPick }: DropdownProps): React.JSX.Element | null {
+export function Dropdown({ id, items, value, compact = false, onPick, onPointerEnter }: DropdownProps): React.JSX.Element | null {
   const openMenu = useUI((s) => s.openMenu)
   const setOpenMenu = useUI((s) => s.setOpenMenu)
   const ref = useRef<HTMLDivElement>(null)
@@ -43,6 +46,7 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
      卸载定时器不能省:reduced-motion 下 glass.css 全局移除过渡,transitionend 永不触发。 */
   const [mounted, setMounted] = useState(open)
   const [shown, setShown] = useState(open)
+  useMenuFocus(open && mounted, ref, () => setOpenMenu(null))
 
   useEffect(() => {
     if (open) {
@@ -114,6 +118,7 @@ export function Dropdown({ id, items, value, compact = false, onPick }: Dropdown
       ref={ref}
       className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}${shown ? ' open' : ' closing'}`}
       role="menu"
+      onPointerEnter={onPointerEnter}
       onPointerLeave={() => setOpenMenu(null)}
     >
       {items.map((it) => {

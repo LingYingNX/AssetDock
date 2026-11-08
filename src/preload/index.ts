@@ -18,6 +18,7 @@ const api = {
 
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
   pickFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFile'),
+  pickAssetFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickAssetFiles'),
   getFilePath: (file: File): string => webUtils.getPathForFile(file),
 
   tools: {

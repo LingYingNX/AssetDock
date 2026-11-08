@@ -89,7 +89,11 @@ export function normalizeEmissive(material: THREE.MeshStandardMaterial): void {
   }
 }
 
-/** 源贴图一张都没加载到时，白色素材质不该冒充渲染结果。 */
+/**
+ * 源贴图一张都没加载到时，只有默认白色材质才降级成 clay。
+ * baseColorFactor 明确给出的颜色本身就是真实材质信息；把它们统一刷灰，
+ * 会让无贴图的 PBR / unlit 模型在「渲染模型」模式下丢失全部配色。
+ */
 export function fallbackMissingTextures(material: THREE.MeshStandardMaterial): boolean {
   if (
     material.map ||
@@ -101,6 +105,9 @@ export function fallbackMissingTextures(material: THREE.MeshStandardMaterial): b
   ) {
     return false
   }
+  if (material.vertexColors) return false
+  const { r, g, b } = material.color
+  if (r < 0.94 || g < 0.94 || b < 0.94) return false
   material.color.setRGB(0.48, 0.52, 0.57)
   material.emissive.setRGB(0, 0, 0)
   material.emissiveIntensity = 0

@@ -10,8 +10,9 @@ import {
 } from '../src/renderer/src/data/colw'
 
 describe('缩略图列宽刻度', () => {
-  it('把原来的下限 170px 放在滑块正中间', () => {
-    expect(Math.abs(colwToSlider(170) - COLW_STEPS / 2)).toBeLessThanOrEqual(1)
+  it('列宽下限固定为 170px', () => {
+    expect(COLW_MIN).toBe(170)
+    expect(sliderToColw(0)).toBe(170)
   })
 
   it('两端与默认值都能来回换算', () => {

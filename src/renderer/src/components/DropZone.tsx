@@ -29,11 +29,16 @@ export function DropZone({ active }: { active: boolean }): React.JSX.Element | n
       setDragging(false)
     }
     const onDragOver = (event: DragEvent): void => {
-      if (!isExternalFileDrag(event.dataTransfer) || !inside(event)) {
+      if (!isExternalFileDrag(event.dataTransfer)) {
         clear()
         return
       }
+      /* 只要拖的是外部文件就吃掉默认行为:工作区外松手也不能让 Chromium 导航去打开文件 */
       event.preventDefault()
+      if (!inside(event)) {
+        clear()
+        return
+      }
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
       if (!host.classList.contains('is-active')) {
         host.classList.add('is-active')
@@ -97,11 +102,25 @@ export function DropZone({ active }: { active: boolean }): React.JSX.Element | n
     }
   }, [active])
 
+  /* 灯箱/空态下组件不渲染,但拖文件进窗口仍必须被吃掉,否则主框架会导航到 file:// */
+  useEffect(() => {
+    if (active) return
+    const block = (event: DragEvent): void => {
+      if (isExternalFileDrag(event.dataTransfer)) event.preventDefault()
+    }
+    window.addEventListener('dragover', block)
+    window.addEventListener('drop', block)
+    return () => {
+      window.removeEventListener('dragover', block)
+      window.removeEventListener('drop', block)
+    }
+  }, [active])
+
   if (!active) return null
   return (
     <div ref={hostRef} className={`drop-zone${busy ? ' is-busy' : ''}`} aria-hidden={!dragging && !busy}>
       <div className="drop-zone-frame" />
-      <div className="drop-zone-card">
+      <div className="drop-zone-card" role="status" aria-live="polite">
         <span className="drop-zone-icon"><Icon name={busy ? 'clock' : 'plus'} /></span>
         <span className="drop-zone-copy">
           <strong>{busy ? '正在导入素材' : '拖入素材到工作区'}</strong>

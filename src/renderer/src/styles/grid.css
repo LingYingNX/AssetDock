@@ -1,26 +1,26 @@
 /* ============================ 素材网格 ============================ */
 .gridwrap{flex:1;overflow-y:auto;min-height:0;user-select:none}
+.gridwrap.is-empty{display:flex;flex-direction:column}
 
 /* 瀑布流(默认) */
-.grid{column-width:var(--colw);column-gap:14px;padding:20px 22px 32px}
+.grid{column-width:var(--colw);column-gap:12px;padding:20px 22px 32px}
 /* 网格 */
 .grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:12px}
 .v-grid .thumb{aspect-ratio:4/3}
 /* 列表 */
 .grid.v-list{columns:auto;display:flex;flex-direction:column;gap:1px;padding:0 12px 24px}
-.lhead,.grid.v-list .card{display:grid;grid-template-columns:96px minmax(180px,1.7fr) 52px 92px 76px 60px 96px 34px;gap:12px;align-items:center}
-.lhead{display:none;position:sticky;top:0;z-index:5;padding:0 12px;height:34px;margin:0 -4px 6px;background:var(--bg0);border-bottom:1px solid var(--line);font-size:var(--fs-cap);color:var(--t3)}
+.lhead,.v-list .card{display:grid;grid-template-columns:96px minmax(0,1.7fr) 52px 92px 76px 60px 96px 34px;gap:12px;align-items:center}
+.lhead{display:none;position:sticky;top:0;z-index:5;padding:0 12px;height:34px;margin:0 -4px 6px;background:var(--bg2);backdrop-filter:blur(16px) saturate(1.2);border-bottom:1px solid var(--ctl-line);font-size:var(--fs-cap);color:var(--t3)}
 .v-list .lhead{display:grid;margin:0;padding:0 10px}
 .v-list .card{margin:0;padding:5px 10px;border-radius:var(--r-md);border-color:transparent}
 .v-list .card:hover{border-color:var(--line);background:var(--bg2)}
 .v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:var(--r-sm);flex:none}
-/* 列表视图也要能收藏:原来把 .qa 直接 display:none 掉,行里再无收藏入口。
-   保留它,与网格同一套悬停揭示规则。 */
-.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
+.v-list .thumb .type-chip,.v-list .thumb .res-chip,.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
 /* 同一批立方体不该有两种转速:基准 24s,列表视图只改尺寸 */
 .v-list .thumb .cube3d{--cs:30px}
-.v-list figcaption{display:contents;padding:0}
+.v-list figcaption{display:contents;position:static;padding:0;border:0;background:none;backdrop-filter:none}
 .v-list .name-row{display:block}
+.v-list .name{color:var(--t1);text-shadow:none;font-size:var(--fs-body);line-height:15px}
 .v-list .meta-row{display:none}
 .v-list .lc{display:block;font-size:var(--fs-cap);color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v-list .lc-type{color:var(--t3);font-size:var(--fs-micro);font-weight:700;letter-spacing:.05em}
@@ -28,23 +28,36 @@
 .v-list .lc-acts{display:flex;justify-content:flex-end}
 .v-list .lc-acts button{width:26px;height:26px;border-radius:var(--r-sm);color:var(--t3);display:grid;place-items:center;opacity:0}
 .v-list .card:hover .lc-acts button{opacity:1}
+.v-list .card:focus-within .lc-acts button,
+.v-list .lc-acts button:focus-visible{opacity:1}
 .v-list .lc-acts button:hover{background:var(--bg4);color:var(--t1)}
+
+/* 窗口收窄时优先保留名称和操作；列模板必须与表头同步收缩，否则长文件名会压到类型列。 */
+@container (max-width:860px){
+  .lhead,.v-list .card{grid-template-columns:96px minmax(0,1.7fr) 52px 92px 76px 34px}
+  .lhead>span:nth-child(6),.lhead>span:nth-child(7),
+  .v-list .lc-dur,.v-list .lc-date{display:none}
+}
+@container (max-width:640px){
+  .lhead,.v-list .card{grid-template-columns:96px minmax(0,1fr) 52px 34px}
+  .lhead>span:nth-child(4),.lhead>span:nth-child(5),
+  .v-list .lc-res,.v-list .lc-size{display:none}
+}
 
 /* ---------- 卡片 ---------- */
 /* 卡片可聚焦、可点选、可双击打开、可拖拽,却给了默认箭头;而同一张卡上的浮层按钮
    反而是 pointer。光标是最廉价的可点击性线索,这里必须与真实行为一致。 */
-.card{break-inside:avoid;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out),outline-color var(--dur-fast) var(--ease-out);position:relative}
+.card{break-inside:avoid;margin-bottom:12px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out),outline-color var(--dur-fast) var(--ease-out);position:relative}
+.v-grid .card{margin-bottom:0}
 .card:hover{border-color:var(--line2)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 78%,rgba(0,0,0,.34));pointer-events:none}
 .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
 .thumb img.loaded{opacity:1}
-/* 超宽素材(1200x172 这类字幕条/长条渲染图):真实比例约 7:1,而缩略图容器最宽是
-   瀑布流的 21:9、网格视图的 4:3。cover 在这两个容器里都会把宽度裁到只剩中间一小段
-   (4:3 框下只剩约 19% 宽度),画面主体基本全丢。
-   contain 会留出上下底色,但画面完整可辨 —— 对本来就是细长条的素材,留白比裁切更接近真相。
-   判定写在 Card.tsx(超宽类),因为只有那里同时拿得到 width/height 与视图模式。 */
-.thumb.uw img{object-fit:contain}
+/* 超宽/超高素材超出 [1/2, 21/9] 容器比例时,cover 会裁掉长边内容。
+   contain 会留出底色,但画面完整可辨 —— 对长条图/长截图,留白比裁切更接近真相。
+   判定写在 Card.tsx(uw/uh 类),因为只有那里同时拿得到 width/height 与视图模式。 */
+.thumb.uw img,.thumb.uh img{object-fit:contain}
 /* 渐变占位(设计稿 g-* 类) */
 .g-ocean{background:radial-gradient(circle at 72% 24%,rgba(255,255,255,.35),transparent 38%),linear-gradient(165deg,#5EE7F9 0%,#2E7CF6 48%,#16266B 100%)}
 .g-night{background:radial-gradient(circle at 26% 28%,rgba(148,187,255,.5),transparent 34%),radial-gradient(circle at 78% 72%,rgba(250,204,21,.28),transparent 26%),linear-gradient(180deg,#232C46 0%,#0E1424 78%)}
@@ -63,6 +76,7 @@
 
 .type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:18px;padding:0 7px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:700;letter-spacing:.06em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 .type-chip .dot{width:6px;height:6px}
+.res-chip{position:absolute;left:8px;top:8px;z-index:2;height:18px;padding:0 7px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
 .dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:1px 6px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 /* 选中环:未选中 1px --line,选中再叠一层 box-shadow 外环就变成视觉 2px 蓝框,
    比 1px 灰框「厚」一档——卡片在选中瞬间像被撑了一下。改成只切 border-color,
@@ -75,18 +89,10 @@
 .asset-drag-preview{position:fixed;left:-10000px;top:-10000px;z-index:-1;width:44px;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid rgba(255,255,255,.9);border-radius:var(--r-sm);background:rgba(20,40,70,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:var(--fs-cap)}
 .asset-drag-icon{position:relative;width:17px;height:13px;border:1.5px solid currentColor;border-radius:2px}
 .asset-drag-icon::before{content:"";position:absolute;left:1px;top:-4px;width:7px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}
-/* 位移方向取 +4px:它贴在卡片右上角,视觉来源是「卡片里面」,从上方飘入与来源相反 */
-.qa{position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:4px;opacity:0;transform:translateY(4px);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
-.card:hover .qa,.card:focus-within .qa{opacity:1;transform:none}
-/* 触屏/无悬停设备没有 .card:hover 可言,浮层按钮必须常显,否则等于没有 */
+/* 触屏/无悬停设备没有 .card:hover 可言,播放按钮必须常显,否则等于没有 */
 @media (hover:none){
-  .qa,.card.video .play-big{opacity:1;transform:none}
+  .card.video .play-big{opacity:1}
 }
-.qa button{width:25px;height:25px;border-radius:var(--r-sm);display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.72);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(4px)}
-.qa button:hover{background:rgba(10,12,16,.88)}
-.qa .ic{width:var(--ic-sm);height:var(--ic-sm)}
-.qa .fav.on{color:#FF7A93;background:rgba(10,12,16,.82)}
-.qa .fav.on .ic{fill:currentColor;stroke:currentColor}
 .play-big{position:absolute;left:50%;top:50%;z-index:2;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(10,12,16,.5);border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(5px);opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
 .play-big .ic{width:var(--ic-md);height:var(--ic-md);margin-left:2px}
 .card.video:hover .play-big,.card.video:focus-within .play-big{opacity:1}
@@ -108,14 +114,13 @@
 .card:hover .thumb .cube3d,.card:focus-within .thumb .cube3d{animation-play-state:running}
 @keyframes turnY{from{transform:rotateX(-24deg) rotateY(0deg)}to{transform:rotateX(-24deg) rotateY(360deg)}}
 
-/* 信息区往下让一让:缩略图与文字贴在一起时,眼睛分不清哪行属于哪张卡 */
-figcaption{padding:7px 10px}
+/* 信息栏放在缩略图下方,不能用绝对定位覆盖画面;高度与 Grid.tsx 的 captionHeight 一致。 */
+figcaption{position:relative;height:24px;padding:0 7px;display:flex;flex-direction:column;justify-content:center;background:rgba(8,12,18,.52);backdrop-filter:blur(9px) saturate(1.1);border-top:1px solid rgba(255,255,255,.1)}
+.card.has-meta figcaption{height:38px}
 .lc{display:none}
 .name-row{display:flex;align-items:baseline;gap:4px;min-width:0}
-.name{font-size:var(--fs-body);line-height:15px;font-weight:500;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.meta-row{display:flex;align-items:center;gap:6px;margin-top:2px;font-size:var(--fs-cap);line-height:13px;color:var(--t2);
-  /* 列宽下限 90px 时「1920×1080 · 131.1 MB」放不下,折行会把信息区从 44px 撑到 57px,
-     而 Grid.tsx 的 CAPTION_H 与虚拟化定位都按 44px 算,卡片会互相叠压。锁死单行、溢出裁掉。 */
+.name{flex:1;min-width:0;font-size:clamp(10px, calc(var(--colw, 232px) * .052), 12px);line-height:1.18;font-weight:500;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.meta-row{display:flex;align-items:center;gap:6px;margin-top:1px;font-size:var(--fs-cap);line-height:12px;color:rgba(255,255,255,.72);text-shadow:0 1px 2px rgba(0,0,0,.3);
+  /* 列宽下限 170px 时分辨率放不下,锁死单行、溢出裁掉。 */
   white-space:nowrap;overflow:hidden}
 .meta-row>span{flex:none}
-.meta-row .sep2{opacity:.5}

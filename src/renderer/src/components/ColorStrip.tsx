@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { aggregatePalette, queryAssets } from '../data/query'
+import { useMenuFocus } from './useMenuFocus'
 
 /**
  * 颜色构造:当前视图素材 palette 加权聚合前 8 色。
@@ -30,6 +31,7 @@ export function ColorStrip(): React.JSX.Element | null {
      卸载定时器不能省:reduced-motion 下 glass.css 全局移除过渡,transitionend 永不触发。 */
   const [mounted, setMounted] = useState(cbarOpen)
   const [shown, setShown] = useState(cbarOpen)
+  useMenuFocus(cbarOpen && mounted, ref, () => useUI.getState().toggleCbar())
 
   /* 退场期间 cbarOpen 已是 false,strip 会立刻算成空数组,浮层会在淡出时
      把内容换成「无颜色数据」—— 与 ThumbProgress 退场抽空文案是同一类问题。
@@ -115,7 +117,9 @@ export function ColorStrip(): React.JSX.Element | null {
               className={`cs${stripColor === c.hex ? ' on' : ''}`}
               style={{ background: c.hex }}
               title={c.hex}
-              aria-pressed={stripColor === c.hex}
+              role="menuitemradio"
+              aria-checked={stripColor === c.hex}
+              aria-label={`${c.hex}，占 ${c.ratio}%`}
               onClick={() => setStripColor(stripColor === c.hex ? null : c.hex)}
             >
               <em>{c.ratio}%</em>

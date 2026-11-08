@@ -7,7 +7,7 @@ interface IconProps {
 
 /** 通用线性图标(设计稿同源 symbol,1.7px 描边圆头) */
 export function Icon({ name, className }: IconProps): React.JSX.Element {
-  return <svg className={`ic${className ? ` ${className}` : ''}`}><use href={`#i-${name}`} /></svg>
+  return <svg className={`ic${className ? ` ${className}` : ''}`} aria-hidden="true" focusable="false"><use href={`#i-${name}`} /></svg>
 }
 
 /**

@@ -113,6 +113,9 @@ function FolderNameEditor({ name, onCommit, onCancel }: { name: string; onCommit
       className="folder-name-edit"
       value={value}
       aria-label="文件夹名称"
+      name="folder-name"
+      autoComplete="off"
+      spellCheck={false}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') commit()
@@ -262,6 +265,7 @@ function DirTree({
                     setNav(key as never)
                   }}
                   title={n.label}
+                  aria-current={on ? 'page' : undefined}
                 >
                   <Icon name="folder" />
                   <span className="folder-label">{n.label}</span>
@@ -446,17 +450,20 @@ export function Sidebar(): React.JSX.Element {
   const folderDragSourceRef = useRef<string | null>(null)
   const collapsedPaths = useMemo(() => new Set(collapsedFolders), [collapsedFolders])
   const navTags = useMemo(() => tagsFromNav(nav), [nav])
-  const c = sidebarCounts(assets)
-  const tagStats = assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
+  const c = useMemo(() => sidebarCounts(assets), [assets])
+  const tagStats = useMemo(() => assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
     if (a.missing || a.deletedAt) return acc
     for (const t of a.tags) {
       acc[t.name] = acc[t.name] ?? { color: t.color, n: 0 }
       acc[t.name].n++
     }
     return acc
-  }, {})
+  }, {}), [assets])
 
-  const dirTree = mode === 'library' ? buildDirTree(folderPaths, assets, new Set(physicalFolderPaths)) : []
+  const dirTree = useMemo(
+    () => mode === 'library' ? buildDirTree(folderPaths, assets, new Set(physicalFolderPaths)) : [],
+    [mode, folderPaths, assets, physicalFolderPaths]
+  )
 
   const setAssetDropTarget = (element: HTMLElement | null): void => {
     if (assetDropTargetRef.current === element) return
@@ -523,14 +530,15 @@ export function Sidebar(): React.JSX.Element {
           {/* 这一组装的是系统视图筛选(含回收站),不是"快捷入口";clock 图标同时被下面的
               「最近导入」使用,重复会让人误以为两者相关 */}
           <div className="side-title"><Icon name="sliders" />浏览</div>
-          <button className={`nav-item${nav === 'all' ? ' on' : ''}`} onClick={() => setNav('all')}>
+          <button className={`nav-item${nav === 'all' ? ' on' : ''}`} aria-current={nav === 'all' ? 'page' : undefined} onClick={() => setNav('all')}>
             <Icon name="layers" />全部素材<span className="cnt has-items">{fmtCount(c.all)}</span>
           </button>
-          <button className={`nav-item${nav === 'recent' ? ' on' : ''}`} onClick={() => setNav('recent')}>
+          <button className={`nav-item${nav === 'recent' ? ' on' : ''}`} aria-current={nav === 'recent' ? 'page' : undefined} onClick={() => setNav('recent')}>
             <Icon name="clock" />最近导入<span className={`cnt${c.recent > 0 ? ' has-items' : ''}`}>{fmtCount(c.recent)}</span>
           </button>
           <button
                 className={`nav-item${nav === 'untagged' ? ' on' : ''}`}
+                aria-current={nav === 'untagged' ? 'page' : undefined}
             onClick={() => setNav('untagged')}
             onDragOver={(e) => {
               if (!isAssetDrag(e)) return
@@ -546,10 +554,10 @@ export function Sidebar(): React.JSX.Element {
           >
             <Icon name="inbox" />未分类<span className={`cnt${c.untagged > 0 ? ' has-items' : ''}`}>{fmtCount(c.untagged)}</span>
           </button>
-          <button className={`nav-item${nav === 'fav' ? ' on' : ''}`} onClick={() => setNav('fav')}>
+          <button className={`nav-item${nav === 'fav' ? ' on' : ''}`} aria-current={nav === 'fav' ? 'page' : undefined} onClick={() => setNav('fav')}>
             <Icon name="heart" />收藏<span className={`cnt${c.fav > 0 ? ' has-items' : ''}`}>{fmtCount(c.fav)}</span>
           </button>
-          <button className={`nav-item${nav === 'trash' ? ' on' : ''}`} onClick={() => setNav('trash')}>
+          <button className={`nav-item${nav === 'trash' ? ' on' : ''}`} aria-current={nav === 'trash' ? 'page' : undefined} onClick={() => setNav('trash')}>
             <Icon name="trash" />回收站<span className={`cnt${c.trash > 0 ? ' has-items' : ''}`}>{fmtCount(c.trash)}</span>
           </button>
         </section>
@@ -636,7 +644,9 @@ export function Sidebar(): React.JSX.Element {
                     ? selected
                       ? navTags.filter((tag) => tag !== name)
                       : [...navTags, name]
-                    : [name]
+                    : selected
+                      ? []
+                      : [name]
                   setNav(tagNavKey(next))
                 }}
               >
@@ -646,7 +656,6 @@ export function Sidebar(): React.JSX.Element {
               </button>
             )
           })}
-          <button className="side-add"><Icon name="edit" />管理标签</button>
         </section>
       </div>
       <SidebarResizer />

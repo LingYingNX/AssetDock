@@ -58,6 +58,9 @@ export function Inspector(): React.JSX.Element {
             {renaming && activeId === a.id ? (
               <input
                 defaultValue={a.name}
+                name="asset-name"
+                autoComplete="off"
+                spellCheck={false}
                 ref={(el) => {
                   // 像 Windows 那样进入即全选,直接输入就能替换整个名字
                   if (!el) return
@@ -89,15 +92,18 @@ export function Inspector(): React.JSX.Element {
 
         <div className="insp-sec">
           <div className="insp-h"><Icon name="star" />评分</div>
-          <span className="rate big">
+          <span className="rate big" role="group" aria-label="评分">
             {[1, 2, 3, 4, 5].map((v) => (
-              <span
+              <button
+                type="button"
                 key={v}
                 className={`star${a.rating >= v ? ' fill' : ''}`}
+                aria-label={`${v} 星`}
+                aria-pressed={a.rating >= v}
                 onClick={() => setRating(a.id, a.rating === v ? v - 1 : v)}
               >
-                <svg><use href="#i-star" /></svg>
-              </span>
+                <svg aria-hidden="true"><use href="#i-star" /></svg>
+              </button>
             ))}
           </span>
         </div>
@@ -136,9 +142,15 @@ export function Inspector(): React.JSX.Element {
               <span key={t.name} className="tag">
                 <span className="dot" style={{ background: t.color }} />
                 {t.name}
-                <span className="x" onClick={() => removeTag(a.id, t.name)}>
-                  <svg className="ic"><use href="#i-x" /></svg>
-                </span>
+                <button
+                  type="button"
+                  className="x"
+                  aria-label={`移除标签 ${t.name}`}
+                  title={`移除标签 ${t.name}`}
+                  onClick={() => removeTag(a.id, t.name)}
+                >
+                  <svg className="ic" aria-hidden="true"><use href="#i-x" /></svg>
+                </button>
               </span>
             ))}
           </div>
@@ -147,6 +159,10 @@ export function Inspector(): React.JSX.Element {
             <input
               type="text"
               placeholder="输入标签，Enter 添加"
+              aria-label="新标签名称"
+              name="asset-tags"
+              autoComplete="off"
+              spellCheck={false}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => {
@@ -162,13 +178,16 @@ export function Inspector(): React.JSX.Element {
             {SUGGESTED_TAGS.map((name) => {
               const used = a.tags.some((t) => t.name === name)
               return (
-                <span
+                <button
+                  type="button"
                   key={name}
                   className={used ? 'used' : ''}
+                  disabled={used}
+                  aria-label={used ? `${name} 已添加` : `添加标签 ${name}`}
                   onClick={() => addTag(a.id, name)}
                 >
                   + {name}
-                </span>
+                </button>
               )
             })}
           </div>
@@ -197,6 +216,10 @@ export function Inspector(): React.JSX.Element {
               key={`source-${a.id}`}
               type="url"
               placeholder="粘贴素材来源链接 https://…"
+              aria-label="素材来源链接"
+              name="source-url"
+              autoComplete="off"
+              spellCheck={false}
               defaultValue={a.sourceUrl ?? ''}
               onBlur={(e) => setSourceUrl(a.id, e.target.value.trim())}
             />
@@ -209,6 +232,9 @@ export function Inspector(): React.JSX.Element {
             key={`note-${a.id}`}
             className="note"
             placeholder="添加备注、拍摄信息、使用限制…"
+            aria-label="素材备注"
+            name="asset-note"
+            autoComplete="off"
             defaultValue={a.note}
             onBlur={(e) => setNote(a.id, e.target.value)}
           />

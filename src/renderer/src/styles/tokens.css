@@ -2,7 +2,8 @@
 :root{
   --bg0:#EFF2F0; --bg1:rgba(219,236,255,.34); --bg2:rgba(219,236,255,.26); --bg3:rgba(255,255,255,.5); --bg4:rgba(255,255,255,.68);
   --line:rgba(255,255,255,.62); --line2:rgba(255,255,255,.82);
-  --t1:#101820; --t2:#3D4A5C; --t3:#64748A;
+  --ctl-line:rgba(61,74,92,.28); --ctl-line-hover:rgba(61,74,92,.46);
+  --t1:#101820; --t2:#3D4A5C; --t3:#4B5B70;
   --acc:#0A84FF; --acc2:#0A66D6; --acc-soft:rgba(10,132,255,.16); --acc-line:rgba(10,132,255,.55);
   --star:#E8A33D; --star-off:rgba(18,26,22,.26); --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
   --ok:#1FA871; --warn:#C77F1F;
@@ -75,6 +76,7 @@
 :root[data-theme="dark"]{
   --bg0:#0E1218; --bg1:rgba(28,36,48,.5); --bg2:rgba(36,45,60,.42); --bg3:rgba(255,255,255,.07); --bg4:rgba(255,255,255,.11);
   --line:rgba(255,255,255,.12); --line2:rgba(255,255,255,.2);
+  --ctl-line:rgba(255,255,255,.18); --ctl-line-hover:rgba(255,255,255,.34);
   --t1:#E9EEF6; --t2:#B4C0D2; --t3:#7C8A9E;
   --acc:#3B9BFF; --acc2:#6FB6FF; --acc-soft:rgba(59,155,255,.2); --acc-line:rgba(59,155,255,.5);
   --star:#E8A33D; --star-off:#3D4454; --danger:#F0737C; --danger-soft:rgba(240,115,124,.16);
@@ -124,7 +126,7 @@ body{
     radial-gradient(720px 580px at 18% 82%,rgba(28,92,140,.26),transparent 58%),
     linear-gradient(165deg,#0C1017,#0A0E14 50%,#0B1119);
 }
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
 /* 按压反馈:轻微收缩给出触感,透明度不压太低,避免按钮像被禁用 */
 button:active:not([disabled]){opacity:.9;transform:scale(.97)}
 button{transition:opacity var(--dur-press) var(--ease-out),transform var(--dur-press) var(--ease-out)}

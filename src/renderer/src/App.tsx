@@ -148,6 +148,15 @@ export default function App(): React.JSX.Element {
       /* 可编辑控件与模态对话框内:方向键、Enter、Space、Del 属于输入语义,
          不拦截也不 preventDefault,否则要么吃掉文本编辑,要么误触预览/删除 */
       if (isEditableTarget(e.target as Element | null)) return
+      /* Enter/Space 在按钮/菜单项上属于该控件自己的激活语义,不能升级成打开素材/切换选中 */
+      if (e.key === 'Enter' || e.key === ' ') {
+        const control = (e.target as Element | null)?.closest?.(
+          'button, select, a, summary, [role="button"], [role="menuitem"], [role="option"], [role="tab"], [role="slider"]'
+        )
+        if (control) return
+      }
+      /* 浮层打开时,全局素材快捷键(尤其 Del)不能作用到菜单后面看不见的 activeId */
+      if (st.openMenu || st.ctxMenu || st.folderCtxMenu || st.renaming) return
 
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
@@ -164,6 +173,12 @@ export default function App(): React.JSX.Element {
         return
       }
       if (st.lightboxId) {
+        const cur = st.assets.find((a) => a.id === st.lightboxId)
+        if (cur?.type === 'image' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+          e.preventDefault()
+          st.stepLightbox(e.key === 'ArrowLeft' ? -1 : 1)
+          return
+        }
         if (e.key === '[') {
           e.preventDefault()
           st.stepLightbox(-1)
@@ -173,7 +188,6 @@ export default function App(): React.JSX.Element {
           st.stepLightbox(1)
         }
         if (e.key === 'Enter') {
-          const cur = st.assets.find((a) => a.id === st.lightboxId)
           if (cur) st.toggleFavorite(cur.id)
         }
         return
@@ -188,7 +202,8 @@ export default function App(): React.JSX.Element {
           break
         }
         case 'F2': {
-          if (st.nav.startsWith('folder:')) {
+          const inSidebar = (document.activeElement as HTMLElement | null)?.closest('.sidebar') != null
+          if (st.nav.startsWith('folder:') && (inSidebar || !st.activeId)) {
             e.preventDefault()
             st.beginFolderRename(st.nav.slice('folder:'.length))
           } else if (st.activeId) {
@@ -197,7 +212,8 @@ export default function App(): React.JSX.Element {
           break
         }
         case 'Delete': {
-          if (st.activeId) st.trashAsset(st.activeId)
+          const ids = st.selectedIds.length > 0 ? st.selectedIds : st.activeId ? [st.activeId] : []
+          if (ids.length > 0) st.trashAssets(ids)
           break
         }
         case 'i':
@@ -219,6 +235,8 @@ export default function App(): React.JSX.Element {
       if (!e.ctrlKey) return
       e.preventDefault()
       const st = useUI.getState()
+      /* 灯箱内的 Ctrl+滚轮只缩放媒体,不能再改网格列宽 */
+      if (st.lightboxId) return
       const next = Math.min(COLW_MAX, Math.max(COLW_MIN, st.colw - Math.sign(e.deltaY) * 12))
       st.setColw(next)
       document.documentElement.style.setProperty('--colw', `${next}px`)
@@ -232,9 +250,22 @@ export default function App(): React.JSX.Element {
     document.documentElement.style.setProperty('--colw', `${colw}px`)
   }, [colw])
 
+  /* 有未保存的 CSS 改动时,关窗口先拦一下 */
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!useUI.getState().cssDirty) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
   return (
     <div className="app">
       <SvgDefs />
+      <a className="skip-link" href="#main-content">跳到主内容</a>
+      <h1 className="sr-only">MediaHub 素材管理器</h1>
       <Titlebar />
       {/* 折叠检查器时不要卸载它:它一旦从 DOM 消失,列宽的过渡就没有对手可动画,
           只会看到内容凭空消失、布局瞬间重排。让它留在 DOM 里,由 .layout 的
@@ -244,7 +275,7 @@ export default function App(): React.JSX.Element {
         style={{ '--rail-nav': `${sideWidth}px` } as React.CSSProperties}
       >
         <Sidebar />
-        <main className="content">
+        <main id="main-content" className="content" tabIndex={-1}>
           <FilterBar />
           <ColorStrip />
           <Grid />

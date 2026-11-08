@@ -22,12 +22,27 @@
 .pv.model .pv-corner-btn{position:absolute;top:12px;pointer-events:auto;background:rgba(9,12,18,.62);border:1px solid var(--pv-line)}
 .pv.model .pv-corner-btn:first-child{left:12px}
 /* 工作区只有舞台一列:文件信息/评分/标签由右侧已有的检查器承担,不在这里重复一份 */
-.pv-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:0 20px 6px;min-height:0}
+.pv-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:14px;padding:0 20px 6px;min-height:0}
 .pv-body.video-body{padding:0}
-.pv-stage{display:flex;flex-direction:column;min-width:0;min-height:0}
-.pv-frame{flex:1;min-height:0;display:grid;place-items:center;overflow:hidden}
-.pv-frame img{max-width:100%;max-height:100%;border-radius:var(--r-m);box-shadow:0 24px 70px rgba(20,60,120,.25)}
+.pv-stage{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0}
+/* 行列轨道必须写死成 1fr:否则行高按内容(auto)撑到图片原始尺寸,
+   img 的 max-height:100% 会解析到一个「比舞台还高」的高度而形同虚设,
+   结果就是按 1:1 原始像素显示并被 overflow 裁掉。 */
+.pv-frame{flex:1;min-height:0;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;overflow:hidden}
+/* 图片铺在舞台上,不再套圆角卡片与投影——那层框会把画面「关」在一块小方框里,
+   放大时阴影也被裁在舞台边缘,看起来像被限制住。 */
+.pv-frame img{display:block;max-width:100%;max-height:100%;border-radius:0;box-shadow:none}
 .pv-svg-doc{display:block;width:100%;height:100%;border:0;border-radius:var(--r-m);background:#fff}
+
+/* 位图舞台占满灯箱(扣掉底部胶片带):图片按这个框等比放到最大,不裁切。
+   胶片带是实底,若压在画面上会吃掉图片底边,所以舞台到胶片带上沿为止。 */
+.pv.image-mode{--pv-strip-h:65px}
+.pv.image-mode .pv-body{position:absolute;left:0;right:0;top:0;bottom:var(--pv-strip-h);z-index:1;padding:0}
+.pv.image-mode .pv-top{position:absolute;inset:0 0 auto;z-index:6;height:0;padding:0;pointer-events:none}
+.pv.image-mode .pv-corner-btn{position:absolute;top:12px;left:12px;pointer-events:auto;background:rgba(9,12,18,.62);border:1px solid var(--pv-line)}
+.pv.image-mode .pv-stripbar{position:absolute;left:0;right:0;bottom:0;z-index:5;height:var(--pv-strip-h);box-sizing:border-box}
+/* 图片缩放读数:贴在舞台底边,位于胶片带上方,不参与布局 */
+.pv-image-zoom{position:absolute;left:50%;bottom:12px;z-index:4;transform:translateX(-50%);min-width:42px;padding:4px 8px;border-radius:var(--r-sm);background:rgba(9,12,18,.62);border:1px solid var(--pv-line);color:#aeb8c6;font:500 var(--fs-cap)/1 var(--font-mono);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;backdrop-filter:blur(16px)}
 
 /* 文档舞台:白纸内容、深色工具栏;内容自身滚动,不把点击传给灯箱关闭逻辑。 */
 .doc-shell{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0;background:#fff;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden}
@@ -184,29 +199,37 @@ input[type=range].pv-vol-fader::-webkit-slider-runnable-track{width:3px;height:1
 input[type=range].pv-vol-fader::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;margin-left:-3.5px;border-radius:1px;background:var(--t1);border:1px solid var(--line2);box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .pv-vol-mute{min-width:0!important;height:22px!important;padding:0 5px!important;border:1px solid var(--line2)!important;font:500 var(--fs-micro)/1 var(--font-mono)!important;color:var(--t3)!important}
 
-/* 横向素材带:只负责浏览、滚动和点击切换。 */
-.pv-stripbar{flex:none;display:flex;align-items:center;padding:8px 16px 10px;border-top:1px solid var(--line);background:transparent}
-.pv-striprail{position:relative;flex:1;min-width:0;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg2);overflow:hidden}
-.pv-striptrack{display:flex;align-items:center;overflow-x:auto;overflow-y:hidden;height:64px;padding:4px 7px;min-width:0;
+/* 横向素材带:只负责浏览、滚动和点击切换,横向铺满整窗,自身不占上下留白。
+   轨道不留内边距、格子高度撑满轨道,缩略图上下贴边,不再浮在一条灰带里。 */
+.pv-stripbar{flex:none;display:flex;align-items:stretch;padding:0;border-top:1px solid var(--line);background:transparent}
+.pv-striprail{position:relative;flex:1;min-width:0;border:0;border-radius:0;background:var(--bg2);overflow:hidden}
+.pv-striptrack{display:flex;align-items:stretch;overflow-x:auto;overflow-y:hidden;height:64px;padding:0 8px 4px;min-width:0;
   scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent;cursor:grab;user-select:none}
 .pv-striptrack.dragging{cursor:grabbing}
-.pv-striptrack::-webkit-scrollbar{height:3px}
-.pv-striptrack::-webkit-scrollbar-track{background:transparent}
-.pv-striptrack::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:1px}
-.pv-striptrack::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover)}
-.pv-strip-pad{flex:none;height:56px}
-.pv-reel{position:relative;flex:none;width:96px;height:56px;margin-right:7px;border-radius:var(--r-sm);overflow:hidden;
+/* 滚动条隐藏:原生滚动条会吃掉轨道底部十几像素,格子被压矮后上下就又出现留白。
+   位置提示改由自绘的细滑块承担(见 .pv-stripslider)。 */
+.pv-striptrack{scrollbar-width:none}
+.pv-striptrack::-webkit-scrollbar{height:0;display:none}
+/* 自绘滑块:4px 细条,压在轨道底边内侧。
+   放在轨道外会被 .pv-striprail 的 overflow:hidden 裁掉,放在内侧会盖住缩略图底边,
+   所以给轨道留出 4px 底边,滑块正好嵌在这条边里,不遮内容也不被裁。 */
+.pv-stripslider{position:absolute;left:0;bottom:0;z-index:2;height:4px;border-radius:2px;
+  background:var(--acc);opacity:.9;cursor:grab;touch-action:none;transition:opacity var(--dur-fast) var(--ease-out)}
+.pv-stripslider:hover{opacity:.95}
+.pv-stripslider.dragging{opacity:1;cursor:grabbing}
+.pv-striprail:hover .pv-stripslider{opacity:.8}
+.pv-strip-pad{flex:none;height:100%}
+.pv-reel{position:relative;flex:none;align-self:stretch;width:96px;margin-right:7px;border-radius:0;overflow:hidden;
   border:1px solid var(--line);opacity:.66;background:var(--bg2);padding:0;cursor:pointer;
   transition:opacity var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .pv-reel img,.pv-reel-video{width:100%;height:100%;object-fit:cover;display:block}
 .pv-reel:hover{opacity:.92;border-color:var(--line2)}
-.pv-reel.on{opacity:1;border-color:var(--acc);background:var(--acc-soft)}
-.pv-reel-fallback{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;width:100%;height:100%;padding:8px 9px;color:var(--t2);
+.pv-reel.on{opacity:1;border-color:var(--acc);background:var(--acc-soft);
+  box-shadow:0 0 0 2px var(--acc),0 0 14px rgba(59,155,255,.55)}
+.pv-reel-fallback{display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:8px 9px;color:var(--t2);
   background:var(--bg2)}
 .pv-reel-fallback .ic{width:var(--ic-sm);height:var(--ic-sm)}
-.pv-reel-fallback span{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--t3)}
 .pv-reel-fallback.video .ic,.pv-reel-fallback.model .ic{color:var(--acc2)}
-.pv-reel-format{position:absolute;right:4px;top:4px;padding:2px 4px;border-radius:1px;background:var(--menu-solid);border:1px solid var(--line2);font:500 9px/1 var(--font-mono);color:var(--t2)}
 
 /* 3D 加载指示浮层 */
 .pv-loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;padding:6px 12px;
@@ -236,6 +259,7 @@ input[type=range].pv-vol-fader::-webkit-slider-thumb{-webkit-appearance:none;wid
 .css-pane-h .css-state{margin-left:auto}
 .css-pane-h .css-state+.v3-chip{margin-left:8px}
 .css-code{flex:1;min-height:0;resize:none;border:0;outline:none;padding:12px 14px;background:transparent;color:var(--t1);font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;font-size:var(--fs-body);line-height:1.6;tab-size:2;white-space:pre;overflow:auto}
+.css-code:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
 .css-code::placeholder{color:var(--t3)}
 .css-preview{flex:1;min-height:0;width:100%;border:0;background:#fff}
 .css-error{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--t3);font-size:var(--fs-body)}
@@ -258,7 +282,7 @@ input[type=range].pv-vol-fader::-webkit-slider-thumb{-webkit-appearance:none;wid
   .pv-tools{gap:0;padding-left:3px}
   .pv-tool-btn{width:28px}
   .pv-timecode{min-width:86px;gap:3px}
-  .pv-stripbar{gap:10px;padding:8px 12px 10px}
+  .pv-stripbar{gap:10px;padding:8px 0 10px}
   .pv-reel{width:84px;height:50px}
   .doc-text{padding:20px}
   .doc-sheet-wrap{padding:10px}

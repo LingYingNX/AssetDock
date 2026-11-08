@@ -1,12 +1,135 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { canDropFolder } from '../data/folder-drag'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
+import { useMenuFocus } from './useMenuFocus'
 
-interface MoveTarget {
+interface MoveNode {
   path: string
   label: string
-  hint: string
+  selectable: boolean
+  children: MoveNode[]
+}
+
+function buildMoveTree(paths: string[], source: string): MoveNode {
+  const root: MoveNode = { path: '', label: '库根目录', selectable: false, children: [] }
+  const byPath = new Map<string, MoveNode>([['', root]])
+  for (const item of paths) {
+    const cut = item.lastIndexOf('/')
+    const node: MoveNode = {
+      path: item,
+      label: cut < 0 ? item : item.slice(cut + 1),
+      selectable: canDropFolder(source, item, 'inside', true),
+      children: []
+    }
+    byPath.set(item, node)
+    ;(byPath.get(cut < 0 ? '' : item.slice(0, cut)) ?? root).children.push(node)
+  }
+  const prune = (node: MoveNode): MoveNode | null => {
+    if (node.path === source || node.path.startsWith(`${source}/`)) return null
+    const children = node.children.map(prune).filter((child): child is MoveNode => child != null)
+    if (!node.selectable && children.length === 0) return null
+    return { ...node, children }
+  }
+  return prune(root) ?? { ...root, children: [] }
+}
+
+/** 多级移动菜单:悬停展开子级,点击文件夹直接移入。 */
+function MoveLevel({
+  node,
+  onPick,
+  anchor
+}: {
+  node: MoveNode
+  onPick: (path: string) => void
+  anchor?: HTMLElement | null
+}): React.JSX.Element {
+  const [open, setOpen] = useState<{ path: string; anchor: HTMLElement } | null>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  const nested = anchor != null
+
+  useLayoutEffect(() => {
+    const menu = ref.current
+    if (!menu) return
+    const margin = 8
+    menu.classList.toggle('has-more', menu.scrollHeight > menu.clientHeight + 1)
+    const width = menu.offsetWidth
+    const height = menu.offsetHeight
+    if (!nested) {
+      const row = menu.parentElement?.getBoundingClientRect()
+      if (!row) return
+      const top = Math.max(margin, Math.min(row.top - 5, window.innerHeight - height - margin))
+      menu.style.top = `${top - row.top}px`
+      menu.classList.toggle('flip-x', row.right + 3 + width > window.innerWidth - margin)
+      return
+    }
+    const row = anchor.getBoundingClientRect()
+    const flip = row.right + 3 + width > window.innerWidth - margin
+    setPos({
+      left: flip ? row.left - 3 - width : row.right + 3,
+      top: Math.max(margin, Math.min(row.top - 5, window.innerHeight - height - margin))
+    })
+  }, [anchor, nested])
+
+  const content = (
+    <>
+      {node.children.map((child) => (
+        <div
+          key={child.path}
+          className="menu-row"
+          onMouseEnter={(event) => setOpen({ path: child.path, anchor: event.currentTarget })}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            title={child.children.length > 0 ? '点击移入，悬停展开子文件夹' : undefined}
+            aria-haspopup={child.children.length > 0 ? 'menu' : undefined}
+            aria-expanded={child.children.length > 0 ? open?.path === child.path : undefined}
+            onFocus={(event) =>
+              setOpen(child.children.length > 0 ? { path: child.path, anchor: event.currentTarget.parentElement as HTMLElement } : null)
+            }
+            onClick={(event) => {
+              if (child.selectable) {
+                onPick(child.path)
+                return
+              }
+              const row = event.currentTarget.parentElement as HTMLElement
+              setOpen((value) => (value?.path === child.path ? null : { path: child.path, anchor: row }))
+            }}
+          >
+            {child.label}
+            {child.children.length > 0 ? <Icon name="chev-r" className="ic sub" /> : null}
+          </button>
+          {open?.path === child.path && child.children.length > 0 ? (
+            <MoveLevel node={child} onPick={onPick} anchor={open.anchor} />
+          ) : null}
+        </div>
+      ))}
+      {node.children.length === 0 ? <div className="menu-empty">没有可移动到的文件夹</div> : null}
+    </>
+  )
+
+  if (nested) {
+    return createPortal(
+      <div
+        ref={ref}
+        className="menu glass-menu open folder-move-popup"
+        role="menu"
+        style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}
+      >
+        {content}
+      </div>,
+      document.body
+    )
+  }
+
+  return (
+    <div ref={ref} className="menu glass-menu open submenu folder-move-menu" role="menu">
+      {content}
+    </div>
+  )
 }
 
 /** 文件夹右键菜单:分组列表、层级移动子菜单与屏边翻转。 */
@@ -25,9 +148,6 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const [subOpen, setSubOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const subRef = useRef<HTMLDivElement>(null)
-  const glowFrame = useRef(0)
-  const glowPoint = useRef<{ element: HTMLDivElement; x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (folderCtxMenu) {
@@ -43,31 +163,19 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const menu = folderCtxMenu ?? last
   const path = menu?.path ?? ''
   const menuKey = folderCtxMenu ? `${folderCtxMenu.libraryId}:${path}:${folderCtxMenu.x}:${folderCtxMenu.y}` : ''
+  useMenuFocus(
+    folderCtxMenu != null && mounted,
+    menuRef,
+    () => setFolderCtxMenu(null),
+    'menu',
+    () => document.querySelector<HTMLElement>(`[data-folder-path="${CSS.escape(path)}"] .folder-main`)
+  )
 
   useEffect(() => {
     setSubOpen(false)
   }, [menuKey])
 
-  useEffect(() => () => {
-    if (glowFrame.current) cancelAnimationFrame(glowFrame.current)
-  }, [])
-
-  const targets = useMemo<MoveTarget[]>(() => {
-    if (!path) return []
-    const root = canDropFolder(path, '', 'inside', true)
-      ? [{ path: '', label: '库根目录', hint: '素材库根目录' }]
-      : []
-    return [
-      ...root,
-      ...folderPaths
-        .filter((target) => canDropFolder(path, target, 'inside', true))
-        .map((target) => ({
-          path: target,
-          label: target.split('/').pop() ?? target,
-          hint: target.includes('/') ? target : ''
-        }))
-    ]
-  }, [folderPaths, path])
+  const moveRoot = useMemo(() => buildMoveTree(folderPaths, path), [folderPaths, path])
 
   useLayoutEffect(() => {
     const element = menuRef.current
@@ -84,21 +192,6 @@ export function FolderContextMenu(): React.JSX.Element | null {
     setPos({ top, left })
   }, [menuKey, mounted])
 
-  useLayoutEffect(() => {
-    const submenu = subRef.current
-    if (!submenu) return
-    const row = submenu.parentElement?.getBoundingClientRect()
-    if (!row) return
-    const margin = 8
-    const height = submenu.offsetHeight
-    const desiredTop = row.top - 5
-    const clampedTop = Math.max(margin, Math.min(desiredTop, window.innerHeight - height - margin))
-    submenu.style.top = `${clampedTop - row.top}px`
-    submenu.classList.toggle('has-more', submenu.scrollHeight > submenu.clientHeight + 1)
-    const width = submenu.offsetWidth
-    submenu.classList.toggle('flip-x', row.right + 3 + width > window.innerWidth - margin)
-  }, [subOpen, pos])
-
   if (!mounted || !menu) return null
 
   const close = (): void => setFolderCtxMenu(null)
@@ -109,7 +202,7 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const openSource = (): void => {
     void window.windowApi.folders.open(menu.libraryId, menu.path).then((result) => {
       if ('error' in result) showToast(result.error, 'warn')
-    }).catch(() => showToast('无法打开源目录', 'warn'))
+    }).catch(() => showToast('无法在资源管理器中显示', 'warn'))
   }
 
   return (
@@ -138,7 +231,7 @@ export function FolderContextMenu(): React.JSX.Element | null {
     >
       <div
         ref={menuRef}
-        className={`menu glass-menu folder-menu${folderCtxMenu ? ' open' : ' closing'}`}
+        className={`menu glass-menu ctx-menu${folderCtxMenu ? ' open' : ' closing'}`}
         style={{
           top: pos?.top ?? menu.y,
           left: pos?.left ?? menu.x,
@@ -147,113 +240,70 @@ export function FolderContextMenu(): React.JSX.Element | null {
         role="menu"
         aria-label={`文件夹「${menu.path.split('/').pop() ?? menu.path}」菜单`}
         onClick={(event) => event.stopPropagation()}
-        onPointerMove={(event) => {
-          if (event.pointerType !== 'mouse') return
-          glowPoint.current = {
-            element: event.currentTarget,
-            x: event.clientX,
-            y: event.clientY
-          }
-          if (glowFrame.current) return
-          glowFrame.current = requestAnimationFrame(() => {
-            glowFrame.current = 0
-            const point = glowPoint.current
-            if (!point) return
-            const rect = point.element.getBoundingClientRect()
-            point.element.style.setProperty('--menu-glow-x', `${point.x - rect.left}px`)
-            point.element.style.setProperty('--menu-glow-y', `${point.y - rect.top}px`)
-          })
-        }}
       >
-        <ul className="folder-menu-group" role="group">
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onMouseEnter={() => setSubOpen(false)}
-              onClick={() => act(() => createFolder(menu.path))}
-            >
-              <span className="folder-menu-icon"><Icon name="folder-plus" /></span>
-              <span className="folder-menu-label">新增子文件夹</span>
-            </button>
-          </li>
-          <li className="menu-row folder-menu-move-row" onMouseEnter={() => setSubOpen(true)}>
-            <button
-              type="button"
-              role="menuitem"
-              aria-haspopup="menu"
-              aria-expanded={subOpen}
-              disabled={targets.length === 0}
-              onClick={() => setSubOpen((open) => !open)}
-            >
-              <span className="folder-menu-icon"><Icon name="arr-r" /></span>
-              <span className="folder-menu-label">移动</span>
-              <Icon name="chev-r" className="sub" />
-            </button>
-            {subOpen ? (
-              <div ref={subRef} className="menu glass-menu open submenu folder-menu-submenu" role="menu">
-                {targets.length === 0 ? <div className="menu-empty">没有可移动到的文件夹</div> : null}
-                {targets.map((target, index) => (
-                  <button
-                    key={target.path || '__root'}
-                    type="button"
-                    role="menuitem"
-                    style={{ '--item-index': index } as React.CSSProperties}
-                    onClick={() => act(() => moveFolder(menu.path, target.path, 'inside'))}
-                  >
-                    <span className="folder-menu-target-icon"><Icon name={target.path ? 'folder' : 'layers'} /></span>
-                    <span className="folder-menu-label">{target.label}</span>
-                    <span className="sub">{target.hint}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onMouseEnter={() => setSubOpen(false)}
-              onClick={() => act(() => beginFolderRename(menu.path))}
-            >
-              <span className="folder-menu-icon"><Icon name="edit" /></span>
-              <span className="folder-menu-label">重命名</span>
-              <span className="k">F2</span>
-            </button>
-          </li>
-        </ul>
+        <button
+          type="button"
+          role="menuitem"
+          onMouseEnter={() => setSubOpen(false)}
+          onClick={() => act(() => createFolder(menu.path))}
+        >
+          <Icon name="folder-plus" />
+          新增子文件夹
+        </button>
+        <div className="menu-row" onMouseEnter={() => setSubOpen(true)}>
+          <button
+            type="button"
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={subOpen}
+            disabled={moveRoot.children.length === 0}
+            onFocus={() => setSubOpen(true)}
+            onClick={() => setSubOpen((open) => !open)}
+          >
+            <Icon name="folder" />
+            移动
+            <Icon name="chev-r" className="ic sub" />
+          </button>
+          {subOpen ? (
+            <MoveLevel node={moveRoot} onPick={(target) => act(() => moveFolder(menu.path, target, 'inside'))} />
+          ) : null}
+        </div>
+        <button
+          type="button"
+          role="menuitem"
+          onMouseEnter={() => setSubOpen(false)}
+          onClick={() => act(() => beginFolderRename(menu.path))}
+        >
+          <Icon name="edit" />
+          重命名
+          <span className="k">F2</span>
+        </button>
 
-        <div className="folder-menu-sep" />
+        <div className="sep" />
 
-        <ul className="folder-menu-group" role="group">
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              onMouseEnter={() => setSubOpen(false)}
-              onClick={() => act(openSource)}
-            >
-              <span className="folder-menu-icon"><Icon name="external" /></span>
-              <span className="folder-menu-label">源目录</span>
-            </button>
-          </li>
-        </ul>
+        <button
+          type="button"
+          role="menuitem"
+          onMouseEnter={() => setSubOpen(false)}
+          onClick={() => act(openSource)}
+        >
+          <Icon name="external" />
+          在资源管理器中显示
+        </button>
 
-        <div className="folder-menu-sep" />
+        <div className="sep" />
 
-        <ul className="folder-menu-group" role="group">
-          <li className="danger">
-            <button
-              type="button"
-              role="menuitem"
-              onMouseEnter={() => setSubOpen(false)}
-              onClick={() => act(() => trashFolder(menu.path))}
-            >
-              <span className="folder-menu-icon"><Icon name="trash" /></span>
-              <span className="folder-menu-label">删除</span>
-            </button>
-          </li>
-        </ul>
+        <div className="danger">
+          <button
+            type="button"
+            role="menuitem"
+            onMouseEnter={() => setSubOpen(false)}
+            onClick={() => act(() => trashFolder(menu.path))}
+          >
+            <Icon name="trash" />
+            删除
+          </button>
+        </div>
       </div>
     </div>
   )

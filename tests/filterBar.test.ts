@@ -101,7 +101,13 @@ describe('filter result size formatting', () => {
       formatBytes(131.1 * 1024 ** 2),
       formatBytes(1023.9 * 1024 ** 2),
       formatBytes(32.56 * 1024 ** 3)
-    ]).toEqual(['0 B', '3 KB', '131.1 MB', '1023.9 MB', '32.6 GB'])
+    ]).toEqual([
+      '0\u00A0B',
+      '3\u00A0KB',
+      '131.1\u00A0MB',
+      '1023.9\u00A0MB',
+      '32.6\u00A0GB'
+    ])
   })
 
 })

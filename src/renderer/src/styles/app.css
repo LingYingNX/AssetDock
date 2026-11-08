@@ -3,6 +3,10 @@
    搜索框又搬进了筛选条,那一行两半都是空的。 */
 .app{display:grid;grid-template-rows:var(--h-title) 1fr;height:100vh;min-width:0}
 
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip-link{position:fixed;z-index:200;top:8px;left:8px;padding:8px 12px;border:1px solid var(--acc);border-radius:var(--r-xs);background:var(--bg0);color:var(--t1);font-size:var(--fs-sub);transform:translateY(-160%)}
+.skip-link:focus{transform:none}
+
 /* ============================ 标题栏 ============================ */
 /* 右内边距必须为 0:窗口控制按钮要贴住窗口右边缘(Windows 原生即如此),
    留 8px 会在关窗按钮右侧露出背景条。左侧 28px 是齿轮区留白,保留。
@@ -28,8 +32,9 @@
    圆角走全局统一的 5px(--r-xs 已与其它半径同值,不再有胶囊档 11px 那一套)。
    标签字号原为 15px,是全界面最大的一档,上层只有标题栏;收到 --fs-title 后
    与偏好设置标题同级,不再是一个孤立的大值。 */
-.lib-tabs{display:flex;align-items:center;gap:6px;align-self:stretch;height:100%;padding:0;min-width:0;overflow:hidden}
-.lib-tab{display:flex;align-items:center;justify-content:center;gap:8px;height:100%;padding:0 14px;border-radius:var(--r-xs);font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:transparent;border:1px solid transparent;
+.lib-tabs{display:flex;align-items:center;gap:6px;align-self:stretch;height:100%;padding:0;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain}
+.lib-tabs::-webkit-scrollbar{display:none}
+.lib-tab{display:flex;flex:none;align-items:center;justify-content:center;gap:8px;height:100%;padding:0 14px;border-radius:var(--r-xs);font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:transparent;border:1px solid transparent;
   transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .lib-tab:hover{background:var(--bg3);color:var(--t1)}
 .lib-tab.on{background:var(--bg3);border-color:var(--line);color:var(--t1);font-weight:600}

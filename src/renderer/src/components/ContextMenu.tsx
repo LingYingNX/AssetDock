@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
+import { useMenuFocus } from './useMenuFocus'
 
 interface MenuItem {
   icon: string
@@ -19,9 +20,9 @@ export function ContextMenu(): React.JSX.Element | null {
   const ctxMenu = useUI((s) => s.ctxMenu)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const startRenaming = useUI((s) => s.startRenaming)
-  const trashAsset = useUI((s) => s.trashAsset)
+  const trashAssets = useUI((s) => s.trashAssets)
   const restoreAsset = useUI((s) => s.restoreAsset)
-  const purgeAsset = useUI((s) => s.purgeAsset)
+  const purgeAssets = useUI((s) => s.purgeAssets)
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
   const assets = useUI((s) => s.assets)
   const selectedIds = useUI((s) => s.selectedIds)
@@ -53,6 +54,13 @@ export function ContextMenu(): React.JSX.Element | null {
 
   /** 渲染用的菜单数据:退场期间回落到最后一次打开的快照 */
   const m = ctxMenu ?? last
+  useMenuFocus(
+    ctxMenu != null && mounted,
+    menuRef,
+    () => setCtxMenu(null),
+    'menu',
+    () => document.querySelector<HTMLElement>(`.card[data-asset-id="${CSS.escape(m?.assetId ?? '')}"]`)
+  )
 
   /** 换素材/关菜单时重置,避免上一个菜单量出的位置残留到下一次打开 */
   const ctxKey = ctxMenu ? `${ctxMenu.x},${ctxMenu.y},${ctxMenu.assetId}` : ''
@@ -128,9 +136,10 @@ export function ContextMenu(): React.JSX.Element | null {
 
   /* 退场期间 ctxMenu 已为 null,靠 mounted + last 再撑 180ms 播完淡出 */
   if (!mounted || !m) return null
-  const a = assets.find((x) => x.id === m.assetId)
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]))
+  const a = assetById.get(m.assetId)
   const dbIds = targetIds
-    .map((id) => assets.find((x) => x.id === id))
+    .map((id) => assetById.get(id))
     .filter((x): x is NonNullable<typeof x> => x != null && x.dbId != null && x.libraryId != null)
   const libraryId = dbIds[0]?.libraryId
   const copyable = dbIds.length > 0
@@ -156,13 +165,14 @@ export function ContextMenu(): React.JSX.Element | null {
   }
 
   const moveTargets = folderPaths.filter((path) => path !== '')
-  const moveItems = moveTargets.length
-    ? moveTargets.map((path) => ({
+  const moveItems = [
+    { label: '库根目录', fn: subAct(() => moveAssetsToFolder(targetIds, '')) },
+    ...moveTargets.map((path) => ({
         label: path.split('/').pop() ?? path,
         hint: path.includes('/') ? path : undefined,
         fn: subAct(() => moveAssetsToFolder(targetIds, path))
       }))
-    : [{ label: '库根目录', fn: subAct(() => moveAssetsToFolder(targetIds, '')) }]
+  ]
 
   const items: MenuItem[] = [
     {
@@ -177,7 +187,7 @@ export function ContextMenu(): React.JSX.Element | null {
       : []),
     { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? () => { copySelected() } : undefined },
     { icon: 'download', label: '导出…', fn: copyable ? exportSelection : undefined },
-    { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAsset(m.assetId) : trashAsset(m.assetId)) }
+    { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAssets(targetIds) : trashAssets(targetIds)) }
   ]
 
   const row = (it: MenuItem, key: string): React.JSX.Element => {
@@ -188,6 +198,7 @@ export function ContextMenu(): React.JSX.Element | null {
       <div key={key} className="menu-row">
         <div className={it.danger ? 'danger' : undefined}>
           <button
+            role="menuitem"
             disabled={!enabled}
             aria-haspopup={hasSub ? 'menu' : undefined}
             aria-expanded={hasSub ? expanded : undefined}
@@ -212,7 +223,7 @@ export function ContextMenu(): React.JSX.Element | null {
           <div className="menu glass-menu open submenu" role="menu" ref={subRef}>
             {it.children!.length === 0 ? <div className="menu-empty">暂无可选项</div> : null}
             {it.children!.map((child, i) => (
-              <button key={`${child.label}-${i}`} onClick={child.fn}>
+              <button key={`${child.label}-${i}`} role="menuitem" onClick={child.fn}>
                 {child.swatch ? <span className="dot" style={{ background: child.swatch }} /> : null}
                 {child.label}
                 {child.hint ? <span className="sub">{child.hint}</span> : null}
@@ -257,6 +268,8 @@ export function ContextMenu(): React.JSX.Element | null {
         /* 关闭时摘掉 .open 换上 .closing:.open 把 opacity 定在 1,只有摘掉它才能从 1 过渡到 0。
            .closing 写在 menu.css 里 .open 之后,同特异性靠顺序取胜。 */
         className={`menu glass-menu ctx-menu${ctxMenu ? ' open' : ' closing'}`}
+        role="menu"
+        aria-label="素材操作"
         style={{
           top: pos?.top ?? m.y,
           left: pos?.left ?? m.x,

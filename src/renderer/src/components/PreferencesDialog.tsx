@@ -24,16 +24,13 @@ const DEFAULT_PREFERENCES: PreferenceState = {
   cinema4dPath: ''
 }
 
-type SectionKey = 'general' | 'library' | 'media' | 'interface' | 'operation' | 'shortcuts' | 'notify'
+type SectionKey = 'general' | 'library' | 'media' | 'shortcuts'
 
 const SECTIONS: { key: SectionKey; icon: string; label: string }[] = [
   { key: 'general', icon: 'sliders', label: '常用' },
   { key: 'library', icon: 'drive', label: '资源库' },
   { key: 'media', icon: 'film', label: '音视频' },
-  { key: 'interface', icon: 'grid', label: '界面' },
-  { key: 'operation', icon: 'edit', label: '操作' },
-  { key: 'shortcuts', icon: 'more-h', label: '快捷键' },
-  { key: 'notify', icon: 'info', label: '通知' }
+  { key: 'shortcuts', icon: 'more-h', label: '快捷键' }
 ]
 
 /**
@@ -54,18 +51,25 @@ const SHORTCUT_GROUPS: { group: string; items: { keys: string; label: string }[]
   {
     group: '素材浏览',
     items: [
-      { keys: 'Enter', label: '打开选中素材' },
-      { keys: 'Space', label: '选中 / 取消选中' },
-      { keys: 'F2', label: '重命名' },
-      { keys: 'Del', label: '移入回收站' },
-      { keys: 'Ctrl I', label: '查看文件信息' }
+      { keys: 'Enter', label: '打开焦点素材' },
+      { keys: 'Space', label: '选中焦点素材' },
+      { keys: 'F2', label: '重命名选中素材' },
+      { keys: 'Del', label: '删除选中素材' },
+      { keys: 'Ctrl I', label: '打开焦点素材预览' }
     ]
   },
   {
     group: '灯箱',
     items: [
-      { keys: '← →', label: '上一个 / 下一个' },
+      { keys: '← →', label: '上一个 / 下一个（图片）' },
+      { keys: '+ -', label: '缩放图片' },
+      { keys: '0', label: '复位图片缩放' },
+      { keys: '方向键', label: '放大后平移图片' },
+      { keys: '[ ]', label: '上一个 / 下一个（图片与视频）' },
       { keys: 'Enter', label: '收藏 / 取消收藏' },
+      { keys: 'Space', label: '播放 / 暂停（视频）' },
+      { keys: 'F', label: '全屏 / 退出全屏' },
+      { keys: 'M', label: '静音（视频）' },
       { keys: 'Esc', label: '关闭' }
     ]
   },
@@ -134,6 +138,38 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [draftLoaded, setDraftLoaded] = useState(false)
   /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
   const savedTheme = useRef<ThemeMode>('light')
+  const dialogRef = useRef<HTMLElement>(null)
+  const openFocus = useRef<HTMLElement | null>(null)
+  const createNameRef = useRef<HTMLInputElement>(null)
+  const createPathRef = useRef<HTMLInputElement>(null)
+  const createTriggerRef = useRef<HTMLButtonElement>(null)
+  const createWasOpen = useRef(false)
+  const [nameError, setNameError] = useState('')
+  const [pathError, setPathError] = useState('')
+
+  /* Esc 必须走与「取消/关闭」相同的回滚路径。App 的全局 Esc 只清 openMenu,
+     绕过了 close(),主题预览会留在屏幕上。捕获阶段先处理并截断冒泡。 */
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (createOpen) {
+        if (creating) return
+        setCreateOpen(false)
+        setLibraryName('')
+        setLibraryPath('')
+        setNameError('')
+        setPathError('')
+        return
+      }
+      applyTheme(savedTheme.current)
+      setOpenMenu(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open, createOpen, creating, setOpenMenu])
 
   const activeLibrary = useMemo(() => {
     const libraryId = tabs.find((tab) => tab.id === activeTabId)?.libraryId
@@ -156,7 +192,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
     void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => {
       if (cancelled) return
       const loaded = readPreferences(raw)
-      savedTheme.current = loaded.theme
       setDraft(loaded)
       setDraftLoaded(true)
     })
@@ -208,6 +243,67 @@ export function PreferencesDialog(): React.JSX.Element | null {
     return () => window.clearTimeout(t)
   }, [open, mounted])
 
+  /* 模态面板自己收住 Tab:遮罩从标题栏下方开始,不设陷阱时焦点能跑到后面的库标签/窗口按钮 */
+  useEffect(() => {
+    if (!open || !mounted) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Tab') return
+      const root = document.querySelector<HTMLElement>(createOpen ? '.pref-create-dialog' : '.pref-dialog')
+      if (!root) return
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )).filter((el) => el.getClientRects().length > 0)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (!root.contains(active)) {
+        e.preventDefault()
+        first.focus()
+        return
+      }
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, mounted, createOpen])
+
+  /* 打开时把焦点送进面板,关闭后还给打开前的元素 */
+  useEffect(() => {
+    if (!mounted) {
+      const target = openFocus.current
+      openFocus.current = null
+      if (target?.isConnected) target.focus()
+      return
+    }
+    openFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const id = requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>('.pref-close')?.focus()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [mounted])
+
+  /* 创建资源库是第二层弹窗:焦点进名称输入,关闭回到触发按钮 */
+  useEffect(() => {
+    if (createOpen) {
+      createWasOpen.current = true
+      setNameError('')
+      setPathError('')
+      const id = requestAnimationFrame(() => createNameRef.current?.focus())
+      return () => cancelAnimationFrame(id)
+    }
+    if (createWasOpen.current) {
+      createWasOpen.current = false
+      createTriggerRef.current?.focus()
+    }
+  }, [createOpen])
+
   if (!mounted) return null
 
   const close = (): void => {
@@ -221,6 +317,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
     setCreateOpen(false)
     setLibraryName('')
     setLibraryPath('')
+    setNameError('')
+    setPathError('')
   }
   const save = (): void => {
     if (saving) return
@@ -240,6 +338,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const browseLibraryPath = (): void => {
     void window.windowApi.pickFolder().then((path) => {
       if (path) setLibraryPath(path)
+      if (path) setPathError('')
     })
   }
   const browseToolPath = (key: 'blenderPath' | 'cinema4dPath'): void => {
@@ -250,11 +349,13 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const createLibrary = (): void => {
     const name = libraryName.trim()
     if (!name) {
-      useUI.getState().showToast('请输入资源库名称', 'warn')
+      setNameError('请输入资源库名称')
+      createNameRef.current?.focus()
       return
     }
     if (!libraryPath) {
-      useUI.getState().showToast('请选择存储文件夹路径', 'warn')
+      setPathError('请选择存储文件夹路径')
+      createPathRef.current?.focus()
       return
     }
     setCreating(true)
@@ -322,7 +423,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
           </div>
         </div>
         <div className="pref-create-bar">
-          <button className="pref-create-library" onClick={() => setCreateOpen(true)}><Icon name="plus" />创建资源库</button>
+          <button ref={createTriggerRef} className="pref-create-library" onClick={() => setCreateOpen(true)}><Icon name="plus" />创建资源库</button>
         </div>
       </section>
     </>
@@ -335,28 +436,37 @@ export function PreferencesDialog(): React.JSX.Element | null {
         <div className="pref-tool-row">
           <span className="pref-tool-name">Blender</span>
           <span className="pref-path-picker">
-            <input value={draft.blenderPath} placeholder="留空则自动探测" onChange={(e) => setDraft({ ...draft, blenderPath: e.target.value })} />
-            <button onClick={() => browseToolPath('blenderPath')}>选择</button>
+            <input
+              value={draft.blenderPath}
+              placeholder="留空则自动探测"
+              aria-label="Blender 程序路径"
+              name="blender-path"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setDraft({ ...draft, blenderPath: e.target.value })}
+            />
+            <button aria-label="选择 Blender 程序" onClick={() => browseToolPath('blenderPath')}>选择</button>
           </span>
           <span className="pref-tool-status">{toolStatus.blender}</span>
         </div>
         <div className="pref-tool-row">
           <span className="pref-tool-name">Cinema 4D</span>
           <span className="pref-path-picker">
-            <input value={draft.cinema4dPath} placeholder="留空则自动探测" onChange={(e) => setDraft({ ...draft, cinema4dPath: e.target.value })} />
-            <button onClick={() => browseToolPath('cinema4dPath')}>选择</button>
+            <input
+              value={draft.cinema4dPath}
+              placeholder="留空则自动探测"
+              aria-label="Cinema 4D 程序路径"
+              name="cinema4d-path"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setDraft({ ...draft, cinema4dPath: e.target.value })}
+            />
+            <button aria-label="选择 Cinema 4D 程序" onClick={() => browseToolPath('cinema4dPath')}>选择</button>
           </span>
           <span className="pref-tool-status">{toolStatus.cinema4d}</span>
         </div>
       </section>
     </>
-  )
-
-  const emptyPane = (label: string): React.JSX.Element => (
-    <section className="pref-section pref-empty-pane">
-      <h2>{label}</h2>
-      <p>该分类暂无可用设置。</p>
-    </section>
   )
 
   /* 快捷键为只读速查表:无草稿可改,故不参与「保存/取消」那套提交语义 */
@@ -384,15 +494,12 @@ export function PreferencesDialog(): React.JSX.Element | null {
     general: generalPane,
     library: libraryPane,
     media: mediaPane,
-    interface: emptyPane('界面'),
-    operation: emptyPane('操作'),
-    shortcuts: shortcutsPane,
-    notify: emptyPane('通知')
+    shortcuts: shortcutsPane
   }
 
   return (
     <div className={`pref-backdrop${shown ? ' show' : ''}`} role="presentation">
-      <section className={`pref-dialog glass-preferences${shown ? ' show' : ''}`} role="dialog" aria-modal="true" aria-label="偏好设置">
+      <section ref={dialogRef} className={`pref-dialog glass-preferences${shown ? ' show' : ''}`} role="dialog" aria-modal="true" aria-label="偏好设置">
         <header className="pref-header">
           <span className="pref-title">偏好设置</span>
           <button className="pref-close" title="关闭" aria-label="关闭" onClick={close}><Icon name="x" /></button>
@@ -412,7 +519,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
               </button>
             ))}
           </nav>
-          <main className="pref-content">
+          <div className="pref-content" role="region" aria-label="偏好设置内容">
             {panes[section]}
             {/* 快捷键是只读速查表,没有草稿可提交,给出「保存」只会让人以为需要点 */}
             {section === 'shortcuts' ? null : (
@@ -421,7 +528,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
                 <button className="pref-save" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>
               </footer>
             )}
-          </main>
+          </div>
         </div>
       </section>
       {createOpen ? (
@@ -430,14 +537,38 @@ export function PreferencesDialog(): React.JSX.Element | null {
             <header className="pref-create-header">创建资源库</header>
             <label className="pref-field">
               <span>资源库名称</span>
-              <input autoFocus value={libraryName} placeholder="例如：设计素材库" onChange={(event) => setLibraryName(event.target.value)} />
+              <input
+                ref={createNameRef}
+                value={libraryName}
+                placeholder="例如：设计素材库"
+                name="library-name"
+                autoComplete="off"
+                aria-invalid={nameError ? true : undefined}
+                aria-describedby={nameError ? 'library-name-error' : undefined}
+                onChange={(event) => {
+                  setLibraryName(event.target.value)
+                  if (nameError) setNameError('')
+                }}
+              />
+              {nameError ? <span id="library-name-error" className="pref-field-error" role="alert">{nameError}</span> : null}
             </label>
             <label className="pref-field">
               <span>存储路径</span>
               <span className="pref-path-picker">
-                <input value={libraryPath} placeholder="请选择存储文件夹路径..." readOnly onClick={browseLibraryPath} />
-                <button type="button" onClick={browseLibraryPath}>浏览...</button>
+                <input
+                  ref={createPathRef}
+                  value={libraryPath}
+                  placeholder="请选择存储文件夹路径…"
+                  name="library-path"
+                  autoComplete="off"
+                  aria-invalid={pathError ? true : undefined}
+                  aria-describedby={pathError ? 'library-path-error' : undefined}
+                  readOnly
+                  onClick={browseLibraryPath}
+                />
+                <button type="button" aria-label="浏览选择存储文件夹" onClick={browseLibraryPath}>浏览…</button>
               </span>
+              {pathError ? <span id="library-path-error" className="pref-field-error" role="alert">{pathError}</span> : null}
             </label>
             <footer className="pref-create-footer">
               <button type="button" className="pref-cancel" disabled={creating} onClick={() => closeCreate()}>取消</button>

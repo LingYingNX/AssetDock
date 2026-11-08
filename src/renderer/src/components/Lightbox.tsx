@@ -11,6 +11,7 @@ import { CssEditor } from './CssEditor'
 import { VideoControls, useVideoPlayback, type VideoPlayback } from './VideoControls'
 import { Filmstrip } from './Filmstrip'
 import { DocumentStage, documentNavCount, DOC_ZOOM_MAX, DOC_ZOOM_MIN, stepDocZoom } from './DocumentStage'
+import { clampPanOffset } from '../data/pan-clamp'
 import { formatSpec, needsVideoTranscode } from '../../../shared/formats'
 import type { DocumentPreview } from '../../../shared/types'
 
@@ -28,7 +29,7 @@ function MediaFallback({ label = '文件加载失败或已缺失' }: { label?: s
 }
 
 /** 媒体元素由 effect 原生创建,避免 React 接管 video 时干扰 Chromium 解码管线。 */
-function VideoElement({ src, playback }: { src: string; playback: VideoPlayback }): React.JSX.Element {
+function VideoElement({ src, playback, name }: { src: string; playback: VideoPlayback; name: string }): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,9 +43,11 @@ function VideoElement({ src, playback }: { src: string; playback: VideoPlayback 
       video = document.createElement('video')
       video.preload = 'auto'
       video.autoplay = true
+      video.setAttribute('aria-label', name)
       host.appendChild(video)
       playback.ref.current = video
-      video.addEventListener('canplay', play)
+      /* 只自动播放一次:用户暂停后 seek 会再次触发 canplay,常驻监听会把视频偷偷续播 */
+      video.addEventListener('canplay', play, { once: true })
       video.src = `${src}${src.includes('?') ? '&' : '?'}load=${++videoLoadSeq}`
       play()
     }, 0)
@@ -59,45 +62,201 @@ function VideoElement({ src, playback }: { src: string; playback: VideoPlayback 
       video.remove()
       if (playback.ref.current === video) playback.ref.current = null
     }
-  }, [src, playback.ref])
+  }, [src, playback.ref, name])
 
   return <div ref={hostRef} className="pv-video-element" />
 }
 
-/** 图片查看:滚轮缩放(以光标为锚),双击重置 */
-function MediaImg({ src, name }: { src: string; name: string }): React.JSX.Element {
+/** 图片查看:滚轮/键盘以舞台中心缩放,放大后可拖拽平移,双击重置 */
+function MediaImg({ src, name, onZoom }: { src: string; name: string; onZoom: (scale: number) => void }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [scale, setScale] = useState(1)
-  const [origin, setOrigin] = useState('50% 50%')
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const scaleRef = useRef(1)
+  const offsetRef = useRef({ x: 0, y: 0 })
+  const pendingZoom = useRef(1)
+  const zoomFrame = useRef(0)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; x: number; y: number } | null>(null)
+  const actionsRef = useRef<{ zoomBy: (factor: number) => void; resetView: () => void; panBy: (dx: number, dy: number) => void } | null>(null)
   useEffect(() => {
     setFailed(false)
+    scaleRef.current = 1
+    offsetRef.current = { x: 0, y: 0 }
+    pendingZoom.current = 1
+    onZoom(1)
+    if (zoomFrame.current) cancelAnimationFrame(zoomFrame.current)
+    zoomFrame.current = 0
     setScale(1)
-    setOrigin('50% 50%')
-  }, [src])
+    setOffset({ x: 0, y: 0 })
+    setDragging(false)
+  }, [src, onZoom])
+  useEffect(() => () => {
+    if (zoomFrame.current) cancelAnimationFrame(zoomFrame.current)
+  }, [])
+
+  const zoomBy = (factor: number): void => {
+    const img = imgRef.current
+    if (!img) return
+    const nextScale = Math.min(10, Math.max(0.2, scaleRef.current * factor))
+    const nextOffset = clampPanOffset(
+      offsetRef.current,
+      nextScale,
+      0.5,
+      0.5,
+      img.clientWidth,
+      img.clientHeight
+    )
+    if (nextScale === scaleRef.current && nextOffset.x === offsetRef.current.x && nextOffset.y === offsetRef.current.y) return
+    scaleRef.current = nextScale
+    offsetRef.current = nextOffset
+    setScale(nextScale)
+    setOffset(nextOffset)
+    onZoom(nextScale)
+  }
+
+  const resetView = (): void => {
+    if (zoomFrame.current) cancelAnimationFrame(zoomFrame.current)
+    zoomFrame.current = 0
+    pendingZoom.current = 1
+    scaleRef.current = 1
+    offsetRef.current = { x: 0, y: 0 }
+    setScale(1)
+    setOffset({ x: 0, y: 0 })
+    onZoom(1)
+  }
+
+  const panBy = (dx: number, dy: number): void => {
+    const img = imgRef.current
+    if (!img) return
+    const next = clampPanOffset(
+      { x: offsetRef.current.x + dx, y: offsetRef.current.y + dy },
+      scaleRef.current,
+      0.5,
+      0.5,
+      img.clientWidth,
+      img.clientHeight
+    )
+    if (next.x === offsetRef.current.x && next.y === offsetRef.current.y) return
+    offsetRef.current = next
+    setOffset(next)
+  }
+
+  actionsRef.current = { zoomBy, resetView, panBy }
+
+  /*
+   * 图片不再抢焦点:焦点环会沿整张图外缘画一圈蓝框。
+   * 缩放快捷键改由灯箱级监听接管,胶片带/进度条/菜单里的按键仍归它们自己。
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' || target.isContentEditable)) return
+      if (document.querySelector('.menu, .settings-menu, .pref-dialog, .pref-create-dialog, .tag-filter-menu')) return
+      const actions = actionsRef.current
+      if (!actions || !imgRef.current) return
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault()
+        event.stopPropagation()
+        actions.zoomBy(1.15)
+        return
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault()
+        event.stopPropagation()
+        actions.zoomBy(1 / 1.15)
+        return
+      }
+      if (event.key === '0') {
+        event.preventDefault()
+        event.stopPropagation()
+        actions.resetView()
+        return
+      }
+      if (scaleRef.current <= 1) return
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+      if (target?.closest('.pv-stripbar, .pv-dock, .pv-ctl, [role="slider"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      const step = 40
+      actions.panBy(
+        event.key === 'ArrowLeft' ? step : event.key === 'ArrowRight' ? -step : 0,
+        event.key === 'ArrowUp' ? step : event.key === 'ArrowDown' ? -step : 0
+      )
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
   if (failed) return <MediaFallback />
+
   return (
     <img
+      ref={imgRef}
       src={src}
       alt={name}
       draggable={false}
       style={{
-        transform: `scale(${scale})`,
-        transformOrigin: origin,
-        transition: 'transform 120ms cubic-bezier(.23,1,.32,1)',
-        cursor: scale > 1 ? 'grab' : 'zoom-in'
+        width: '100%',
+        height: '100%',
+        /* 始终 contain:按当前框等比放到最大,四边都不裁。
+           cover 会把超出比例的部分切掉——缩小后那个裁切也还在,画面就永远不完整。 */
+        objectFit: 'contain',
+        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+        transformOrigin: '50% 50%',
+        willChange: 'transform',
+        cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
+        touchAction: 'none'
       }}
       onWheel={(e) => {
         e.preventDefault()
-        const rect = e.currentTarget.getBoundingClientRect()
-        const x = ((e.clientX - rect.left) / rect.width) * 100
-        const y = ((e.clientY - rect.top) / rect.height) * 100
-        setOrigin(`${Math.min(100, Math.max(0, x))}% ${Math.min(100, Math.max(0, y))}%`)
-        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-        setScale((s) => Math.min(10, Math.max(0.2, s * factor)))
+        /* 滚轮可能一帧来十几次:先累积,按帧只提交一次,避免 React 逐事件重渲染造成拖动发涩 */
+        const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1
+        pendingZoom.current *= Math.exp(-e.deltaY * unit * 0.0015)
+        if (zoomFrame.current) return
+        zoomFrame.current = requestAnimationFrame(() => {
+          zoomFrame.current = 0
+          const factor = pendingZoom.current
+          pendingZoom.current = 1
+          zoomBy(factor)
+        })
       }}
       onDoubleClick={() => {
-        setScale(1)
-        setOrigin('50% 50%')
+        /* 双击复位缩放与平移 */
+        resetView()
+      }}
+      onPointerDown={(e) => {
+        if (scaleRef.current <= 1) return
+        dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, x: offsetRef.current.x, y: offsetRef.current.y }
+        e.currentTarget.setPointerCapture(e.pointerId)
+        setDragging(true)
+      }}
+      onPointerMove={(e) => {
+        const drag = dragRef.current
+        if (!drag || drag.pointerId !== e.pointerId) return
+        const next = clampPanOffset(
+          { x: drag.x + (e.clientX - drag.startX), y: drag.y + (e.clientY - drag.startY) },
+          scaleRef.current,
+          0.5,
+          0.5,
+          e.currentTarget.clientWidth,
+          e.currentTarget.clientHeight
+        )
+        offsetRef.current = next
+        setOffset(next)
+      }}
+      onPointerUp={(e) => {
+        const drag = dragRef.current
+        if (!drag || drag.pointerId !== e.pointerId) return
+        dragRef.current = null
+        setDragging(false)
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null
+        setDragging(false)
       }}
       onError={() => setFailed(true)}
     />
@@ -137,6 +296,8 @@ export function Lightbox(): React.JSX.Element | null {
   /* 全屏切换是 position:absolute→fixed 的整值跳变,position 不可过渡。
      做法是先留住旧矩形的快照,等切换落地后再做一次反向补偿 —— 这就是 FLIP。 */
   const rootRef = useRef<HTMLDivElement>(null)
+  const backRef = useRef<HTMLButtonElement>(null)
+  const restoreFocus = useRef<HTMLElement | null>(null)
   const fsFlip = useRef<{ first: DOMRect; animated: boolean } | null>(null)
   /* reduced-motion 下不做 FLIP 补偿:用户明确要求少动,这里就不该替它补一段 */
   const reduceMotion = useRef(
@@ -161,6 +322,7 @@ export function Lightbox(): React.JSX.Element | null {
   const [pdfPage, setPdfPage] = useState(1)
   const [documentPage, setDocumentPage] = useState(1)
   const [documentZoom, setDocumentZoom] = useState(1)
+  const [imageZoom, setImageZoom] = useState(1)
 
   /* 当前素材:早退之前不能调 hook,故先算出安全值再交给 useVideoPlayback。
      退场期间用 lastId,保证画面在被淡出的那一拍里还是原来那张 */
@@ -241,6 +403,7 @@ export function Lightbox(): React.JSX.Element | null {
     setPdfPage(1)
     setDocumentPage(1)
     setDocumentZoom(1)
+    setImageZoom(1)
   }, [lightboxId])
 
   useEffect(() => {
@@ -275,6 +438,19 @@ export function Lightbox(): React.JSX.Element | null {
     const id = requestAnimationFrame(() => setShown(true))
     return () => cancelAnimationFrame(id)
   }, [mounted, lightboxId])
+
+  /* 打开时把焦点移到返回键,关闭后还给打开前的元素 */
+  useEffect(() => {
+    if (!mounted) {
+      const target = restoreFocus.current
+      restoreFocus.current = null
+      if (target?.isConnected) target.focus()
+      return
+    }
+    restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const id = requestAnimationFrame(() => backRef.current?.focus())
+    return () => cancelAnimationFrame(id)
+  }, [mounted])
 
   /* 记录退场时要保持的全屏形态 */
   useEffect(() => {
@@ -332,6 +508,8 @@ export function Lightbox(): React.JSX.Element | null {
     const onKey = (e: KeyboardEvent): void => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      /* 进度条自己处理方向键;否则同一次按键会既 seek 又逐帧 */
+      if (t?.closest?.('[role="slider"]')) return
       const k = e.key.toLowerCase()
       if (e.code === 'Space') {
         if (!isVideo) return
@@ -415,9 +593,11 @@ export function Lightbox(): React.JSX.Element | null {
   return (
     <div
       ref={rootRef}
-      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}${isModel ? ' model' : ''}`}
+      className={`pv${shown ? ' show' : ''}${fsNow ? ' full' : ''}${isModel ? ' model' : ''}${a.type === 'image' ? ' image-mode' : ''}`}
       role="dialog"
-      aria-modal={fsNow}
+      /* 全屏也不设 aria-modal:灯箱的 Esc/[/]/Enter 是全局快捷键,
+         标成模态会让 isEditableTarget 把这些键全部当成对话框内部输入而吞掉。 */
+      aria-modal={false}
       aria-label="详情预览"
       onClick={(e) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('pv-stage')) closeLightbox()
@@ -425,12 +605,12 @@ export function Lightbox(): React.JSX.Element | null {
     >
       {/* 顶栏只承担进出,中间完全留白,信息统一下沉到播放器底栏。 */}
       <div className="pv-top">
-        <button className="pv-corner-btn" title="返回 (Esc)" aria-label="返回" onClick={closeLightbox}>
+        <button ref={backRef} className="pv-corner-btn" title="返回 (Esc)" aria-label="返回" onClick={closeLightbox}>
           <Icon name="arr-l" />
         </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}${a.type === 'image' ? ' image-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -459,7 +639,10 @@ export function Lightbox(): React.JSX.Element | null {
                   hdr={modelHdr}
                   hdrSettings={hdrSettings}
                   onProgress={setLoadPct}
-                  onLoaded={() => setRealFailed(false)}
+                  onLoaded={() => {
+                    setRealFailed(false)
+                    setLoadPct(100)
+                  }}
                   onError={() => {
                     setRealFailed(true)
                     setLoadPct(100)
@@ -594,6 +777,7 @@ export function Lightbox(): React.JSX.Element | null {
                 <MediaImg
                   src={a.dbId != null ? refreshedImageViewUrl : `/@fs/${a.previewUrl ?? ''}`}
                   name={a.name}
+                  onZoom={setImageZoom}
                 />
               )
             ) : (
@@ -608,7 +792,7 @@ export function Lightbox(): React.JSX.Element | null {
                       </div>
                     </div>
                   ) : videoSrc ? (
-                    <VideoElement src={videoSrc} playback={playback} />
+                    <VideoElement src={videoSrc} playback={playback} name={a.name} />
                   ) : (
                     <div className="pv-loading">
                       {prepared?.progress == null
@@ -620,12 +804,17 @@ export function Lightbox(): React.JSX.Element | null {
               </div>
             )}
           </div>
+          {a.type === 'image' && a.format !== 'SVG' && !prepared?.error ? (
+            <div className="pv-image-zoom" aria-label={`图片缩放 ${Math.round(imageZoom * 100)}%`}>
+              {Math.round(imageZoom * 100)}%
+            </div>
+          ) : null}
         </div>
         </>
         )}
       </div>
 
-      {!isStyle && !isModel ? (
+      {!isStyle && !isModel && a.type !== 'image' ? (
         <div className="pv-dock">
           <div className="pv-meta-row">
             <div className="pv-meta-copy">

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
+import { useMenuFocus } from './useMenuFocus'
 
 interface MenuPosition {
   top: number
@@ -40,6 +41,7 @@ function SettingsItem({
 export function SettingsMenu(): React.JSX.Element | null {
   const open = useUI((s) => s.openMenu === 'settings')
   const setOpenMenu = useUI((s) => s.setOpenMenu)
+  const importAssetFilesFlow = useUI((s) => s.importAssetFilesFlow)
   const importEagleFlow = useUI((s) => s.importEagleFlow)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
   const closeTab = useUI((s) => s.closeTab)
@@ -58,6 +60,7 @@ export function SettingsMenu(): React.JSX.Element | null {
      菜单会在淡出的同时跳到左上角。
      卸载定时器不能省:reduced-motion 下 glass.css 全局移除过渡,transitionend 永不触发。 */
   const [mounted, setMounted] = useState(open)
+  useMenuFocus(open && mounted && position != null, menuRef, () => setOpenMenu(null))
 
   useEffect(() => {
     if (open) {
@@ -126,6 +129,7 @@ export function SettingsMenu(): React.JSX.Element | null {
         <SettingsItem icon="drive" label="资源库管理" arrow expanded={libraryMenuOpen} onClick={() => setLibraryMenuOpen((value) => !value)} />
         {libraryMenuOpen && (
           <div className="settings-menu settings-menu-submenu glass-menu" role="menu">
+            <SettingsItem icon="plus" label="导入素材" onClick={importAssetFilesFlow} />
             <SettingsItem icon="layers" label="导入 Eagle 素材" onClick={importEagleFlow} />
             {canCloseTab && (
               <SettingsItem

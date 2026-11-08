@@ -7,6 +7,7 @@ import {
 import { ensureLibraryStorage } from '../services/libraryDb'
 import { rememberPickedPath, validateLibraryCreatePath, type PickedPathMap } from '../services/libraryCreate'
 import { configuredToolPath, probeTool } from '../services/externalTools'
+import { EXT_WHITELIST } from '../services/ignore'
 import { win, libRootOf } from './context'
 import { reconcileWhenOpened, scanLibraryContents, migrationFailures, attachRootWatcher } from './watch'
 
@@ -32,6 +33,16 @@ export function registerLibraryIpc(): void {
       filters: [{ name: '可执行文件', extensions: ['exe', 'cmd', 'bat'] }]
     })
     return r.canceled ? null : r.filePaths[0] ?? null
+  })
+
+  ipcMain.handle('dialog:pickAssetFiles', async () => {
+    const w = win()
+    if (!w) return []
+    const r = await dialog.showOpenDialog(w, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '素材文件', extensions: Object.keys(EXT_WHITELIST) }]
+    })
+    return r.canceled ? [] : r.filePaths
   })
 
   ipcMain.handle('tools:status', async () => {

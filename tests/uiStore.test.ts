@@ -1114,3 +1114,147 @@ describe('persistence failure feedback', () => {
     expect(reload).toHaveBeenCalled()
   })
 })
+
+describe('selection and library switch hygiene', () => {
+  const asset = (id: string, name = id): Record<string, unknown> => ({
+    id,
+    dbId: Number(id.replace(/\D/g, '')) || null,
+    libraryId: 1,
+    type: 'image',
+    format: 'JPG',
+    name,
+    sizeBytes: 1,
+    importedAt: '2026-09-05T00:00',
+    rating: 0,
+    favorite: false,
+    reviewFlag: false,
+    tags: [],
+    folders: [],
+    note: '',
+    palette: [],
+    previewUrl: '',
+    originalUrl: ''
+  })
+
+  it('trashes every explicitly selected asset instead of only the active one', async () => {
+    const update = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('window', { setTimeout, clearTimeout, windowApi: { assets: { update } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      assets: [asset('a1'), asset('a2'), asset('a3')] as never,
+      ...(() => {
+        const ids = ['a1', 'a2']
+        return { selectedIds: ids, selectedSet: new Set(ids), selectionAnchorId: 'a1', activeId: 'a1', focusedCardId: 'a1' }
+      })(),
+      lightboxId: 'a1',
+      cssDirty: false
+    })
+
+    useUI.getState().trashAssets(useUI.getState().selectedIds)
+
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(useUI.getState().selectedIds).toEqual([])
+    expect(useUI.getState().assets.filter((item) => item.deletedAt).map((item) => item.id)).toEqual(['a1', 'a2'])
+    expect(useUI.getState().lightboxId).toBeNull()
+  })
+
+  it('moves active and focus with a marquee selection', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({ activeId: 'old', focusedCardId: 'old' })
+
+    useUI.getState().setSelectedIds(['a1', 'a2'])
+    expect(useUI.getState().activeId).toBe('a2')
+    expect(useUI.getState().focusedCardId).toBe('a2')
+
+    useUI.getState().clearSelection()
+    expect(useUI.getState().activeId).toBeNull()
+    expect(useUI.getState().focusedCardId).toBeNull()
+  })
+
+  it('drops selection and closes the lightbox when search hides them', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      nav: 'all',
+      search: '',
+      filters: DEFAULT_FILTERS,
+      stripColor: null,
+      assets: [asset('a1', 'one'), asset('a2', 'two')] as never,
+      selectedIds: ['a1', 'a2'],
+      selectedSet: new Set(['a1', 'a2']),
+      selectionAnchorId: 'a2',
+      activeId: 'a2',
+      focusedCardId: 'a2',
+      lightboxId: 'a2',
+      cssDirty: false
+    })
+
+    useUI.getState().setSearch('one')
+
+    expect(useUI.getState().selectedIds).toEqual(['a1'])
+    expect(useUI.getState().activeId).toBe('a1')
+    expect(useUI.getState().lightboxId).toBeNull()
+  })
+
+  it('asks before the filmstrip discards unsaved CSS', async () => {
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('window', { confirm, windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      assets: [asset('a1'), asset('a2')] as never,
+      lightboxId: 'a1',
+      cssDirty: true
+    })
+
+    useUI.getState().openLightbox('a2')
+    expect(confirm).toHaveBeenCalled()
+    expect(useUI.getState().lightboxId).toBe('a1')
+
+    confirm.mockReturnValue(true)
+    useUI.getState().openLightbox('a2')
+    expect(useUI.getState().lightboxId).toBe('a2')
+    expect(useUI.getState().cssDirty).toBe(false)
+  })
+
+  it('clears the previous library view when switching tabs', async () => {
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('window', {
+      confirm,
+      windowApi: {
+        tabs: { save: vi.fn().mockResolvedValue(undefined) },
+        state: { set: vi.fn().mockResolvedValue({ ok: true }) },
+        library: { open: vi.fn().mockResolvedValue(undefined) }
+      }
+    })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    const reload = vi.fn()
+    useUI.setState({
+      tabs: [
+        { id: 't1', name: 'one', libraryId: 1 },
+        { id: 't2', name: 'two', libraryId: 2 }
+      ],
+      activeTabId: 't1',
+      assets: [asset('a1')] as never,
+      selectedIds: ['a1'],
+      selectedSet: new Set(['a1']),
+      activeId: 'a1',
+      focusedCardId: 'a1',
+      lightboxId: 'a1',
+      cssDirty: true,
+      reloadActiveLibrary: reload
+    })
+
+    useUI.getState().openTab('t2')
+
+    const state = useUI.getState()
+    expect(confirm).toHaveBeenCalled()
+    expect(state.activeTabId).toBe('t2')
+    expect(state.selectedIds).toEqual([])
+    expect(state.activeId).toBeNull()
+    expect(state.focusedCardId).toBeNull()
+    expect(state.lightboxId).toBeNull()
+    expect(state.cssDirty).toBe(false)
+    expect(reload).toHaveBeenCalled()
+  })
+})
