@@ -1,9 +1,10 @@
-import { copyFile, lstat, mkdir, readdir, rename } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readdir, rename, rmdir } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isIgnoredDir } from './ignore'
 import { realPathWithinRoot } from './libResolve'
 
 const DEFAULT_NAME = '未命名'
+const FOLDER_WALK_CONCURRENCY = 8
 const INVALID_NAME = /[<>:"/\\|?*\u0000-\u001F]/
 const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
@@ -50,19 +51,30 @@ function folderName(name: string): string {
 
 export async function listLibraryFolders(root: string): Promise<string[]> {
   const folders: string[] = []
-
-  const walk = async (relDir: string): Promise<void> => {
-    const entries = await readdir(join(root, relDir), { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      const rel = relDir ? `${relDir}/${entry.name}` : entry.name
-      if (isIgnoredDir(rel)) continue
-      folders.push(rel)
-      await walk(rel)
+  // 串行递归在机械盘上 200+ 目录要 2s+;并发读目录能让侧边栏目录树首帧就出来。
+  const queue: string[] = ['']
+  while (queue.length > 0) {
+    const batch = queue.splice(0, FOLDER_WALK_CONCURRENCY)
+    const children = await Promise.all(batch.map(async (relDir) => {
+      // 只容忍「刚好被删掉」:权限不足、盘掉线必须报错,否则整棵子树静默消失
+      const entries = await readdir(join(root, relDir), { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return []
+        throw error
+      })
+      const found: string[] = []
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+        if (isIgnoredDir(rel)) continue
+        found.push(rel)
+      }
+      return found
+    }))
+    for (const found of children) {
+      folders.push(...found)
+      queue.push(...found)
     }
   }
-
-  await walk('')
   return folders.sort((a, b) => a.localeCompare(b))
 }
 
@@ -144,6 +156,45 @@ export async function resolveLibraryFolder(root: string, relPath: string): Promi
   if (!real) fail('文件夹路径越界')
   if (!(await lstat(real)).isDirectory()) fail('文件夹不存在')
   return real
+}
+
+/**
+ * 摘掉一个空文件夹,非空返回 false。
+ *
+ * 跨库移动收尾时用:源文件删掉后目录才空得下来,但源文件可能删不掉(占用/权限),
+ * 那串残留文件必须留在原地。所以这里只用非递归 rmdir —— 目录里还有任何东西就失败,
+ * 天然不会把「没搬干净」的目录连同漏掉的素材一起抹掉。
+ */
+export async function removeFolderIfEmpty(root: string, relPath: string): Promise<boolean> {
+  const target = libraryPath(root, relPath)
+  try {
+    await rmdir(target.abs)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 从 relDir 起逐级向上摘空目录(含自身),库根不动。
+ *
+ * 移动/剪切把文件夹里最后一批素材搬走之后,磁盘上会剩一个 0 件的空壳,
+ * 侧栏上挂着一个点不开的空文件夹;搬完就顺手摘掉。
+ */
+export async function removeEmptyFolderChain(root: string, relDir: string): Promise<number> {
+  const segments = relDir.split('/').filter(Boolean)
+  let removed = 0
+  for (let i = segments.length; i > 0; i--) {
+    if (await removeFolderIfEmpty(root, segments.slice(0, i).join('/'))) removed++
+  }
+  return removed
+}
+
+/** 确保库内某个相对路径的目录存在(跨库搬整棵子树时目标库可能还没有这层目录)。 */
+export async function ensureLibraryFolder(root: string, relPath: string): Promise<void> {
+  const target = libraryPath(root, relPath)
+  await assertRealWithinRoot(root, target.abs)
+  await mkdir(target.abs, { recursive: true })
 }
 
 export async function renameLibraryFolder(root: string, relPath: string, newName: string): Promise<string> {

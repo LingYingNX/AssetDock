@@ -8,6 +8,8 @@ import { probeDocumentMeta } from './documentMeta'
 import type { ScanEntry } from './store'
 
 const SCAN_BATCH_SIZE = 64
+/** 全局限流:8 个目录 × 64 个文件会同时打几百个 stat,机械盘上会把 folders:list 排到后面 */
+const FILE_CONCURRENCY = 24
 
 /** 对账用的已知行:size/mtime 一致时可直接沿用旧指纹,跳过读文件与元数据探测 */
 export interface KnownScanFile {
@@ -97,6 +99,23 @@ export async function scanLibrary(
   const queue: string[] = ['']
   let done = 0
   let errors = 0
+  let active = 0
+  const waiting: (() => void)[] = []
+  const withFileSlot = async <T>(work: () => Promise<T>): Promise<T> => {
+    if (active >= FILE_CONCURRENCY) {
+      await new Promise<void>((resolve) => waiting.push(resolve))
+    } else {
+      active++
+    }
+    try {
+      return await work()
+    } finally {
+      // 名额直接交给下一个等待者,active 不变;没人等才真正释放
+      const next = waiting.shift()
+      if (next) next()
+      else active--
+    }
+  }
 
   async function walk(relDir: string): Promise<void> {
     const absDir = join(root, relDir)
@@ -124,7 +143,7 @@ export async function scanLibrary(
       }
       if (!dent.isFile() || isIgnored(rel)) continue
       const abs = join(root, rel)
-      batch.push((async () => {
+      batch.push(withFileSlot(async () => {
         const st = await stat(abs).catch((error: unknown) => {
           errors++
           onError?.(rel, error)
@@ -162,7 +181,7 @@ export async function scanLibrary(
         batchEntries.push(entry)
         done++
         if (onProgress && done % 20 === 0) onProgress(done)
-      })())
+      }))
       if (batch.length >= SCAN_BATCH_SIZE) {
         await Promise.all(batch.splice(0))
         flushBatch()

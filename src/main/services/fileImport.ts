@@ -44,7 +44,8 @@ function targetInside(root: string, targetFolder: string, fileName: string): { a
   return { abs, rel: rel.replace(/\\/g, '/') }
 }
 
-async function uniqueTarget(root: string, targetFolder: string, fileName: string, claimed: Set<string>): Promise<{ abs: string; rel: string }> {
+/** 在目标文件夹里找一个不冲突的文件名;`claimed` 收集同批已占用的路径,避免批内互撞。 */
+export async function uniqueTarget(root: string, targetFolder: string, fileName: string, claimed: Set<string>): Promise<{ abs: string; rel: string }> {
   const dot = fileName.lastIndexOf('.')
   const stem = dot > 0 ? fileName.slice(0, dot) : fileName
   const ext = dot > 0 ? fileName.slice(dot) : ''

@@ -113,7 +113,9 @@
 .menu.pick-menu.menu-anchor-right{transform-origin:top right}
 
 /* 标签筛选面板:尺寸固定,避免标签增多后把筛选条撑宽。
-   左栏保留内置入口和用户总分类;右侧每行严格 4 条、间距 2.5px。 */
+   左栏保留内置入口和用户总分类;右侧每行严格 4 条、间距 4px。
+   三区层次:表头与左栏压一层次要面(--bg2),主区留在 --menu-solid 上。
+   原先是三区同一块 #1B2430,只靠 1px 分隔线区分,截图里读不出层次。 */
 .tag-filter-menu{
   position:fixed;z-index:90;display:flex;flex-direction:column;
   width:430px;min-width:430px;height:250px;padding:0;overflow:hidden;
@@ -131,118 +133,143 @@
 }
 
 .tag-filter-head{
-  display:flex;align-items:center;gap:4px;flex:none;height:22px;padding:0 6px;
+  display:flex;align-items:center;gap:6px;flex:none;height:var(--h-sm);padding:0 8px;
   border-bottom:1px solid var(--line);
-  background:var(--menu-solid)
+  background:var(--bg2)
 }
-.tag-filter-search{position:relative;display:flex;align-items:center;flex:1;min-width:0;max-width:155px;height:18px}
-.tag-filter-search>.ic{position:absolute;left:4px;width:10px;height:10px;color:var(--t3);pointer-events:none}
+/* 搜索不再限宽 155px:原来它左边贴死、右边到「全部」之间空出 180px 死区。
+   搜索框吃掉这段,表头读成「搜索 + 右对齐工具」而不是隔空两簇。 */
+.tag-filter-search{position:relative;display:flex;align-items:center;flex:1;min-width:0;height:22px}
+.tag-filter-search>.ic{position:absolute;left:6px;width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);pointer-events:none}
 .tag-filter-search input{
-  width:100%;height:18px;padding:0 17px 0 17px;border:1px solid var(--line);
-  border-radius:var(--r-xs);outline:none;background:var(--bg2);color:var(--t1);
-  font:400 12px/1.2 var(--font)
+  width:100%;height:22px;padding:0 22px 0 22px;border:1px solid var(--line);
+  border-radius:var(--r-xs);outline:none;background:var(--bg3);color:var(--t1);
+  font:400 var(--fs-body)/1.2 var(--font);
+  transition:border-color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out)
 }
 .tag-filter-search input::placeholder{color:var(--t3)}
-.tag-filter-search input:focus{border-color:var(--acc-line)}
+.tag-filter-search input:hover{border-color:var(--line2)}
+.tag-filter-search input:focus{border-color:var(--acc-line);background:var(--bg4)}
 .tag-filter-search button{
-  position:absolute;right:1px;display:grid;place-items:center;width:15px;height:16px;color:var(--t3)
+  position:absolute;right:2px;display:grid;place-items:center;width:18px;height:18px;
+  border-radius:var(--r-xs);color:var(--t3);
+  transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out)
 }
-.tag-filter-search button:hover{color:var(--t1)}
-.tag-filter-search button .ic{width:9px;height:9px}
-.tag-filter-head-tools{display:flex;align-items:center;gap:4px;margin-left:auto;flex:none}
-.tag-filter-head-tools select,
+.tag-filter-search button:hover{color:var(--t1);background:var(--bg4)}
+.tag-filter-search button .ic{width:var(--ic-xs);height:var(--ic-xs)}
+.tag-filter-head-tools{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}
+/* 排序原先是最裸的原生 select:系统箭头与面板的线性图标不同源,18px 高度也比同排控件矮一档。
+   改成 appearance:none + 自绘 chev-d,回到 22px 同排高度,悬停/聚焦给同一套边框反馈。 */
+.tag-filter-sort{position:relative;display:flex;align-items:center}
+.tag-filter-sort select{
+  appearance:none;height:22px;padding:0 20px 0 7px;border:1px solid var(--line);border-radius:var(--r-xs);
+  background:var(--bg3);color:var(--t2);font:400 var(--fs-cap)/1 var(--font);outline:none;cursor:pointer;
+  transition:border-color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out)
+}
+.tag-filter-sort select:hover{border-color:var(--line2);color:var(--t1)}
+.tag-filter-sort select:focus{border-color:var(--acc-line)}
+.tag-filter-sort>.ic{position:absolute;right:5px;width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);pointer-events:none}
 .tag-filter-head-tools>button{
-  height:18px;border:1px solid var(--line);border-radius:var(--r-xs);background:var(--bg2);
-  color:var(--t2);font:400 11px/1 var(--font)
+  height:22px;padding:0 9px;border:1px solid var(--line);border-radius:var(--r-xs);background:var(--bg3);
+  color:var(--t2);font:400 var(--fs-cap)/1 var(--font);
+  transition:border-color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out)
 }
-.tag-filter-head-tools select{width:64px;padding:0 2px;outline:none;cursor:pointer}
-.tag-filter-head-tools select:hover,.tag-filter-head-tools>button:hover{border-color:var(--line2);color:var(--t1)}
-.tag-filter-head-tools>button{padding:0 6px}
+.tag-filter-head-tools>button:hover{border-color:var(--line2);color:var(--t1)}
 .tag-filter-head-tools>button.on{border-color:var(--acc-line);background:var(--acc-soft);color:var(--acc2)}
 
 .tag-filter-body{display:flex;flex:1;min-height:0}
 .tag-filter-cats{
   display:flex;flex-direction:column;flex:none;width:92px;
   overflow:hidden;border-right:1px solid var(--line);
-  background:var(--menu-solid)
+  background:var(--bg2)
 }
-.tag-filter-cats-scroll{flex:1;min-height:0;padding:2px 0;overflow-y:auto;overscroll-behavior:contain}
+.tag-filter-cats-scroll{flex:1;min-height:0;padding:4px 0;overflow-y:auto;overscroll-behavior:contain}
 .tag-filter-cats-scroll::-webkit-scrollbar{width:3px}
 .tag-filter-cats-scroll::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:0;border-radius:2px}
-.tag-filter-sep{height:1px;margin:2px 5px;background:var(--sep)}
-.tag-filter-cat-row{position:relative;display:flex;width:100%;height:22px}
+.tag-filter-sep{height:1px;margin:4px 6px;background:var(--sep)}
+.tag-filter-cat-row{position:relative;display:flex;width:100%;height:24px}
 .tag-filter-cat-row>button:first-child{
-  position:relative;display:flex;align-items:center;gap:3px;width:100%;height:22px;
-  padding:0 5px;color:var(--t2);font-size:12px;text-align:left;
-  transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out)
+  position:relative;display:flex;align-items:center;gap:4px;width:100%;height:24px;
+  padding:0 6px;color:var(--t2);font-size:var(--fs-body);text-align:left;
+  transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),
+  transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)
 }
 .tag-filter-cat-row>button:first-child:hover:not([disabled]){background:var(--bg3);color:var(--t1)}
 .tag-filter-cat-row>button:first-child.on{background:var(--acc-soft);color:var(--acc2);font-weight:500}
 .tag-filter-cat-row>button:first-child[disabled]{opacity:.45;cursor:default}
 .tag-filter-cat-row.drop{outline:1px solid var(--acc);outline-offset:-1px;background:var(--acc-soft)}
-.tag-filter-cat-indicator{position:absolute;left:0;top:3px;bottom:3px;width:2px;border-radius:0 2px 2px 0;background:var(--acc)}
+.tag-filter-cat-indicator{position:absolute;left:0;top:4px;bottom:4px;width:2px;border-radius:0 2px 2px 0;background:var(--acc)}
 .tag-filter-cat-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag-filter-cat-dot{width:4px;height:4px;margin-left:auto;border-radius:50%;background:var(--acc);flex:none}
-.tag-filter-cat-count{margin-left:auto;color:var(--t3);font:11px/1 var(--font-mono);flex:none}
+.tag-filter-cat-count{margin-left:auto;color:var(--t3);font:400 var(--fs-cap)/1 var(--font-mono);flex:none;
+  transition:opacity var(--dur-hover) var(--ease-out)}
 .tag-filter-cat-dot+.tag-filter-cat-count{margin-left:0}
 .tag-filter-cat-row>button:first-child.on .tag-filter-cat-count{color:var(--acc2)}
+/* 删除按钮与计数占同一格:原来两个都贴 right:2px,悬停时 × 直接压在数字上。
+   改成同一格交叉淡入淡出——悬停时计数让位,指针离开再换回来。 */
 .tag-filter-cat-delete{
-  position:absolute;right:2px;top:3px;display:grid;place-items:center;width:16px;height:16px;
+  position:absolute;right:3px;top:4px;display:grid;place-items:center;width:16px;height:16px;
   border-radius:var(--r-xs);background:var(--bg4);color:var(--t3);opacity:0;
   transition:opacity var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out)
 }
+.tag-filter-cat-row:has(.tag-filter-cat-delete):hover .tag-filter-cat-count,
+.tag-filter-cat-row:has(.tag-filter-cat-delete):focus-within .tag-filter-cat-count{opacity:0}
 .tag-filter-cat-row:hover .tag-filter-cat-delete{opacity:1}
 .tag-filter-cat-row:focus-within .tag-filter-cat-delete,
 .tag-filter-cat-delete:focus-visible{opacity:1}
 .tag-filter-cat-delete:hover{color:var(--danger)}
-.tag-filter-cat-delete .ic{width:8px;height:8px}
+.tag-filter-cat-delete .ic{width:var(--ic-xs);height:var(--ic-xs)}
 .tag-filter-add-wrap{flex:none;border-top:1px solid var(--line)}
 .tag-filter-add{
-  display:flex;align-items:center;gap:3px;width:100%;height:22px;padding:0 6px;
-  color:var(--t3);font-size:12px;text-align:left
+  display:flex;align-items:center;gap:4px;width:100%;height:24px;padding:0 6px;
+  color:var(--t3);font-size:var(--fs-body);text-align:left;
+  transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),
+  transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)
 }
 .tag-filter-add:hover:not([disabled]){background:var(--bg3);color:var(--acc2)}
 .tag-filter-add[disabled]{opacity:.45;cursor:default}
-.tag-filter-add .ic{width:10px;height:10px}
-.tag-filter-add-form{display:flex;align-items:center;gap:2px;height:22px;padding:2px 3px}
+.tag-filter-add .ic{width:var(--ic-xs);height:var(--ic-xs)}
+.tag-filter-add-form{display:flex;align-items:center;gap:4px;height:28px;padding:2px 4px}
 .tag-filter-add-form input{
-  flex:1;min-width:0;height:18px;padding:0 3px;border:1px solid var(--acc-line);border-radius:var(--r-xs);
-  outline:none;background:var(--bg3);color:var(--t1);font:400 12px/1.2 var(--font)
+  flex:1;min-width:0;height:22px;padding:0 5px;border:1px solid var(--acc-line);border-radius:var(--r-xs);
+  outline:none;background:var(--bg3);color:var(--t1);font:400 var(--fs-body)/1.2 var(--font)
 }
 .tag-filter-add-form input::placeholder{color:var(--t3)}
 .tag-filter-add-form.invalid input{border-color:var(--danger)}
-.tag-filter-add-form button{display:grid;place-items:center;flex:none;width:16px;height:16px;border-radius:var(--r-xs);color:var(--acc2)}
+.tag-filter-add-form button{display:grid;place-items:center;flex:none;width:20px;height:20px;border-radius:var(--r-xs);color:var(--acc2)}
 .tag-filter-add-form button:hover{background:var(--acc-soft)}
-.tag-filter-add-form button .ic{width:9px;height:9px}
+.tag-filter-add-form button .ic{width:var(--ic-xs);height:var(--ic-xs)}
 
 .tag-filter-main{display:flex;flex:1;min-width:0;min-height:0;background:var(--menu-solid)}
-.tag-filter-scroll{flex:1;min-height:0;padding:4px;overflow-y:auto;overscroll-behavior:contain}
+.tag-filter-scroll{flex:1;min-height:0;padding:6px;overflow-y:auto;overscroll-behavior:contain}
 .tag-filter-scroll::-webkit-scrollbar{width:3px;height:3px}
 .tag-filter-scroll::-webkit-scrollbar-track{background:transparent}
 .tag-filter-scroll::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:0;border-radius:2px}
 .tag-filter-scroll::-webkit-scrollbar-thumb:hover{background:var(--scroll-thumb-hover)}
-.tag-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2.5px;align-content:start}
+.tag-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;align-content:start}
+/* 20px 高 + 4px 内边距:12.5px 的字在 chip 里上下只剩 2px,截图里读作「挤在一起」。
+   抬到 --h-xs(24px),圆角/内边距/间距都用令牌值,press 反馈交给全局 scale(.97),
+   这里只把 transform 与 opacity 补进过渡,免得按下瞬跳、松手瞬回。 */
 .tag-filter-strip{
-  display:flex;align-items:center;gap:3px;min-width:0;height:20px;padding:0 4px;
-  overflow:hidden;border:1px solid var(--line);border-radius:5px;background:var(--bg2);
+  display:flex;align-items:center;gap:4px;min-width:0;height:var(--h-xs);padding:0 5px;
+  overflow:hidden;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg3);
   color:var(--t2);text-align:left;transition:background-color var(--dur-hover) var(--ease-out),
   border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),
-  box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)
+  transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)
 }
-.tag-filter-strip:hover{background:var(--bg3);border-color:var(--line2);color:var(--t1)}
+.tag-filter-strip:hover{background:var(--bg4);border-color:var(--line2);color:var(--t1)}
 .tag-filter-strip.on{border-color:var(--acc-line);background:var(--acc-soft);color:var(--acc2)}
-.tag-filter-strip:focus-visible{outline:none}
-.tag-filter-strip:not(.on):focus-visible{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .tag-filter-strip:active{cursor:grabbing}
-.tag-filter-dot{width:4px;height:4px;border-radius:50%;flex:none}
-.tag-filter-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500;line-height:1.2}
-.tag-filter-count{flex:none;color:var(--t3);font:11px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.tag-filter-dot{width:5px;height:5px;border-radius:50%;flex:none}
+.tag-filter-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-body);font-weight:500;line-height:1.2}
+.tag-filter-count{flex:none;color:var(--t3);font:400 var(--fs-micro)/1 var(--font-mono);font-variant-numeric:tabular-nums}
 .tag-filter-strip.on .tag-filter-name,.tag-filter-strip.on .tag-filter-count{color:var(--acc2)}
 .tag-filter-strip.on .tag-filter-name{font-weight:700}
-.tag-filter-empty{display:grid;place-items:center;height:100%;color:var(--t3);font-size:12px}
+.tag-filter-empty{display:grid;place-items:center;height:100%;color:var(--t3);font-size:var(--fs-body)}
 
 @media (prefers-reduced-motion:reduce){
   .tag-filter-menu.open,.tag-filter-menu.closing{transform:none}
+  .tag-filter-menu button:active:not([disabled]){transform:none}
 }
 
 /* 齿轮菜单:沿用当前浅色玻璃主题 */

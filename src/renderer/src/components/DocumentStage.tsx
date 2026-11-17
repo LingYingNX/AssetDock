@@ -314,6 +314,9 @@ export function DocumentStage({
   if (preview.shape === 'doc') {
     return <div className="doc-shell"><HtmlView html={preview.html ?? ''} zoom={zoom} /></div>
   }
+  if (preview.shape === 'html') {
+    return <div className="doc-shell"><HtmlView html={preview.html ?? ''} zoom={zoom} /></div>
+  }
   return (
     <div className="doc-shell">
       <div className="doc-scroll" onDoubleClick={() => onZoom(1)}>

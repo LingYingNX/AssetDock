@@ -32,7 +32,7 @@ Ponytail 技能已安装在本机，编码任务默认遵循其懒惰阶梯：YA
 ## OpenSpec 接手
 
 新会话开始处理任务前，如果项目根目录存在 `openspec/`，先运行 `openspec list --json` 和 `openspec list --specs --json` 查看当前进行中的 change 和已有 spec，结合任务判断是否需要继续某个 change 或创建新 change。已有 change 且 tasks 有未完成项时，使用 `openspec-apply-change` 继续；tasks 全部完成时提示用户归档。
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-06 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-17 -->
 
 # AGENTS.md
 
@@ -58,11 +58,12 @@ MediaHub 素材管理器 — 本地优先的 Electron 桌面应用（Electron 44
 ## Structure
 
 ```
-src/main/           主进程：index.ts 生命周期/窗口、ipc.ts 注册壳、ipc/* 分域 handler、events.ts 推送
-src/main/services/  单一职责服务（db/store/scan/watch/media/folders/palette/thumbs/…）
+src/main/           主进程：index.ts 生命周期/窗口、ipc.ts 注册壳、ipc/* 分域 handler 与目录树缓存、events.ts 推送
+src/main/services/  单一职责服务（库/扫描/监听/缩略图/文档与外部预览/导入/跨库传输/…）
 src/shared/         跨进程共享的纯逻辑（无 fs / 无 electron），两侧 tsconfig 都 include
-src/preload/        contextBridge 暴露 windowApi；src/renderer/src/ 为 React（components/data/store/styles）
-tests/              vitest 用例   tools/ 开发与无头验证脚本   openspec/ 规范
+src/preload/        contextBridge 暴露 windowApi
+src/renderer/src/   React：components（界面块）/ data（纯视图逻辑）/ store（zustand）/ styles
+tests/              vitest 用例（69 个 .test.ts）   tools/ 开发与无头验证脚本   openspec/ 规范
 ```
 
 ## Scoped AGENTS.md (MUST read when working in these directories)
@@ -84,6 +85,13 @@ tests/              vitest 用例   tools/ 开发与无头验证脚本   openspe
 | 状态已更新但组件不出现（如右键菜单） | Hook 被放在了 `if (!x) return null` 之后——两次渲染 hook 数量不一致，React 抛错并丢弃整个子树。所有 hook 必须在早退之前 |
 | 菜单 Esc 一次关两层、关闭后焦点丢失 | 各浮层自己写 keydown 会互相抢事件。统一接 `useMenuFocus`（`src/renderer/src/components/`），它按栈只让最上层处理 Esc，并把焦点还给打开前的元素 |
 | prod 构建里 `window.__ui` 是 undefined | 那是设计：`App.tsx` 用 `import.meta.env.DEV` 守卫，只在 dev 暴露 store。生产验证改走真实 UI 路径 |
+| 切库/启动时侧栏目录树要等几秒 | `folders:list` 在主进程按库缓存（`src/main/ipc/folderListCache.ts`）；目录增删改名、导入、跨库传输、watcher 全量事件后必须 `invalidateFolderList(libraryId)`。别改成全局单缓存 |
+| `assets:list` 比数据库少一批 | 有意过滤 `missing=1`（回收站除外）；`assets:rows` 同口径。缺失行只用于回收站清理，别为了“完整”放回主列表 |
+| 启动/切库后仍慢、后台库把前台拖住 | 启动对账每库每次只跑一次且延迟 15s，root watcher 延迟 5s 挂载；`library:scan` / `assets:changed` 只刷新同库，后台库变更只标脏。别把对账/监听挪回启动同步路径 |
+| 跨库剪切后丢评分/标签，或 CSS 只剩裸样式 | 统一走 `src/main/services/assetTransfer.ts`：复制 → 目标库入库 → 迁用户数据；CSS 会带同目录同名 `.html`；两库根互相嵌套直接拒绝。别在 handler 里手写 `copyFile` |
+| 素材文件明明在盘上却一直显示缺失、侧栏 0 | `missing=1` 的行只有再被扫描写回才会复活；`upsertScanned` 判 `unchanged` 必须带上 `missing`，否则跳过 UPDATE 后缺口永远清不掉 |
+| 移动/剪切后源库留一个 0 件空文件夹 | 搬完要摘空目录（`assets.ts` 的 `pruneEmptiedFolders`）并失效**源库**目录清单缓存；只失效目标库会让空壳在侧栏一直挂着 |
+| HTML 缩略图/预览空白 | HTML 是网页：缩略图渲染原文件，预览回 `media://` 原文件给沙箱 iframe；不要走文档清洗（脚本会被剥掉） |
 
 ## Boundaries
 

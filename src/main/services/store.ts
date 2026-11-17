@@ -303,7 +303,7 @@ export interface ScanUpsertResult {
 
 export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[]): ScanUpsertResult[] {
   const existing = d.prepare(
-    'SELECT id, size_bytes, mtime_ms, fingerprint FROM assets WHERE library_id = ? AND rel_path = ?'
+    'SELECT id, size_bytes, mtime_ms, fingerprint, missing FROM assets WHERE library_id = ? AND rel_path = ?'
   )
   const insert = d.prepare(
     `INSERT INTO assets(library_id, rel_path, name, type, format, width, height, duration, codec, fps, face_count, vertices,
@@ -346,11 +346,13 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
     for (const e of entries) {
       const relPath = e.relPath
       const row = existing.get(libraryId, relPath) as
-        | { id: number; size_bytes: number; mtime_ms: number; fingerprint: string }
+        | { id: number; size_bytes: number; mtime_ms: number; fingerprint: string; missing: number }
         | undefined
       if (row) {
+        /* 缺失行必须借这次扫描回到 live:文件回来后 size/mtime/指纹都没变,按 unchanged 跳过 UPDATE
+           会让 missing 永远清不掉(侧栏一直 0 件,打不开也搬不走) */
         const action =
-          row.size_bytes === e.sizeBytes && row.mtime_ms === e.mtimeMs && row.fingerprint === e.fingerprint
+          !row.missing && row.size_bytes === e.sizeBytes && row.mtime_ms === e.mtimeMs && row.fingerprint === e.fingerprint
             ? 'unchanged'
             : 'changed'
         // S2-4:unchanged 跳过 UPDATE——避免对账写入放大,且 updated_at/排序语义不被无变化写入污染

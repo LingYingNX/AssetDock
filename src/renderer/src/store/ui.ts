@@ -12,11 +12,10 @@ import {
   type HdrId
 } from '../data/hdr-presets'
 import type { ModelShade } from '../components/Viewer3D'
-import { THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
+import { DOCUMENT_RENDERER_VERSION, THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
 import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../data/sidebar-width'
 import { COLW_DEFAULT, clampColw } from '../data/colw'
 import { parseTagGroups, type TagGroupDefinition } from '../data/filter-menu'
-import { tagsFromNav } from '../data/tag-nav'
 
 export type ViewMode = 'waterfall' | 'grid' | 'list'
 
@@ -57,11 +56,11 @@ interface UiPrefs {
   colw: number
   inspHidden: boolean
   cbarOpen: boolean
-  /** 上次停留的侧栏导航项(全部素材/文件夹/标签等) */
+  /** 上次停留的侧栏导航项(全部素材/文件夹等) */
   nav: NavKey
   /** 用户拖拽后的侧栏宽度 */
   sideWidth: number
-  /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留 */
+  /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留。跨库共享,切库时不能按当前库的路径清空 */
   collapsedFolders: string[]
   /** 三维预览模式与 HDR 环境:跨重启保留 */
   modelShade: ModelShade
@@ -72,6 +71,8 @@ interface UiPrefs {
   modelHdrBlur: number
   /** 每个库的标签总分类;键为库 id,随 uiPrefs 持久化 */
   tagGroups: Record<string, TagGroupDefinition[]>
+  /** 灯箱底部胶片带是否展开:收起后仍留一条可点开的窄条 */
+  stripOpen: boolean
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -81,7 +82,8 @@ function parseNav(value: unknown): NavKey {
   if (typeof value !== 'string') return 'all'
   if ((NAV_SIMPLE as readonly string[]).includes(value)) return value as NavKey
   if (value.startsWith('folder:') && value.length > 'folder:'.length) return value as NavKey
-  if (tagsFromNav(value as NavKey).length > 0) return value as NavKey
+  /* 标签导航已无界面入口(侧栏标签组删除),旧版本留下的 tag: 值一律退回「全部素材」,
+     否则重启后会进入一个没有任何界面指示的标签过滤视图 */
   return 'all'
 }
 
@@ -109,7 +111,8 @@ function persistUiPrefs(): void {
       modelHdrStrength: s.modelHdrStrength,
       modelHdrOpacity: s.modelHdrOpacity,
       modelHdrBlur: s.modelHdrBlur,
-      tagGroups: s.tagGroups
+      tagGroups: s.tagGroups,
+      stripOpen: s.stripOpen
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -182,7 +185,8 @@ export async function restoreUiPrefs(): Promise<void> {
         modelHdrStrength: hdr.strength,
         modelHdrOpacity: hdr.opacity,
         modelHdrBlur: hdr.blur,
-        tagGroups: parseTagGroups(parsed.tagGroups)
+        tagGroups: parseTagGroups(parsed.tagGroups),
+        stripOpen: parsed.stripOpen !== false
       })
     } catch {
       /* 界面偏好损坏:保持默认 */
@@ -245,7 +249,12 @@ function rowToAsset(r: Record<string, unknown>): Asset {
 }
 
 function thumbUrl(originalUrl: string): string {
-  return `${originalUrl}&thumb=1&tv=${THUMB_CACHE_VERSION}`
+  /*
+    缓存键必须跟着「渲染规则」一起变。文档缩略图的外观由 DOCUMENT_RENDERER_VERSION 决定,
+    只带 THUMB_CACHE_VERSION 时改了取景方式 URL 仍然相同,Chromium 会一直回旧图——
+    表现就是「改了没效果」。两个版本都进键,任一升级即换 URL。
+  */
+  return `${originalUrl}&thumb=1&tv=${THUMB_CACHE_VERSION}-${DOCUMENT_RENDERER_VERSION}`
 }
 
 function TAG_COLOR(name: string): string {
@@ -267,6 +276,8 @@ interface UIState {
   libraries: { id: number; name: string; path: string }[]
   setLibraries: (list: { id: number; name: string; path: string }[]) => void
   createLibraryFlow: (name?: string, folderPath?: string) => Promise<boolean>
+  /** 外部文件拖入:复制进目标文件夹、提示结果并刷新当前库 */
+  importDroppedPaths: (paths: string[], folder: string) => Promise<void>
   importAssetFilesFlow: () => void
   importEagleFlow: () => void
   openLibrary: (libraryId: number, name: string) => void
@@ -282,9 +293,12 @@ interface UIState {
   /* 数据源 */
   mode: 'empty' | 'library' | 'error'
   scanProgress: string | null
-  /** 缩略图全量生成进度;null 表示没有正在进行的预热 */
-  thumbProgress: { done: number; total: number } | null
-  setThumbProgress: (p: { done: number; total: number } | null) => void
+  /** 缩略图全量生成进度;libraryId 用于只显示当前素材库的进度 */
+  thumbProgress: { libraryId: number; done: number; total: number } | null
+  setThumbProgress: (p: { libraryId: number; done: number; total: number } | null) => void
+  /** 跨库移动进度(源库归属);用户主动发起,所以不看当前标签页,操作结束由发起方清空 */
+  transferProgress: { libraryId: number; done: number; total: number } | null
+  setTransferProgress: (p: { libraryId: number; done: number; total: number } | null) => void
   /** 指纹 → 完成序号：懒生成占位必须先有这一跳，浏览器才会换 URL 重取真实图。 */
   thumbRevisions: Record<string, number>
   markThumbReady: (fingerprint: string) => void
@@ -294,7 +308,7 @@ interface UIState {
   setAssets: (list: Asset[]) => void
   /** S1-7:assets:changed 携带 assetIds 时按 id 增量合并;缺省数组退全量 reload */
   applyAssetDelta: (libraryId: number, assetIds?: number[]) => void
-  reloadActiveLibrary: () => void
+  reloadActiveLibrary: (reuseCache?: boolean) => void
   folderPaths: string[]
   physicalFolderPaths: string[]
   folderEditPath: string | null
@@ -307,7 +321,16 @@ interface UIState {
   cancelFolderRename: () => void
   beginFolderRename: (path: string) => void
   moveFolder: (source: string, target: string, placement: 'before' | 'after' | 'inside') => void
+  moveFolderToLibrary: (sourceLibraryId: number, path: string, targetLibraryId: number, destFolder?: string) => void
   trashFolder: (path: string) => void
+  /** 侧栏文件夹多选(带库 id:切库不会把旧库的选中带过来) */
+  folderSelection: { libraryId: number; paths: string[]; anchor: string | null } | null
+  clickFolder: (
+    libraryId: number,
+    path: string,
+    options?: { shift?: boolean; toggle?: boolean; order?: string[] }
+  ) => void
+  clearFolderSelection: () => void
   moveAssetsToFolder: (assetIds: string[], folder: string) => void
 
   /* 导航与搜索 */
@@ -358,6 +381,12 @@ interface UIState {
   toggleReviewFlag: (id: string) => void
   /** 复制当前库的选中素材；返回是否发起了复制请求 */
   copySelected: () => boolean
+  /** 应用内剪贴板:跨库复制/剪切时记住来源库与素材 id */
+  assetClipboard: { libraryId: number; ids: number[]; mode: 'copy' | 'cut' } | null
+  /** 剪切当前库的选中素材；返回是否记录成功 */
+  cutSelected: () => boolean
+  /** 把剪贴板素材粘贴到当前库/当前文件夹；返回是否发起了请求 */
+  pasteClipboard: () => boolean
   renameAsset: (id: string, name: string) => void
   addTag: (id: string, name: string) => void
   removeTag: (id: string, name: string) => void
@@ -409,6 +438,12 @@ interface UIState {
    */
   lightboxFullscreen: boolean
   setLightboxFullscreen: (v: boolean) => void
+  /**
+   * 胶片带展开态:收起时只留底部一条可点开的窄条,把整个舞台还给作品。
+   * 与全屏一样是视图偏好而非临时态,所以随 uiPrefs 持久化。
+   */
+  stripOpen: boolean
+  toggleStrip: () => void
   /** CSS 编辑器有未保存改动:关闭与切换素材前必须先确认,避免丢改动 */
   cssDirty: boolean
   setCssDirty: (v: boolean) => void
@@ -419,6 +454,37 @@ interface UIState {
 
 let tabSeq = 0
 let reloadSeq = 0
+/** 增量请求自己的序号:不能与全量共用,否则一条增量会把正在飞的全量结果顶掉 */
+let deltaSeq = 0
+/** 每个打开过的库最近一次完整 assets:切回时先画缓存,不必再等几十 MB IPC */
+const assetCache = new Map<number, Asset[]>()
+/** 缓存上限:大库一份就是几十 MB,开过的库不能无限累积 */
+const ASSET_CACHE_MAX = 4
+/** 非活动库收到变更:缓存可能过期,下次激活时后台刷新 */
+const dirtyLibraries = new Set<number>()
+/** 当前 assets 属于哪个库;切库瞬间仍是上一个库,靠它防止把旧数组错记到新库名下 */
+let loadedLibraryId: number | null = null
+/** 目录树同样按库缓存:主进程已缓存读盘结果,这里省掉一次 IPC 往返,也避免切库瞬间显示上一个库的树 */
+const folderCache = new Map<number, string[]>()
+
+/** 离开一个库前保存它的最新集合(含增量、乐观编辑),切回时才有正确首帧 */
+function rememberLoadedAssets(): void {
+  const s = useUI.getState()
+  if (loadedLibraryId == null || s.mode !== 'library') return
+  // 重新插入刷新顺序:刚离开的库是最新用过的,不能被当成最旧淘汰
+  assetCache.delete(loadedLibraryId)
+  assetCache.set(loadedLibraryId, s.assets)
+  trimAssetCache()
+}
+
+/** Map 按插入序淘汰最久未用的库 */
+function trimAssetCache(): void {
+  while (assetCache.size > ASSET_CACHE_MAX) {
+    const oldest = assetCache.keys().next().value
+    if (oldest == null) return
+    assetCache.delete(oldest)
+  }
+}
 
 export const useUI = create<UIState>((set, get) => {
   /** 编辑动作:本地立即生效 + 库模式落库(失败提示) */
@@ -481,7 +547,8 @@ export const useUI = create<UIState>((set, get) => {
     lightboxFullscreen: false,
     ctxMenu: null,
     folderCtxMenu: null,
-    openMenu: null
+    openMenu: null,
+    thumbProgress: null
   })
 
   const canLeaveLightbox = (): boolean =>
@@ -509,6 +576,26 @@ export const useUI = create<UIState>((set, get) => {
       get().openLibrary(r.id, r.name)
       return true
     },
+    importDroppedPaths: async (paths, folder) => {
+      const tab = get().tabs.find((x) => x.id === get().activeTabId)
+      const libraryId = tab?.libraryId
+      if (libraryId == null) {
+        get().showToast('请先打开一个资源库', 'warn')
+        return
+      }
+      try {
+        const result = await window.windowApi.assets.importPaths(libraryId, paths, folder)
+        if ('error' in result) {
+          get().showToast(result.error, 'warn')
+          return
+        }
+        const skipped = result.skipped > 0 ? `，跳过 ${result.skipped} 个不支持或库内文件` : ''
+        get().showToast(`已导入 ${result.imported} 个素材${skipped}`, result.skipped > 0 ? 'warn' : 'ok')
+        get().reloadActiveLibrary()
+      } catch {
+        get().showToast('导入素材失败，请重试', 'warn')
+      }
+    },
     importAssetFilesFlow: () => {
       const tab = get().tabs.find((x) => x.id === get().activeTabId)
       const libraryId = tab?.libraryId
@@ -523,14 +610,7 @@ export const useUI = create<UIState>((set, get) => {
           if (paths.length === 0) return
           const nav = get().nav
           const folder = nav.startsWith('folder:') ? nav.slice('folder:'.length) : ''
-          const result = await window.windowApi.assets.importPaths(libraryId, paths, folder)
-          if ('error' in result) {
-            get().showToast(result.error, 'warn')
-            return
-          }
-          const skipped = result.skipped > 0 ? `，跳过 ${result.skipped} 个不支持或库内文件` : ''
-          get().showToast(`已导入 ${result.imported} 个素材${skipped}`, result.skipped > 0 ? 'warn' : 'ok')
-          get().reloadActiveLibrary()
+          await get().importDroppedPaths(paths, folder)
         } catch {
           get().showToast('导入素材失败，请重试', 'warn')
         }
@@ -582,12 +662,13 @@ export const useUI = create<UIState>((set, get) => {
     openTab: (id) => {
       const switching = id !== get().activeTabId
       if (switching && !canLeaveLightbox()) return
+      if (switching) rememberLoadedAssets()
       set({ activeTabId: id, ...(switching ? clearedAssetView() : {}) })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === id)
       if (t?.libraryId != null) {
         void window.windowApi.library.open(t.libraryId)
-        get().reloadActiveLibrary()
+        get().reloadActiveLibrary(true)
       }
       else if (!t?.libraryId) set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
@@ -599,23 +680,31 @@ export const useUI = create<UIState>((set, get) => {
       const nextActive = id === activeTabId ? (rest[Math.max(0, idx - 1)] ?? rest[0]).id : activeTabId
       const switching = id === activeTabId
       if (switching && !canLeaveLightbox()) return
+      if (switching) rememberLoadedAssets()
+      const closing = tabs.find((t) => t.id === id)
+      if (closing?.libraryId != null && !rest.some((t) => t.libraryId === closing.libraryId)) {
+        assetCache.delete(closing.libraryId)
+        folderCache.delete(closing.libraryId)
+        dirtyLibraries.delete(closing.libraryId)
+      }
       set({ tabs: rest, activeTabId: nextActive, ...(switching ? clearedAssetView() : {}) })
       get().persistTabs()
       const t = get().tabs.find((x) => x.id === nextActive)
       if (t?.libraryId != null) {
         void window.windowApi.library.open(t.libraryId)
-        get().reloadActiveLibrary()
+        get().reloadActiveLibrary(true)
       }
       else set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     createLibraryTab: (libraryId, name) => {
       if (!canLeaveLightbox()) return
+      rememberLoadedAssets()
       tabSeq++
       const tab: LibraryTab = { id: `dblib-${libraryId}-${tabSeq}`, name, libraryId }
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id, ...clearedAssetView() }))
       get().persistTabs()
       void window.windowApi.library.open(libraryId)
-      get().reloadActiveLibrary()
+      get().reloadActiveLibrary(true)
     },
     persistTabs: () => {
       const ids = get().tabs.filter((t) => t.libraryId != null).map((t) => t.libraryId as number)
@@ -627,6 +716,8 @@ export const useUI = create<UIState>((set, get) => {
     scanProgress: null,
     thumbProgress: null,
     setThumbProgress: (p) => set({ thumbProgress: p }),
+    transferProgress: null,
+    setTransferProgress: (p) => set({ transferProgress: p }),
     thumbRevisions: {},
     markThumbReady: (fingerprint) => set((s) => ({
       thumbRevisions: {
@@ -647,16 +738,24 @@ export const useUI = create<UIState>((set, get) => {
     applyAssetDelta: (libraryId, assetIds) => {
       // S1-7 增量合并:只对当前活动库生效;其他库的事件直接丢弃(该库激活时会全量重拉)
       const t = get().tabs.find((x) => x.id === get().activeTabId)
-      if (t?.libraryId !== libraryId) return
+      if (t?.libraryId !== libraryId) {
+        dirtyLibraries.add(libraryId)
+        return
+      }
       if (!Array.isArray(assetIds) || assetIds.length === 0) {
         get().reloadActiveLibrary()
         return
       }
-      const request = ++reloadSeq
+      /* 先标脏:这次增量若被切库顶替,缓存就不完整,下次激活必须重拉 */
+      dirtyLibraries.add(libraryId)
+      const request = ++deltaSeq
       void window.windowApi.assets.rows(libraryId, assetIds).then((r) => {
-        if (request !== reloadSeq) return
+        if (request !== deltaSeq) return
+        /* 请求飞行期间切了库:结果不属于当前界面,缓存留脏标记等下次激活重拉 */
+        if (get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId) return
         const incoming = r.assets as unknown as Record<string, unknown>[]
         if (!Array.isArray(incoming)) return
+        dirtyLibraries.delete(libraryId)
         set((s) => {
           const rows = incoming.map(rowToAsset)
           const byId = new Map(rows.map((a) => [a.dbId as number, a]))
@@ -688,6 +787,7 @@ export const useUI = create<UIState>((set, get) => {
             }
           }
           const physicalFolderPaths = [...s.physicalFolderPaths, ...additions]
+          if (additions.length > 0) folderCache.set(libraryId, physicalFolderPaths)
           return {
             assets: keep,
             folderPaths: physicalFolderPaths,
@@ -699,23 +799,71 @@ export const useUI = create<UIState>((set, get) => {
         get().reloadActiveLibrary()
       })
     },
-    reloadActiveLibrary: () => {
+    reloadActiveLibrary: (reuseCache = false) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) {
         set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
         return
       }
       const libraryId = t.libraryId
+      const cached = assetCache.get(libraryId)
+      const cachedFolders = folderCache.get(libraryId)
+      /* 切库瞬间先把树换成目标库的:主进程虽已缓存,一次 IPC 往返也足够让上一个库的目录闪在屏幕上 */
+      set(cachedFolders
+        ? { folderPaths: cachedFolders, physicalFolderPaths: cachedFolders }
+        : { folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
+      /* 第一次打开这个库没有缓存:宁可短暂空网格,也不让上一个库的卡片留在新标签页下被误操作 */
+      if (reuseCache && !cached) {
+        loadedLibraryId = null
+        set({ assets: [], mode: 'library' })
+      }
+      /* 同一个库的主动刷新不画缓存:内存里那一份比上次离开时更新(乐观编辑、增量合并) */
+      if (cached && !(get().mode === 'library' && loadedLibraryId === libraryId)) {
+        loadedLibraryId = libraryId
+        // 命中缓存也刷新 LRU 顺序,连续来回切时别把正在用的库淘汰掉
+        assetCache.delete(libraryId)
+        assetCache.set(libraryId, cached)
+        set({ assets: cached, mode: 'library' })
+      }
       const request = ++reloadSeq
       /* 已被更新的请求顶替、或用户已切到别的库:这次结果(成功或失败)都不再属于当前界面 */
       const superseded = (): boolean =>
         request !== reloadSeq || get().tabs.find((x) => x.id === get().activeTabId)?.libraryId !== libraryId
       const fail = (): void => {
         if (superseded()) return
+        /* 有缓存就不退回错误态:一次刷新失败不该把可用的列表清空 */
+        if (cached) {
+          /* 标脏:下次切回来要重试,否则缓存会一直挡住重拉 */
+          dirtyLibraries.add(libraryId)
+          get().showToast('素材列表刷新失败，继续显示缓存', 'warn')
+          return
+        }
         set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'error' })
         get().showToast('素材库加载失败，请重试', 'warn')
       }
-      /* 计数与目录树互不阻塞:侧边栏计数只依赖 assets,不再等目录递归遍历完成 */
+      /* 目录树请求先发:assets 全量有几十 MB,主进程同步查询与序列化会占住事件循环,
+         晚发一步的 folders:list 只能等它发完才回包,侧边栏就空着。 */
+      void window.windowApi.folders.list(libraryId).then((folders) => {
+        if (superseded()) return
+        const folderPaths = 'paths' in folders ? folders.paths : []
+        if ('paths' in folders) folderCache.set(libraryId, folderPaths)
+        set((s) => {
+          const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          return {
+            folderPaths,
+            physicalFolderPaths: folderPaths,
+            folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
+            nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav
+          }
+        })
+      }).catch(() => {
+        if (superseded()) return
+        /* 目录树读失败就不展示上一棵树(可能属于别的库),素材本身照常可用 */
+        set({ folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
+        get().showToast('素材库文件夹加载失败，请重试', 'warn')
+      })
+      /* 切回未变更的库:缓存就是最新,不再拉几十 MB */
+      if (reuseCache && cached && !dirtyLibraries.has(libraryId)) return
       void window.windowApi.assets.list(libraryId).then((r) => {
         if (superseded()) return
         const data = r as {
@@ -728,31 +876,17 @@ export const useUI = create<UIState>((set, get) => {
           fail()
           return
         }
-        set({ assets: assets.map(rowToAsset), mode: 'library' })
+        const list = assets.map(rowToAsset)
+        assetCache.set(libraryId, list)
+        dirtyLibraries.delete(libraryId)
+        loadedLibraryId = libraryId
+        set({ assets: list, mode: 'library' })
       }).catch(fail)
-      void window.windowApi.folders.list(libraryId).then((folders) => {
-        if (superseded()) return
-        const folderPaths = 'paths' in folders ? folders.paths : []
-        set((s) => {
-          const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
-          return {
-            folderPaths,
-            physicalFolderPaths: folderPaths,
-            folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
-            collapsedFolders: s.collapsedFolders.filter((path) => folderPaths.includes(path)),
-            nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav
-          }
-        })
-      }).catch(() => {
-        if (superseded()) return
-        /* 目录树读失败就不展示上一棵树(可能属于别的库),素材本身照常可用 */
-        set({ folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
-        get().showToast('素材库文件夹加载失败，请重试', 'warn')
-      })
     },
     folderPaths: [],
     physicalFolderPaths: [],
     folderEditPath: null,
+    folderSelection: null,
     collapsedFolders: [],
     toggleFolderCollapsed: (path) => {
       set((s) => ({
@@ -764,20 +898,21 @@ export const useUI = create<UIState>((set, get) => {
     },
     refreshFolders: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
-      if (t?.libraryId == null) return
-      void window.windowApi.folders.list(t.libraryId).then((r) => {
+      const libraryId = t?.libraryId
+      if (libraryId == null) return
+      void window.windowApi.folders.list(libraryId).then((r) => {
         /* 失败不改目录树:留下与磁盘不符的中间态比维持原样更危险 */
         if (!('paths' in r)) {
           get().showToast('目录列表刷新失败，目录树保持原样', 'warn')
           return
         }
+        folderCache.set(libraryId, r.paths)
         set((s) => {
           const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
           return {
             folderPaths: r.paths,
             physicalFolderPaths: r.paths,
             folderEditPath: s.folderEditPath && r.paths.includes(s.folderEditPath) ? s.folderEditPath : null,
-            collapsedFolders: s.collapsedFolders.filter((path) => r.paths.includes(path)),
             nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
           }
         })
@@ -873,13 +1008,72 @@ export const useUI = create<UIState>((set, get) => {
         get().reloadActiveLibrary()
       })
     },
+    /**
+     * 文件夹跨库移动:结构映射、同名避让、源目录清理全在主进程做,这里只负责提示与刷新。
+     *
+     * 不做乐观更新 —— 跨库落点(目标库同名目录合并、同名文件 `名称 (2).ext` 避让)
+     * 由主进程决定,先猜一个再回滚只会让界面闪两次。`assets:changed` 会把两侧都刷新。
+     */
+    moveFolderToLibrary: (sourceLibraryId, path, targetLibraryId, destFolder = '') => {
+      const targetName = get().libraries.find((lib) => lib.id === targetLibraryId)?.name ?? '目标资产库'
+      void window.windowApi.folders.transfer(sourceLibraryId, targetLibraryId, path, destFolder).then((result) => {
+        get().setTransferProgress(null)
+        if ('error' in result) {
+          get().showToast(result.error, 'warn')
+          return
+        }
+        const skipped = result.skipped > 0 ? `，跳过 ${result.skipped} 个不可用素材` : ''
+        const kept = result.keptSource > 0 ? `，${result.keptSource} 个源文件未能删除，目录已保留` : ''
+        get().showToast(
+          `已移动到「${targetName}」：${result.transferred} 个素材${skipped}${kept}`,
+          result.skipped > 0 || result.keptSource > 0 ? 'warn' : 'ok'
+        )
+        get().reloadActiveLibrary()
+      }).catch(() => {
+        get().setTransferProgress(null)
+        get().showToast('移动到资产库失败,请重试', 'warn')
+      })
+    },
+    /**
+     * 侧栏点选文件夹的选中语义(与卡片一致):
+     * - 无修饰键:替换为单选(导航由调用方 setNav 负责)
+     * - Shift:从锚点按可见顺序重算区间并整体替换,锚点不动,便于继续缩选区
+     * - Ctrl/Cmd:单项 toggle,其余保持不变
+     */
+    clickFolder: (libraryId, path, options) =>
+      set((s) => {
+        const previous =
+          s.folderSelection?.libraryId === libraryId
+            ? s.folderSelection
+            : { libraryId, paths: [] as string[], anchor: null }
+        if (options?.shift) {
+          const order = options.order ?? []
+          const anchor = previous.anchor ?? path
+          const start = order.indexOf(anchor)
+          const end = order.indexOf(path)
+          const range =
+            start >= 0 && end >= 0 ? order.slice(Math.min(start, end), Math.max(start, end) + 1) : [path]
+          return { folderSelection: { libraryId, paths: range, anchor } }
+        }
+        if (options?.toggle) {
+          const paths = previous.paths.includes(path)
+            ? previous.paths.filter((item) => item !== path)
+            : [...previous.paths, path]
+          return { folderSelection: { libraryId, paths, anchor: path } }
+        }
+        return { folderSelection: { libraryId, paths: [path], anchor: path } }
+      }),
+    clearFolderSelection: () => {
+      if (get().folderSelection) set({ folderSelection: null })
+    },
     trashFolder: (path) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
-      if (t?.libraryId == null) return
+      const libraryId = t?.libraryId
+      if (libraryId == null) return
       set({ folderCtxMenu: null })
       const prefix = `${path}/`
       const affectedAssets = get().assets.filter(
-        (asset) => asset.libraryId === t.libraryId && (asset.relPath ?? '').startsWith(prefix)
+        (asset) => asset.libraryId === libraryId && (asset.relPath ?? '').startsWith(prefix)
       )
       const affected = affectedAssets.length
       const deletedIds = new Set(affectedAssets.map((asset) => asset.id))
@@ -910,13 +1104,16 @@ export const useUI = create<UIState>((set, get) => {
         }
       }
 
-      void window.windowApi.folders.trash(t.libraryId, path).then((r) => {
+      void window.windowApi.folders.trash(libraryId, path).then((r) => {
         if ('error' in r) {
           get().showToast(r.error, 'warn')
           get().reloadActiveLibrary()
           return
         }
         set((s) => clearDeletedState(s))
+        /* 整棵子树已删:缓存先扣掉这些路径,不用重读盘也不会留着幽灵目录 */
+        const stale = folderCache.get(libraryId)
+        if (stale) folderCache.set(libraryId, stale.filter((item) => item !== path && !item.startsWith(prefix)))
         get().showToast(r.removedAssets > 0 ? `已移入回收站，移除 ${r.removedAssets} 条素材记录` : '已移入回收站')
         get().reloadActiveLibrary()
       }).catch(() => {
@@ -952,6 +1149,8 @@ export const useUI = create<UIState>((set, get) => {
     // 否则切换目录后 Del 会作用在屏幕上看不到的旧素材上。
     setNav: (nav) => {
       applyViewChange({ nav }, true)
+      /* 离开文件夹视图(点了「全部素材」这类系统视图)就没必要留着文件夹选中 */
+      if (get().nav === nav && !nav.startsWith('folder:')) set({ folderSelection: null })
     },
     search: '',
     setSearch: (search) => {
@@ -1065,6 +1264,7 @@ export const useUI = create<UIState>((set, get) => {
         .filter((asset) => get().selectedSet.has(asset.id) && asset.dbId != null && asset.libraryId === libraryId)
         .map((asset) => asset.dbId as number)
       if (ids.length === 0) return false
+      set({ assetClipboard: { libraryId, ids, mode: 'copy' } })
       void window.windowApi.assets.copy(libraryId, ids).then((result) => {
         if ('error' in result) {
           get().showToast(result.error, 'warn')
@@ -1083,6 +1283,50 @@ export const useUI = create<UIState>((set, get) => {
           skipped > 0 ? 'warn' : 'ok'
         )
       }).catch(() => get().showToast('复制失败,请重试', 'warn'))
+      return true
+    },
+    assetClipboard: null,
+    cutSelected: () => {
+      const tab = get().tabs.find((item) => item.id === get().activeTabId)
+      const libraryId = tab?.libraryId
+      if (libraryId == null) return false
+      const ids = get().assets
+        .filter((asset) => get().selectedSet.has(asset.id) && asset.dbId != null && asset.libraryId === libraryId && !asset.deletedAt && !asset.missing)
+        .map((asset) => asset.dbId as number)
+      if (ids.length === 0) return false
+      set({ assetClipboard: { libraryId, ids, mode: 'cut' } })
+      get().showToast(`已剪切 ${ids.length} 个素材，切换到目标资源库后按 Ctrl V 粘贴`)
+      return true
+    },
+    pasteClipboard: () => {
+      const clipboard = get().assetClipboard
+      const tab = get().tabs.find((item) => item.id === get().activeTabId)
+      const targetLibraryId = tab?.libraryId
+      if (!clipboard || targetLibraryId == null) return false
+      const nav = get().nav
+      const folder = nav.startsWith('folder:') ? nav.slice('folder:'.length) : ''
+      void window.windowApi.assets.transfer(clipboard.libraryId, targetLibraryId, clipboard.ids, folder, clipboard.mode).then((result) => {
+        get().setTransferProgress(null)
+        if ('error' in result) {
+          get().showToast(result.error, 'warn')
+          return
+        }
+        if (clipboard.mode === 'cut') {
+          /* 剪切是移动语义:同一批只粘贴一次,避免二次粘贴得到重复副本 */
+          set({ assetClipboard: null })
+        }
+        /* 粘贴目标就是当前库:无论跨库与否都要重拉,新入库的行才会出现在网格里 */
+        get().reloadActiveLibrary()
+        const extra = result.skipped > 0 ? `，跳过 ${result.skipped} 个不可用素材` : ''
+        const kept = result.keptSource > 0 ? `，${result.keptSource} 个源文件未能删除，已保留原记录` : ''
+        get().showToast(
+          `${clipboard.mode === 'cut' ? '已移动' : '已复制'} ${result.transferred} 个素材${extra}${kept}`,
+          result.skipped > 0 || result.keptSource > 0 ? 'warn' : 'ok'
+        )
+      }).catch(() => {
+        get().setTransferProgress(null)
+        get().showToast(`${clipboard.mode === 'cut' ? '移动' : '复制'}素材失败,请重试`, 'warn')
+      })
       return true
     },
     /**
@@ -1293,6 +1537,11 @@ export const useUI = create<UIState>((set, get) => {
     lightboxId: null,
     lightboxFullscreen: false,
     setLightboxFullscreen: (v) => set({ lightboxFullscreen: v }),
+    stripOpen: true,
+    toggleStrip: () => {
+      set((s) => ({ stripOpen: !s.stripOpen }))
+      persistUiPrefs()
+    },
     cssDirty: false,
     setCssDirty: (v) => set({ cssDirty: v }),
     openLightbox: (id) => {

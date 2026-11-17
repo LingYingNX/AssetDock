@@ -48,7 +48,14 @@ const api = {
     rename: (libraryId: number, path: string, name: string): Promise<{ path: string } | { error: string }> =>
       ipcRenderer.invoke('folders:rename', libraryId, path, name),
     move: (libraryId: number, source: string, target: string, placement: 'before' | 'after' | 'inside'): Promise<{ path: string } | { error: string }> =>
-      ipcRenderer.invoke('folders:move', libraryId, source, target, placement)
+      ipcRenderer.invoke('folders:move', libraryId, source, target, placement),
+    transfer: (
+      sourceLibraryId: number,
+      targetLibraryId: number,
+      path: string,
+      destFolder: string
+    ): Promise<{ transferred: number; skipped: number; keptSource: number; removedFolders: number } | { error: string }> =>
+      ipcRenderer.invoke('folders:transfer', sourceLibraryId, targetLibraryId, path, destFolder)
   },
 
   assets: {
@@ -64,6 +71,7 @@ const api = {
       | { kind: 'three'; url: string }
       | { kind: 'image'; url: string }
       | { kind: 'pdf'; url: string; pages: number }
+      | { kind: 'html'; url: string }
       | { kind: 'document'; preview: DocumentPreview }
       | { kind: 'external'; tool: 'cinema4d'; message: string }
       | { error: string }
@@ -72,6 +80,14 @@ const api = {
       ipcRenderer.invoke('assets:openExternal', libraryId, id),
     move: (libraryId: number, ids: number[], folder: string): Promise<{ moved: number } | { error: string; moved?: number }> =>
       ipcRenderer.invoke('assets:move', libraryId, ids, folder),
+    transfer: (
+      sourceLibraryId: number,
+      targetLibraryId: number,
+      ids: number[],
+      folder: string,
+      mode: 'copy' | 'cut'
+    ): Promise<{ transferred: number; skipped: number; keptSource: number; targetIds: number[] } | { error: string }> =>
+      ipcRenderer.invoke('assets:transfer', sourceLibraryId, targetLibraryId, ids, folder, mode),
     addTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('assets:addTag', libraryId, id, name),
     removeTag: (libraryId: number, id: number, name: string): Promise<{ ok: boolean }> =>

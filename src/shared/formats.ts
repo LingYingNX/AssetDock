@@ -80,6 +80,8 @@ export const FORMAT_SPECS = [
   { ext: 'txt', type: 'document', format: 'TXT', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'text' },
   { ext: 'md', type: 'document', format: 'MARKDOWN', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'markdown' },
   { ext: 'markdown', type: 'document', format: 'MARKDOWN', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'markdown' },
+  { ext: 'html', type: 'document', format: 'HTML', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'html' },
+  { ext: 'htm', type: 'document', format: 'HTML', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'html' },
   { ext: 'csv', type: 'document', format: 'CSV', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'sheet' },
   { ext: 'docx', type: 'document', format: 'DOCX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
   { ext: 'docm', type: 'document', format: 'DOCX', probe: 'document', thumbnail: 'document', preview: 'document', documentShape: 'doc' },
@@ -139,7 +141,7 @@ export const FORMAT_GROUPS: ReadonlyArray<{ type: AssetKind; label: string; form
   {
     type: 'document',
     label: '文档',
-    formats: ['TXT', 'MARKDOWN', 'CSV', 'DOCX', 'XLSX', 'PPTX', 'DOC', 'XLS', 'XLSB', 'PPT', 'WPS', 'ET', 'DPS', 'RTF', 'ODT', 'ODS', 'FODS', 'ODP']
+    formats: ['TXT', 'MARKDOWN', 'HTML', 'CSV', 'DOCX', 'XLSX', 'PPTX', 'DOC', 'XLS', 'XLSB', 'PPT', 'WPS', 'ET', 'DPS', 'RTF', 'ODT', 'ODS', 'FODS', 'ODP']
   }
 ]
 

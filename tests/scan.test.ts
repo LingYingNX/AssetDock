@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openMemoryDb } from '../src/main/services/db'
 import { scanLibrary } from '../src/main/services/scan'
-import { upsertScanned, type ScanEntry } from '../src/main/services/store'
+import { setAssetMissing, upsertScanned, type ScanEntry } from '../src/main/services/store'
 
 describe('library scan', () => {
   it('scans batches without a preview scheduler', async () => {
@@ -75,6 +75,35 @@ describe('library scan', () => {
       const [third] = await scanLibrary(root, undefined, undefined, undefined, known)
       expect(third.fingerprint).not.toBe(first.fingerprint)
     } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('brings a row flagged missing back to live when the file is there again', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mediahub-scan-revive-'))
+    const db = openMemoryDb()
+    try {
+      db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'revive', root)
+      await writeFile(join(root, 'back.svg'), '<svg/>')
+      const [entry] = await scanLibrary(root)
+      upsertScanned(db, 1, [entry])
+      setAssetMissing(db, 1, entry.relPath, true)
+      expect(db.prepare('SELECT missing FROM assets WHERE rel_path = ?').get(entry.relPath)).toEqual({ missing: 1 })
+
+      // 对账只拿 missing = 0 的行当已知清单,缺失行会在扫描里重新出现;此时 size/mtime/指纹都没变
+      const known = new Map(
+        (db
+          .prepare('SELECT rel_path, size_bytes, mtime_ms, fingerprint FROM assets WHERE library_id = 1 AND missing = 0')
+          .all() as { rel_path: string; size_bytes: number; mtime_ms: number; fingerprint: string }[])
+          .map((row) => [row.rel_path, { sizeBytes: row.size_bytes, mtimeMs: row.mtime_ms, fingerprint: row.fingerprint }])
+      )
+      const again = await scanLibrary(root, undefined, undefined, undefined, known)
+      const results = upsertScanned(db, 1, again)
+
+      expect(results[0].action).toBe('changed')
+      expect(db.prepare('SELECT missing FROM assets WHERE rel_path = ?').get(entry.relPath)).toEqual({ missing: 0 })
+    } finally {
+      db.close()
       await rm(root, { recursive: true, force: true })
     }
   })

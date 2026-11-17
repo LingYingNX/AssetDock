@@ -26,6 +26,8 @@ describe('format registry', () => {
     expect(detectFormat('a.c4d')?.external).toBe('cinema4d')
     expect(detectFormat('a.MD')?.format).toBe('MARKDOWN')
     expect(detectFormat('a.markdown')?.format).toBe('MARKDOWN')
+    expect(detectFormat('a.html')?.format).toBe('HTML')
+    expect(detectFormat('a.htm')?.documentShape).toBe('html')
     expect(detectFormat('a.docx')?.type).toBe('document')
     expect(detectFormat('a.doc')).toMatchObject({
       type: 'document',
@@ -64,6 +66,7 @@ describe('format registry', () => {
     expect(formats).toContain('HDR')
     expect(formats).toContain('EXR')
     expect(formats).toContain('MARKDOWN')
+    expect(formats).toContain('HTML')
     expect(formats).toContain('DOC')
     expect(formats).toContain('DOCX')
     expect(formats).toContain('XLSX')
@@ -80,6 +83,7 @@ describe('format registry', () => {
       }
     }
     expect(FORMAT_GROUPS.find((group) => group.type === 'document')?.formats).toContain('DOCX')
+    expect(FORMAT_GROUPS.find((group) => group.type === 'document')?.formats).toContain('HTML')
   })
 
   it('transcodes only video containers that Chromium cannot stream directly', () => {

@@ -68,6 +68,56 @@ describe('document preview', () => {
     expect(await ensureDocumentPreview(root, file, fp, 'MARKDOWN', { relPath: 'notes.md', mtimeMs: 1, sizeBytes: 1 })).toEqual(preview)
   })
 
+  it('renders standalone HTML as sanitized read-only content', async () => {
+    const root = await tempRoot()
+    const file = join(root, 'page.html')
+    await writeFile(file, [
+      '<!doctype html><html><head><style>.card{color:rgb(255,0,0);background:url(https://example.com/bg.png)}</style></head>',
+      '<body><div class="card">安全内容</div><script>alert(1)</script><img src="https://example.com/a.png"></body></html>'
+    ].join(''))
+    const fp = await writeAndFingerprint(file)
+    const preview = await ensureDocumentPreview(root, file, fp, 'HTML', { relPath: 'page.html', mtimeMs: 1, sizeBytes: 1 })
+    expect(preview.shape).toBe('html')
+    expect(preview.pageCount).toBe(1)
+    expect(preview.html).toContain('class="card"')
+    expect(preview.html).toContain('安全内容')
+    expect(preview.html).not.toContain('<script')
+    expect(preview.html).not.toContain('alert(1)')
+    expect(preview.html).not.toContain('https://example.com')
+    expect(documentThumbnailHtml(preview)).toContain('安全内容')
+  })
+
+  it('keeps the HTML <title> out of the preview body', async () => {
+    const root = await tempRoot()
+    const file = join(root, 'titled.html')
+    await writeFile(file, [
+      '<!doctype html><html><head><title>素材加载中</title><style>.mini-loader{width:240px}</style></head>',
+      '<body><div class="mini-loader"><span>准备加载...</span></div></body></html>'
+    ].join(''))
+    const fp = await writeAndFingerprint(file)
+    const preview = await ensureDocumentPreview(root, file, fp, 'HTML', { relPath: 'titled.html', mtimeMs: 1, sizeBytes: 1 })
+    // <title> 是被清洗成裸文本后落进正文的,标题不该出现在预览内容里
+    expect(preview.html).not.toContain('素材加载中')
+    expect(preview.html).toContain('准备加载...')
+    expect(preview.html).toContain('.mini-loader')
+  })
+
+  it('renders the HTML thumbnail full-bleed instead of inside a padded paper sheet', () => {
+    const thumb = documentThumbnailHtml({
+      rendererVersion: DOCUMENT_RENDERER_VERSION,
+      format: 'HTML',
+      shape: 'html',
+      fingerprint: 'abc123def456abc123de',
+      generatedAt: new Date().toISOString(),
+      pageCount: 1,
+      html: '<div class="mini-loader">x</div>'
+    })
+    // 白纸容器带 30px 内边距:HTML 用它会让作品缩成一小块、四周留白边
+    expect(thumb).not.toContain('class="doc-thumb"')
+    expect(thumb).toContain('width:900px;height:675px')
+    expect(thumb).toContain('class="mini-loader"')
+  })
+
   it('inlines library-local markdown images and drops paths outside the library', async () => {
     const root = await tempRoot()
     const outside = await tempRoot()

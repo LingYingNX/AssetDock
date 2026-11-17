@@ -19,7 +19,7 @@ const DEFAULT_PREFERENCES: PreferenceState = {
   autoSync: true,
   theme: 'light',
   autoLaunch: false,
-  closeAction: 'minimize',
+  closeAction: 'quit',
   blenderPath: '',
   cinema4dPath: ''
 }
@@ -59,6 +59,14 @@ const SHORTCUT_GROUPS: { group: string; items: { keys: string; label: string }[]
     ]
   },
   {
+    group: '素材剪贴板',
+    items: [
+      { keys: 'Ctrl C', label: '复制选中素材（可跨资源库粘贴）' },
+      { keys: 'Ctrl X', label: '剪切选中素材（可跨资源库粘贴）' },
+      { keys: 'Ctrl V', label: '粘贴到当前资源库 / 当前文件夹' }
+    ]
+  },
+  {
     group: '灯箱',
     items: [
       { keys: '← →', label: '上一个 / 下一个（图片）' },
@@ -90,7 +98,7 @@ function readPreferences(raw: string | null): PreferenceState {
       autoSync: value.autoSync !== false,
       theme: parseTheme(raw),
       autoLaunch: value.autoLaunch === true,
-      closeAction: value.closeAction === 'quit' ? 'quit' : 'minimize',
+      closeAction: value.closeAction === 'minimize' ? 'minimize' : 'quit',
       blenderPath: typeof value.blenderPath === 'string' ? value.blenderPath : '',
       cinema4dPath: typeof value.cinema4dPath === 'string' ? value.cinema4dPath : ''
     }
@@ -125,6 +133,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const activeTabId = useUI((s) => s.activeTabId)
   const assets = useUI((s) => s.assets)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
+  const openLibrary = useUI((s) => s.openLibrary)
   const [section, setSection] = useState<SectionKey>('general')
   const [draft, setDraft] = useState<PreferenceState>(DEFAULT_PREFERENCES)
   const [saving, setSaving] = useState(false)
@@ -404,24 +413,40 @@ export function PreferencesDialog(): React.JSX.Element | null {
       </section>
       <section className="pref-section">
         <h2>资源库信息</h2>
-        <div className="pref-library">
-          <div className="pref-library-badge">
-            <span className="pref-library-icon"><Icon name="layers" /></span>
-            {/* 三行各占一行:「（当前）」是徽标的限定词,库名是对象名,两者不是一段连续文字。
-                宽度放给整块(pref-library-badge 96px),库名再单独 nowrap + ellipsis —— 
-                否则中文名一到三个字就在窄栏里折行,留下一个孤字。 */}
-            <span className="pref-current">（当前）</span>
-            <span className="pref-library-name" title={activeLibrary?.name ?? undefined}>
-              {activeLibrary?.name ?? '未打开资源库'}
-            </span>
-          </div>
-          <div className="pref-library-details">
-            <span>资源库大小：{formatBytes(librarySize)}</span>
-            <span>素材数量：{fmtCount(libraryAssets.length)}</span>
-            <span className="pref-library-path">{activeLibrary?.path ?? '—'}</span>
-            {activeLibrary ? <button className="pref-link" onClick={() => window.windowApi.showInFolder(activeLibrary.path)}>打开</button> : null}
-          </div>
-        </div>
+        {libraries.length === 0 ? (
+          <div className="pref-library-empty">尚未创建资源库</div>
+        ) : (
+          <ul className="pref-library-list">
+            {libraries.map((library) => {
+              const current = library.id === activeLibrary?.id
+              return (
+                <li key={library.id} className={`pref-library${current ? ' current' : ''}`}>
+                  <div className="pref-library-badge">
+                    <span className="pref-library-icon"><Icon name="layers" /></span>
+                    {current ? <span className="pref-current">（当前）</span> : null}
+                    <span className="pref-library-name" title={library.name}>{library.name}</span>
+                  </div>
+                  <div className="pref-library-details">
+                    {current ? (
+                      <>
+                        <span>资源库大小：{formatBytes(librarySize)}</span>
+                        <span>素材数量：{fmtCount(libraryAssets.length)}</span>
+                      </>
+                    ) : null}
+                    <span className="pref-library-path">{library.path}</span>
+                    <span className="pref-library-actions">
+                      {current ? (
+                        <button className="pref-link" onClick={() => window.windowApi.showInFolder(library.path)}>在资源管理器中打开</button>
+                      ) : (
+                        <button className="pref-link" onClick={() => { openLibrary(library.id, library.name); close() }}>切换到此资源库</button>
+                      )}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
         <div className="pref-create-bar">
           <button ref={createTriggerRef} className="pref-create-library" onClick={() => setCreateOpen(true)}><Icon name="plus" />创建资源库</button>
         </div>

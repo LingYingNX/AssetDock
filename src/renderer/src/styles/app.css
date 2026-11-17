@@ -51,31 +51,49 @@
 .tb-sep{width:1px;height:var(--ic-md);background:var(--line2);margin:0 4px}
 
 /* ============================ 右下角浮层堆叠 ============================ */
-/* 进度与一次性提示共用一个锚点:纵向排列,靠下的贴住底边。
-   两者原本各自 position:fixed;right:18px;bottom:16px —— 锚点一模一样,同时出现时
-   必然互相覆盖。容器统一锚定,子元素只负责自身尺寸与过渡;容器不拦截指针。 */
+/* 一次性提示固定在右下角;加载进度已移入素材工作区,二者不会再互相遮挡。
+   容器统一锚定,子元素只负责自身尺寸与过渡;容器不拦截指针。 */
 .overlay-stack{
   position:fixed;right:18px;bottom:16px;z-index:60;
   display:flex;flex-direction:column;align-items:flex-end;gap:10px;
   pointer-events:none;
 }
 
-/* ============================ 缩略图悬浮进度 ============================ */
-/* 只在生成期间出现,完成后淡出;不占布局、不拦截指针。
+/* ============================ 素材加载悬浮进度 ============================ */
+/* 造型按用户提供的参考:240px 紧凑实底卡片、11px 状态行、4px 胶囊轨道、
+   流动彩虹填充。位置挂在 .content 内,水平居中、距底边 24px,不占布局、不拦截指针。
+   只在当前库确有缩略图要生成时出现,完成后淡出。
+   用 .content> 前缀压过 content.css 的 `.content>*{position:relative;z-index:1}`
+   (两文件同优先级时后者在后;这个前缀让绝对定位不受引入顺序影响)。
    与 Toast 同样的问题:组件在生成结束时直接 return null,卸载先于过渡,
    所以这里的 @starting-style 本来也播不出来。改成 .show 两态。 */
-.thumb-progress{
-  width:236px;padding:10px 12px 12px;border-radius:var(--r-md);
+.content>.thumb-progress{
+  --load-rainbow:linear-gradient(90deg,#ff4b4b,#ff8533,#ffd13b,#2ecc71,#00c3ff,#7d5fff,#ff4b4b);
+  position:absolute;left:0;right:0;bottom:24px;z-index:30;
+  width:min(240px,calc(100% - 48px));margin-inline:auto;
+  padding:12px 14px;border-radius:var(--r-md);
+  background:var(--menu-solid);
+  border:1px solid var(--sep);
+  box-shadow:var(--shadow-panel);
   pointer-events:none;
-  opacity:0;transform:translateY(6px);
-  transition:opacity var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out);
+  user-select:none;
+  opacity:0;transform:translateY(10px) scale(.98);
+  /* 退场比入场快,关闭不拖尾 */
+  transition:opacity var(--dur-exit) var(--ease-out),transform var(--dur-exit) var(--ease-out);
 }
-.thumb-progress.show{opacity:1;transform:none}
-.thumb-progress .tp-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
-.thumb-progress .tp-label{font-size:var(--fs-cap);font-weight:600;color:var(--t1)}
-.thumb-progress .tp-count{font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
-.thumb-progress .tp-track{height:4px;border-radius:2px;background:var(--bg3);overflow:hidden}
-.thumb-progress .tp-fill{height:100%;border-radius:2px;background:var(--acc);transition:width var(--dur-base) var(--ease-out)}
+.content>.thumb-progress.show{
+  opacity:1;transform:none;
+  transition-duration:var(--dur-fast);
+}
+.thumb-progress .tp-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;line-height:1.2}
+.thumb-progress .tp-label{min-width:0;flex:1;font-size:var(--fs-cap);color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thumb-progress .tp-percent{flex:none;font-size:var(--fs-cap);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+.thumb-progress .tp-track{height:4px;border-radius:999px;background:var(--hatch);overflow:hidden}
+.thumb-progress .tp-fill{height:100%;border-radius:999px;background:var(--load-rainbow);background-size:200% 100%;transition:width 200ms var(--ease-out);animation:tp-rainbow-flow 2s linear infinite}
+@keyframes tp-rainbow-flow{
+  0%{background-position:0% 50%}
+  100%{background-position:200% 50%}
+}
 
 /* ============================ 一次性操作提示 ============================ */
 /* 与缩略图进度同处右下,由 .overlay-stack 纵向叠放;同样不拦截指针。

@@ -19,6 +19,7 @@ export function SvgDefs(): React.JSX.Element {
       <defs>
         <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5Z" /><path d="m3 13 9 5 9-5" /></symbol>
         <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+        <symbol id="i-chev-u" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" /></symbol>
         <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
         <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" /></symbol>
         <symbol id="i-arr-l" viewBox="0 0 24 24"><path d="M19 12H5" /><path d="m11 18-6-6 6-6" /></symbol>

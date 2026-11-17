@@ -30,11 +30,13 @@ describe('thumbnail database selection', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('selects eager covers while excluding SVG, trash and missing; fingerprint scope narrows jobs', () => {
+  it('selects eager covers while excluding SVG/HTML, trash and missing; fingerprint scope narrows jobs', () => {
     const add = (relPath: string, type: string, format: string, fingerprint: string) =>
       upsertScanned(db, 1, [{ relPath, name: relPath.replace(/\.[^.]+$/, ''), type: type as never, format, sizeBytes: 10, mtimeMs: 1, fingerprint }])
     add('photo.png', 'image', 'PNG', 'fp-img')
     add('icon.svg', 'image', 'SVG', 'fp-svg')
+    add('bundle.html', 'document', 'HTML', 'fp-html')
+    add('legacy.htm', 'document', 'HTM', 'fp-htm')
     add('loader.css', 'style', 'CSS', 'fp-css')
     add('clip.mp4', 'video', 'MP4', 'fp-vid')
     add('model.glb', 'model', 'GLB', 'fp-model')
@@ -47,6 +49,9 @@ describe('thumbnail database selection', () => {
     ])
     expect(thumbJobRows(db, 1, ['fp-img']).map((row) => row.rel_path)).toEqual(['photo.png'])
     expect(thumbJobRows(db, 1, ['fp-svg'])).toEqual([])
+    // HTML 缩略图要离屏渲染整页(单张数秒),按需生成,不进启动预热
+    expect(thumbJobRows(db, 1, ['fp-html'])).toEqual([])
+    expect(thumbJobRows(db, 1, ['fp-htm'])).toEqual([])
   })
 
   const entry = (relPath: string) => ({

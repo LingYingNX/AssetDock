@@ -45,6 +45,11 @@
 .pref-choice.disabled{opacity:.46;cursor:not-allowed}
 .pref-choice.disabled input{cursor:not-allowed}
 .pref-library{display:flex;align-items:flex-start;gap:20px;min-width:0}
+.pref-library-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:16px}
+.pref-library-list>.pref-library{padding-top:16px;border-top:1px solid var(--line)}
+.pref-library-list>.pref-library:first-child{padding-top:0;border-top:0}
+.pref-library-empty{color:var(--t3);font-size:var(--fs-sub)}
+.pref-library-actions{display:flex;gap:14px}
 /* 徽标列原来 68px:"(当前)" 与库名各占一行,中文库名三个字就在这里折行,
    07-pref-library.png 里剩下一个孤字。放宽到 96px 并给库名 nowrap,
    名字长就省略号 + title 兜底——竖排单字比截断难读得多。 */

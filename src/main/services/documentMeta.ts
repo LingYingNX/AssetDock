@@ -37,7 +37,7 @@ export function documentMetaFromParts(parts: {
   workbookXml?: string | null
   slideNames?: string[]
 }): DocumentMeta {
-  if (parts.format === 'TXT' || parts.format === 'MARKDOWN' || parts.format === 'CSV') {
+  if (parts.format === 'TXT' || parts.format === 'MARKDOWN' || parts.format === 'HTML' || parts.format === 'CSV') {
     return parts.text ? { textEncoding: detectTextEncoding(parts.text) } : {}
   }
   if (parts.format === 'DOCX') {
@@ -72,7 +72,7 @@ async function probeText(absPath: string): Promise<DocumentMeta> {
 
 export async function probeDocumentMeta(absPath: string, format: string): Promise<DocumentMeta> {
   try {
-    if (format === 'TXT' || format === 'MARKDOWN' || format === 'CSV') {
+    if (format === 'TXT' || format === 'MARKDOWN' || format === 'HTML' || format === 'CSV') {
       const st = await stat(absPath)
       if (st.size > MAX_TEXT_META_BYTES) return {}
       return await probeText(absPath)

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { createLibraryFolder, exportLibraryAsset, insertCreatedFolderPath, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset, renameLibraryFolder, resolveLibraryFolder } from '../src/main/services/folders'
+import { createLibraryFolder, exportLibraryAsset, insertCreatedFolderPath, listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, removeEmptyFolderChain, renameLibraryAsset, renameLibraryFolder, resolveLibraryFolder } from '../src/main/services/folders'
 import { deleteFolderTree, listFolderOrders, replaceFolderOrders, renameFolderOrders, upsertScanned } from '../src/main/services/store'
 import { openMemoryDb } from '../src/main/services/db'
 import { openMemoryLibDb } from '../src/main/services/libraryDb'
@@ -30,6 +30,21 @@ describe('library folders', () => {
     await expect(createLibraryFolder(root, 'parent')).resolves.toBe('parent/未命名')
     await expect(createLibraryFolder(root, 'parent')).resolves.toBe('parent/未命名 (2)')
     await expect(listLibraryFolders(root)).resolves.toEqual(['parent', 'parent/未命名', 'parent/未命名 (2)'])
+  })
+
+  it('removes an emptied folder chain but keeps parents that still hold files', async () => {
+    await mkdir(join(root, 'outer', 'inner'), { recursive: true })
+    await writeFile(join(root, 'outer', 'inner', 'a.svg'), '<svg/>')
+    await writeFile(join(root, 'outer', 'keep.txt'), 'keep')
+    await rm(join(root, 'outer', 'inner', 'a.svg'))
+
+    await expect(removeEmptyFolderChain(root, 'outer/inner')).resolves.toBe(1)
+    /* 父级还有 keep.txt:不该被一起摘掉 */
+    await expect(listLibraryFolders(root)).resolves.toEqual(['outer'])
+
+    await rm(join(root, 'outer', 'keep.txt'))
+    await expect(removeEmptyFolderChain(root, 'outer')).resolves.toBe(1)
+    await expect(listLibraryFolders(root)).resolves.toEqual([])
   })
 
   it('resolves a real folder but rejects paths outside the library', async () => {

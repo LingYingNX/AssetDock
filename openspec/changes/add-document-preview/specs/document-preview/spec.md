@@ -20,6 +20,20 @@
 - **WHEN** 扫描 `guide.md` 与 `guide.markdown`
 - **THEN** 两者都归一为 Markdown 文档格式，同时保留各自的原始相对路径
 
+### Requirement: HTML/HTM 静态页面文档
+
+应用 SHALL 将 `HTML` 与 `HTM` 作为文档素材入库并支持应用内只读预览；扩展名 SHALL 大小写不敏感，别名 SHALL 归一为同一规范格式名。预览 SHALL 复用受控静态 HTML 路径与「文档预览安全隔离」要求：脚本、事件属性、`@import`、`url()` 与外部网络资源 SHALL NOT 执行或加载。
+
+#### Scenario: 拖入独立 HTML
+
+- **WHEN** 用户把一个库外 `.html` 文件拖到素材工作区
+- **THEN** 文件被复制进当前文件夹并生成 HTML 文档素材，而不是计入「不支持或库内文件」
+
+#### Scenario: HTML 内的脚本与外部资源
+
+- **WHEN** 独立 HTML 同时包含样式、脚本和远程图片
+- **THEN** 预览保留静态结构与样式，不执行脚本，也不请求远程图片
+
 ### Requirement: 只读文档预览
 
 文档 SHALL 以只读方式展示。应用 SHALL NOT 提供编辑正文、保存回原文件、修改公式、执行宏、执行脚本或改变文档内容的入口。

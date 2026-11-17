@@ -48,7 +48,7 @@
 - [x] 7.2 实现文档页面导航：XLSX 工作表标签、PPTX 幻灯片翻页、长 DOCX 滚动定位；验证键盘与点击操作
 - [x] 7.3 更新卡片、胶片带、格式徽章与检查器，显示文档格式、大小和可用结构信息；信息不可用时显示破折号
 - [x] 7.4 在格式筛选增加文档分组并接入 `queryAssets`；验证 DOCX 与 DOC 分离、Markdown 别名归一
-- [x] 7.5 让文档豁免图片形状与尺寸筛选，并在界面说明该筛选不适用；验证选择方形或尺寸筛选时文档不被误分类
+- [x] 7.5 让文档豁免图片形状与尺寸筛选；验证选择方形或尺寸筛选时文档不被误分类
 - [x] 7.6 更新文档预览样式，保证浅色与深色主题、窄窗口与移动尺寸下工具栏、页码、工作表标签和内容滚动可用；用真实窗口验证
 
 ## 8. 安全与失败验证
@@ -111,6 +111,13 @@
 - [ ] 10C.2 通过 `execFile` 参数数组执行无头转 PDF，限制超时、并发、输出大小和临时目录；用真实 `PPT/WPS/ET/DPS` 样本验证转换
 - [ ] 10C.3 注册 `PPT/WPS/ET/DPS` 的外部路径，复用 PDF 页面渲染、缩略图与缓存清理；在安装对应软件的机器上逐项验证
 - [ ] 10C.4 验证外部转换器版本变化、转换失败、文件加密和超时不会破坏原文件或素材元数据
+
+## 11. HTML/HTM 静态页面
+
+- [x] 11.1 在 `src/shared/formats.ts` 注册 `HTML/HTM` 为内置 document，补 `html` 文档形态与文本编码探测；运行 `npm run test -- tests/formats.test.ts tests/documentMeta.test.ts` 验证别名、分组与编码
+- [x] 11.2 复用 `sanitizeDocumentHtml()`、`documentThumbnailHtml()` 与 `DocumentStage` 的 sandbox iframe，清理脚本、事件属性、`@import`、`url()` 与外部资源；运行 `npm run test -- tests/documentPreview.test.ts tests/fileImport.test.ts` 验证安全清理与拖入导入
+- [x] 11.3 用独立 HTML 在隔离 Electron 实例验证：导入结果为 `imported=1`、`skipped=0`，卡片缩略图为 640×480 JPEG，灯箱显示静态 HTML 且不执行脚本
+- [x] 11.4 让侧栏物理文件夹行接收外部文件拖放：高亮目标、复制进该文件夹并复用统一导入提示；用 CDP 带本地文件路径拖放到「我的分类」验证入库成功
 
 ## Workflow follow-up
 

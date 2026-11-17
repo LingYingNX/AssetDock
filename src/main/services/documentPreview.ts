@@ -1,4 +1,4 @@
-import { readFile, stat, mkdir, rm } from 'node:fs/promises'
+import { cp, readFile, stat, mkdir, rm } from 'node:fs/promises'
 import { dirname, extname, join, normalize } from 'node:path'
 import type Database from 'better-sqlite3'
 import MarkdownIt from 'markdown-it'
@@ -1076,6 +1076,25 @@ function sanitizeDocumentHtml(html: string): string {
     .replace(/@import[\s\S]*?;/gi, '')
     .replace(/(?<!-)url\s*\([^)]*\)/gi, 'none')
     .replace(/expression\s*\([^)]*\)/gi, 'none')
+}
+
+/**
+ * HTML 素材是网页,不是纸张文档。
+ *
+ * cheerio 清洗后整份文档只剩标签流:`<title>` 的文字会变成正文首行(截图里那行
+ * 「素材加载中」),而且 `<style>` 被丢到文档头部——判定时按 head/body 分区重建。
+ * 这里只保留 head 里的 style 与 body 内容,顺序不动,以免破坏既有的层叠关系。
+ */
+export function splitHtmlDocument(html: string): { styles: string; body: string } {
+  const styles = [...html.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/gi)].map((m) => m[0]).join('\n')
+  const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)
+  const withoutStyles = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+  const body = bodyMatch ? bodyMatch[1] : withoutStyles
+  return {
+    styles,
+    // 只剥掉残留的 html/head/body 包裹与文档无关的纯文本骨架,保留真实节点
+    body: body.replace(/<\/?(?:html|head|body)\b[^>]*>/gi, '').trim()
+  }
 }
 
 /** 旧版 Word 常用大量空段落做页首留白；缩略图与首屏应跳过它们。 */
@@ -2320,6 +2339,23 @@ async function previewTextLike(
     }
   }
   const decoded = decodeText(buffer)
+  if (format === 'HTML') {
+    // 先切出 head 的 style 与 body 正文,再清洗:否则 <title> 文字会落进正文。
+    const parts = splitHtmlDocument(decoded.text)
+    const html = sanitizeDocumentHtml(parts.styles + parts.body)
+    assertDocumentHtmlBudget(html)
+    return {
+      rendererVersion: DOCUMENT_RENDERER_VERSION,
+      format,
+      shape: 'html',
+      fingerprint,
+      generatedAt: new Date().toISOString(),
+      textEncoding: decoded.encoding,
+      html,
+      pageCount: 1,
+      ...(decoded.text.length >= MAX_TEXT_CHARS ? { truncated: true } : {})
+    }
+  }
   if (format === 'CSV') {
     return {
       rendererVersion: DOCUMENT_RENDERER_VERSION,
@@ -2381,7 +2417,7 @@ async function parseDocument(
   format: AssetFormat,
   fingerprint: string
 ): Promise<DocumentPreview> {
-  if (format === 'TXT' || format === 'MARKDOWN' || format === 'CSV') {
+  if (format === 'TXT' || format === 'MARKDOWN' || format === 'HTML' || format === 'CSV') {
     return previewTextLike(libPath, absPath, fingerprint, format, shapeFor(format))
   }
   if (format === 'DOC') return previewDoc(absPath, fingerprint)
@@ -2478,6 +2514,35 @@ export async function removeDocumentPreview(libPath: string, fingerprint: string
   await rm(documentPreviewDir(libPath, fingerprint), { recursive: true, force: true }).catch(() => undefined)
 }
 
+/**
+ * 跨库搬素材时把源库那份文档解析缓存一起搬过来。
+ *
+ * 缓存目录按指纹自成一体(预览 JSON + 附带资源),而指纹含 mtime、复制后必然变,
+ * 所以照搬到目标库的新指纹目录下。不搬的话目标库要把 docx/xlsx/pptx 重新解析一遍,
+ * 那是搬家后几秒才出图的另一半原因。
+ */
+export async function adoptDocumentPreview(
+  sourceLibPath: string,
+  targetLibPath: string,
+  sourceFingerprint: string,
+  targetFingerprint: string
+): Promise<boolean> {
+  if (
+    !/^[0-9a-f]{20}$/i.test(sourceFingerprint) ||
+    !/^[0-9a-f]{20}$/i.test(targetFingerprint) ||
+    sourceLibPath === targetLibPath
+  ) {
+    return false
+  }
+  const from = documentPreviewDir(sourceLibPath, sourceFingerprint)
+  const to = documentPreviewDir(targetLibPath, targetFingerprint)
+  if (!(await stat(from).then((s) => s.isDirectory(), () => false))) return false
+  if (await stat(to).then(() => true, () => false)) return true
+  await mkdir(dirname(to), { recursive: true })
+  await cp(from, to, { recursive: true, force: true })
+  return true
+}
+
 export function documentFingerprintInUse(
   db: Database.Database,
   libraryId: number,
@@ -2552,6 +2617,17 @@ export function documentThumbnailHtml(preview: DocumentPreview): string {
       return `<div class="slide-el" style="${style}">${escapeXmlText(el.text ?? '')}</div>`
     }).join('')
     return `<html><head>${styles}</head><body><div class="doc-thumb"><div class="slide">${elements}</div></div></body></html>`
+  }
+  /*
+    HTML 缩略图必须按网页取景:铺满 900×675、不套白纸与 30px 内边距。
+    原先与 Word/Markdown 共用 .doc-thumb,240px 的加载器被 30px 内边距再压缩一层,
+    在卡片里缩成一小块,四周留着白边——用户看到的「很小 + 出血线」就是这个。
+  */
+  if (preview.shape === 'html') {
+    // 正文直接进 body:页面常靠 body 上的 flex 居中,套一层 wrapper 会把内容顶到左上角。
+    return `<html><head>${styles}<style>
+      html,body{width:900px;height:675px;margin:0;overflow:hidden}
+    </style></head><body>${preview.html ?? ''}</body></html>`
   }
   if (preview.shape === 'markdown' || preview.shape === 'doc') {
     return `<html><head>${styles}</head><body><div class="doc-thumb">${preview.html ?? ''}</div></body></html>`

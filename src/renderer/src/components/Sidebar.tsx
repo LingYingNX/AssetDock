@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
 import { fmtCount, sidebarCounts } from '../data/query'
 import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
+import { isExternalFileDrag } from '../data/drop-files'
 import { type FolderPlacement, canDropFolder, folderDropClass, folderDropPlacement } from '../data/folder-drag'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from '../data/sidebar-width'
-import { tagNavKey, tagsFromNav } from '../data/tag-nav'
 import { Icon } from './Icons'
 
 interface DirNode {
@@ -133,7 +133,8 @@ function DirTree({
   nodes,
   depth,
   nav,
-  setNav,
+  selectedFolders,
+  onFolderClick,
   editingPath,
   onCommit,
   onCancel,
@@ -142,6 +143,7 @@ function DirTree({
   onAssetDragOverFolder,
   onAssetDragLeaveFolder,
   onAssetDropFolder,
+  onExternalFileDropFolder,
   folderDropRef,
   folderDragSource,
   onFolderDragStart,
@@ -149,12 +151,13 @@ function DirTree({
   onFolderDragOver,
   onFolderDragLeave,
   onFolderDrop,
-  onOpenContextMenu
+  onFolderContextMenu
 }: {
   nodes: DirNode[]
   depth: number
   nav: string
-  setNav: (n: never) => void
+  selectedFolders: Set<string>
+  onFolderClick: (path: string, event: React.MouseEvent<HTMLElement>) => void
   editingPath: string | null
   onCommit: (path: string, name: string) => void
   onCancel: () => void
@@ -163,6 +166,7 @@ function DirTree({
   onAssetDragOverFolder: (element: HTMLDivElement) => void
   onAssetDragLeaveFolder: (element: HTMLDivElement, event: React.DragEvent<HTMLDivElement>) => void
   onAssetDropFolder: (path: string, event: React.DragEvent<HTMLDivElement>) => void
+  onExternalFileDropFolder: (path: string, event: React.DragEvent<HTMLDivElement>) => void
   folderDropRef: React.MutableRefObject<FolderDrop | null>
   folderDragSource: () => string | null
   onFolderDragStart: (path: string, preview: HTMLDivElement) => void
@@ -170,7 +174,7 @@ function DirTree({
   onFolderDragOver: (element: HTMLDivElement, path: string, placement: FolderPlacement) => void
   onFolderDragLeave: (path: string, event: React.DragEvent<HTMLDivElement>) => void
   onFolderDrop: (path: string, event: React.DragEvent<HTMLDivElement>, placement: FolderPlacement) => void
-  onOpenContextMenu: (path: string, x: number, y: number) => void
+  onFolderContextMenu: (path: string, x: number, y: number) => void
 }): React.JSX.Element {
   return (
     <>
@@ -191,7 +195,7 @@ function DirTree({
               </div>
             ) : (
               <div
-                className={`nav-item folder-row${on ? ' on' : ''}${n.children.length > 0 ? ' has-children' : ''}`}
+                className={`nav-item folder-row${on ? ' on' : ''}${selectedFolders.has(n.path) ? ' sel' : ''}${n.children.length > 0 ? ' has-children' : ''}`}
                 style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 16px))` }}
                 draggable={n.movable}
                 onDragStart={(event) => {
@@ -207,6 +211,11 @@ function DirTree({
                   if (isAssetDrag(e) && n.movable) {
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
+                    onAssetDragOverFolder(e.currentTarget)
+                  } else if (isExternalFileDrag(e.dataTransfer) && n.movable) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    e.dataTransfer.dropEffect = 'copy'
                     onAssetDragOverFolder(e.currentTarget)
                   } else if (isFolderDrag(e)) {
                     const rect = e.currentTarget.getBoundingClientRect()
@@ -225,6 +234,8 @@ function DirTree({
                 onDrop={(e) => {
                   if (isAssetDrag(e)) {
                     onAssetDropFolder(n.path, e)
+                  } else if (isExternalFileDrag(e.dataTransfer) && n.movable) {
+                    onExternalFileDropFolder(n.path, e)
                   } else if (isFolderDrag(e)) {
                     const rect = e.currentTarget.getBoundingClientRect()
                     const placement = folderDropPlacement(e.clientY - rect.top, rect.height)
@@ -236,10 +247,7 @@ function DirTree({
                   if (!n.movable) return
                   event.preventDefault()
                   event.stopPropagation()
-                  setNav(key as never)
-                  // 灯箱未保存内容取消切换时 setNav 不会落定,此时不能打开与选中态不一致的菜单。
-                  if (useUI.getState().nav !== key) return
-                  onOpenContextMenu(n.path, event.clientX, event.clientY)
+                  onFolderContextMenu(n.path, event.clientX, event.clientY)
                 }}
                 data-folder-path={n.path}
               >
@@ -261,11 +269,10 @@ function DirTree({
                 )}
                 <button
                   className="folder-main"
-                  onClick={() => {
-                    setNav(key as never)
-                  }}
+                  onClick={(event) => onFolderClick(n.path, event)}
                   title={n.label}
                   aria-current={on ? 'page' : undefined}
+                  aria-pressed={selectedFolders.has(n.path)}
                 >
                   <Icon name="folder" />
                   <span className="folder-label">{n.label}</span>
@@ -278,7 +285,8 @@ function DirTree({
                 nodes={n.children}
                 depth={depth + 1}
                 nav={nav}
-                setNav={setNav}
+                selectedFolders={selectedFolders}
+                onFolderClick={onFolderClick}
                 editingPath={editingPath}
                 onCommit={onCommit}
                 onCancel={onCancel}
@@ -287,6 +295,7 @@ function DirTree({
                 onAssetDragOverFolder={onAssetDragOverFolder}
                 onAssetDragLeaveFolder={onAssetDragLeaveFolder}
                 onAssetDropFolder={onAssetDropFolder}
+                onExternalFileDropFolder={onExternalFileDropFolder}
                 folderDropRef={folderDropRef}
                 folderDragSource={folderDragSource}
                 onFolderDragStart={onFolderDragStart}
@@ -294,7 +303,7 @@ function DirTree({
                 onFolderDragOver={onFolderDragOver}
                 onFolderDragLeave={onFolderDragLeave}
                 onFolderDrop={onFolderDrop}
-                onOpenContextMenu={onOpenContextMenu}
+                onFolderContextMenu={onFolderContextMenu}
               />
             )}
           </div>
@@ -431,6 +440,9 @@ export function Sidebar(): React.JSX.Element {
   const setNav = useUI((s) => s.setNav)
   const assets = useUI((s) => s.assets)
   const mode = useUI((s) => s.mode)
+  const activeLibraryId = useUI((s) => s.tabs.find((t) => t.id === s.activeTabId)?.libraryId ?? null)
+  const folderSelection = useUI((s) => s.folderSelection)
+  const clickFolder = useUI((s) => s.clickFolder)
   const folderPaths = useUI((s) => s.folderPaths)
   const physicalFolderPaths = useUI((s) => s.physicalFolderPaths)
   const folderEditPath = useUI((s) => s.folderEditPath)
@@ -449,21 +461,42 @@ export function Sidebar(): React.JSX.Element {
   const folderDropRef = useRef<FolderDrop | null>(null)
   const folderDragSourceRef = useRef<string | null>(null)
   const collapsedPaths = useMemo(() => new Set(collapsedFolders), [collapsedFolders])
-  const navTags = useMemo(() => tagsFromNav(nav), [nav])
   const c = useMemo(() => sidebarCounts(assets), [assets])
-  const tagStats = useMemo(() => assets.reduce<Record<string, { color: string; n: number }>>((acc, a) => {
-    if (a.missing || a.deletedAt) return acc
-    for (const t of a.tags) {
-      acc[t.name] = acc[t.name] ?? { color: t.color, n: 0 }
-      acc[t.name].n++
-    }
-    return acc
-  }, {}), [assets])
 
   const dirTree = useMemo(
     () => mode === 'library' ? buildDirTree(folderPaths, assets, new Set(physicalFolderPaths)) : [],
     [mode, folderPaths, assets, physicalFolderPaths]
   )
+
+  /* 可见顺序 = 展开状态下的深度优先;Shift 区间按这个顺序算,和屏幕上看到的顺序一致 */
+  const visibleFolderOrder = useMemo(() => {
+    const order: string[] = []
+    const walk = (nodes: DirNode[]): void => {
+      for (const node of nodes) {
+        order.push(node.path)
+        if (!collapsedPaths.has(node.path)) walk(node.children)
+      }
+    }
+    walk(dirTree)
+    return order
+  }, [dirTree, collapsedPaths])
+
+  const selectedFolders = useMemo(
+    () =>
+      new Set(
+        folderSelection && folderSelection.libraryId === activeLibraryId ? folderSelection.paths : []
+      ),
+    [folderSelection, activeLibraryId]
+  )
+
+  const handleFolderClick = (path: string, event: React.MouseEvent<HTMLElement>): void => {
+    if (activeLibraryId == null) return
+    const shift = event.shiftKey
+    const toggle = event.ctrlKey || event.metaKey
+    clickFolder(activeLibraryId, path, { shift, toggle, order: visibleFolderOrder })
+    /* 加选只改选区:改导航会把素材列表也切走,多选过程中等于把眼睛挪开 */
+    if (!shift && !toggle) setNav(`folder:${path}` as never)
+  }
 
   const setAssetDropTarget = (element: HTMLElement | null): void => {
     if (assetDropTargetRef.current === element) return
@@ -478,6 +511,26 @@ export function Sidebar(): React.JSX.Element {
     const encoded = event.dataTransfer.getData(MEDIA_ASSETS_DRAG_TYPE) || event.dataTransfer.getData('text/plain')
     const assetIds = decodeAssetDrag(encoded)
     if (assetIds.length > 0) moveAssetsToFolder(assetIds, folder)
+  }
+
+  const importExternalDrop = (folder: string, event: React.DragEvent<HTMLElement>): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setAssetDropTarget(null)
+    let paths: string[]
+    try {
+      paths = Array.from(event.dataTransfer?.files ?? [])
+        .map((file) => window.windowApi.getFilePath(file))
+        .filter((path): path is string => !!path)
+    } catch {
+      useUI.getState().showToast('无法读取拖入文件的路径', 'warn')
+      return
+    }
+    if (paths.length === 0) {
+      useUI.getState().showToast('无法读取拖入文件的路径', 'warn')
+      return
+    }
+    void useUI.getState().importDroppedPaths(paths, folder)
   }
 
   const toggleCollapsed = (path: string): void => {
@@ -541,16 +594,25 @@ export function Sidebar(): React.JSX.Element {
                 aria-current={nav === 'untagged' ? 'page' : undefined}
             onClick={() => setNav('untagged')}
             onDragOver={(e) => {
-              if (!isAssetDrag(e)) return
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              setAssetDropTarget(e.currentTarget)
+              if (isExternalFileDrag(e.dataTransfer)) {
+                e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = 'copy'
+                setAssetDropTarget(e.currentTarget)
+              } else if (isAssetDrag(e)) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setAssetDropTarget(e.currentTarget)
+              }
             }}
             onDragLeave={(e) => {
               if (e.currentTarget.contains(e.relatedTarget as Node)) return
               if (assetDropTargetRef.current === e.currentTarget) setAssetDropTarget(null)
             }}
-            onDrop={(e) => moveDrop('', e)}
+            onDrop={(e) => {
+              if (isExternalFileDrag(e.dataTransfer)) importExternalDrop('', e)
+              else moveDrop('', e)
+            }}
           >
             <Icon name="inbox" />未分类<span className={`cnt${c.untagged > 0 ? ' has-items' : ''}`}>{fmtCount(c.untagged)}</span>
           </button>
@@ -577,7 +639,8 @@ export function Sidebar(): React.JSX.Element {
                 nodes={dirTree}
                 depth={0}
                 nav={nav}
-                setNav={setNav}
+                selectedFolders={selectedFolders}
+                onFolderClick={handleFolderClick}
                 editingPath={folderEditPath}
                 onCommit={renameFolder}
                 onCancel={cancelFolderRename}
@@ -589,6 +652,7 @@ export function Sidebar(): React.JSX.Element {
                   if (assetDropTargetRef.current === element) setAssetDropTarget(null)
                 }}
                 onAssetDropFolder={moveDrop}
+                onExternalFileDropFolder={importExternalDrop}
                 folderDropRef={folderDropRef}
                 folderDragSource={() => folderDragSourceRef.current}
                 onFolderDragStart={(path, preview) => {
@@ -606,7 +670,18 @@ export function Sidebar(): React.JSX.Element {
                   }
                 }}
                 onFolderDrop={(path, event, placement) => dropFolder(path, event, placement, physicalFolderPaths.includes(path))}
-                onOpenContextMenu={openFolderContextMenu}
+                onFolderContextMenu={(path, x, y) => {
+                  const key = `folder:${path}`
+                  setNav(key as never)
+                  /* 灯箱未保存内容取消切换时 setNav 不会落定,此时不能打开与选中态不一致的菜单 */
+                  if (useUI.getState().nav !== key) return
+                  /* 右键落在已选中的行上时保留整个选区,落在别处就改成单选 */
+                  const current = useUI.getState().folderSelection
+                  if (activeLibraryId != null && !(current?.libraryId === activeLibraryId && current.paths.includes(path))) {
+                    clickFolder(activeLibraryId, path, {})
+                  }
+                  openFolderContextMenu(path, x, y)
+                }}
               />
               <RootFolderDrop
                 onDragOver={(element, e) => {
@@ -629,34 +704,6 @@ export function Sidebar(): React.JSX.Element {
           )}
         </section>
 
-        <section className="side-sec">
-          <div className="side-title"><Icon name="tag" />标签</div>
-          {Object.entries(tagStats).map(([name, info]) => {
-            const selected = navTags.includes(name)
-            return (
-              <button
-                key={name}
-                className={`nav-item tag-nav-item${selected ? ' on' : ''}`}
-                aria-pressed={selected}
-                title={`${name} · Shift 点击多选`}
-                onClick={(event) => {
-                  const next = event.shiftKey
-                    ? selected
-                      ? navTags.filter((tag) => tag !== name)
-                      : [...navTags, name]
-                    : selected
-                      ? []
-                      : [name]
-                  setNav(tagNavKey(next))
-                }}
-              >
-                <span className="dot" style={{ background: info.color }} />
-                {name}
-                <span className={`cnt${info.n > 0 ? ' has-items' : ''}`}>{fmtCount(info.n)}</span>
-              </button>
-            )
-          })}
-        </section>
       </div>
       <SidebarResizer />
     </aside>

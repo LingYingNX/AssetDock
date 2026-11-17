@@ -44,6 +44,13 @@ const MIME: Record<string, string> = {
 
 const CORS_HEADERS = { 'access-control-allow-origin': '*' }
 
+/**
+ * HTML 素材在灯箱里是「原样播放」,脚本必须能跑,但素材库页面不该能发起远程请求。
+ * sandbox="allow-scripts" 已经把它隔离出应用上下文,这里再补一层资源策略。
+ */
+export const HTML_PREVIEW_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+
 /** 扩展名 → MIME;未知扩展名按二进制流处理(纯函数,便于测试) */
 export function mimeForExtension(ext: string): string {
   return MIME[ext.toLowerCase()] ?? 'application/octet-stream'
@@ -122,6 +129,8 @@ function serveFile(path: string, type: string, immutable: boolean, size?: number
     'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate'
   }
   if (size != null) headers['content-length'] = String(size)
+  // HTML 是唯一会执行脚本的类型:内联动效必须能跑,远程资源一律不许
+  if (type === 'text/html') headers['content-security-policy'] = HTML_PREVIEW_CSP
   const stream = createReadStream(path)
   return new Response(Readable.toWeb(stream) as ReadableStream, { status: 200, headers })
 }
@@ -274,6 +283,7 @@ export function registerMediaProtocol(): void {
             'content-length': String(end - start + 1),
             'content-range': `bytes ${start}-${end}/${total}`,
             'accept-ranges': 'bytes',
+            ...(type === 'text/html' ? { 'content-security-policy': HTML_PREVIEW_CSP } : {}),
             ...cacheHeaders
           }
         })

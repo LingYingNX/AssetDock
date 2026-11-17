@@ -50,6 +50,8 @@ export function Filmstrip(): React.JSX.Element | null {
   const filters = useUI((s) => s.filters)
   const stripColor = useUI((s) => s.stripColor)
   const openLightbox = useUI((s) => s.openLightbox)
+  const stripOpen = useUI((s) => s.stripOpen)
+  const toggleStrip = useUI((s) => s.toggleStrip)
   const trackRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
   const [scrollLeft, setScrollLeft] = useState(0)
@@ -146,8 +148,20 @@ export function Filmstrip(): React.JSX.Element | null {
     : { start: 0, end: visible.length, padLeft: centerStart, padRight: centerEnd }
   const slice = visible.slice(win.start, win.end)
 
+  /* 抽屉:底边常驻一条握把,胶片带从握把上方滑出/收回。
+     握把是唯一的开关,收起时右侧仍写「第几张/共几张」,不至于失去方位。 */
   return (
-    <div className="pv-stripbar">
+    <div className={`pv-stripbar${stripOpen ? ' open' : ''}`}>
+      <button
+        className="pv-strip-grab"
+        title={stripOpen ? '收起胶片带' : '展开胶片带'}
+        aria-label={stripOpen ? '收起胶片带' : '展开胶片带'}
+        aria-expanded={stripOpen}
+        onClick={toggleStrip}
+      >
+        <span className="pv-strip-grip" aria-hidden="true" />
+        {stripOpen ? null : <span className="pv-strip-pos">{idx + 1} / {visible.length}</span>}
+      </button>
       <div className="pv-striprail" ref={railRef}>
         <StripSlider
           rail={railRef}

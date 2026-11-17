@@ -23,13 +23,17 @@ if (!app.isPackaged && process.env.MEDIAHUB_TEST_USER_DATA) {
   app.setPath('userData', resolve(process.env.MEDIAHUB_TEST_USER_DATA))
 }
 
-/** 偏好中的关闭行为:minimize=关闭时最小化到任务栏,quit=直接退出应用 */
+/**
+ * 偏好中的关闭行为:minimize=关闭时隐藏窗口,quit=直接退出应用。
+ * 默认 quit:点右上角 X 却"什么都没发生"是最容易让人以为改动没生效的一种反馈,
+ * 想常驻后台的用户可以在设置里显式选「最小化」。
+ */
 function closeBehavior(): 'minimize' | 'quit' {
   try {
     const prefs = JSON.parse(getAppState(getDb(), 'preferences') ?? '{}') as { closeAction?: unknown }
-    return prefs.closeAction === 'quit' ? 'quit' : 'minimize'
+    return prefs.closeAction === 'minimize' ? 'minimize' : 'quit'
   } catch {
-    return 'minimize'
+    return 'quit'
   }
 }
 

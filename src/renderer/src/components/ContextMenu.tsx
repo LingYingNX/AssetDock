@@ -28,6 +28,9 @@ export function ContextMenu(): React.JSX.Element | null {
   const selectedIds = useUI((s) => s.selectedIds)
   const folderPaths = useUI((s) => s.folderPaths)
   const copySelected = useUI((s) => s.copySelected)
+  const cutSelected = useUI((s) => s.cutSelected)
+  const pasteClipboard = useUI((s) => s.pasteClipboard)
+  const assetClipboard = useUI((s) => s.assetClipboard)
   const showToast = useUI((s) => s.showToast)
   const [openSub, setOpenSub] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -186,6 +189,13 @@ export function ContextMenu(): React.JSX.Element | null {
       ? [{ icon: 'sync', label: '从回收站恢复', fn: () => restoreAsset(m.assetId) }]
       : []),
     { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? () => { copySelected() } : undefined },
+    { icon: 'contract', label: '剪切', k: 'Ctrl X', fn: copyable ? () => { cutSelected() } : undefined },
+    {
+      icon: 'inbox',
+      label: assetClipboard ? `粘贴 ${assetClipboard.ids.length} 个素材` : '粘贴',
+      k: 'Ctrl V',
+      fn: assetClipboard ? () => { pasteClipboard() } : undefined
+    },
     { icon: 'download', label: '导出…', fn: copyable ? exportSelection : undefined },
     { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAssets(targetIds) : trashAssets(targetIds)) }
   ]

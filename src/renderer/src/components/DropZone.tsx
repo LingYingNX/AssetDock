@@ -71,17 +71,7 @@ export function DropZone({ active }: { active: boolean }): React.JSX.Element | n
       }
       busyRef.current = true
       setBusy(true)
-      void window.windowApi.assets.importPaths(tab.libraryId, paths, currentFolder(state.nav)).then((result) => {
-        if ('error' in result) {
-          state.showToast(result.error, 'warn')
-          return
-        }
-        const skipped = result.skipped > 0 ? `，跳过 ${result.skipped} 个不支持或库内文件` : ''
-        state.showToast(`已导入 ${result.imported} 个素材${skipped}`, result.skipped > 0 ? 'warn' : 'ok')
-        state.reloadActiveLibrary()
-      }).catch(() => {
-        state.showToast('导入素材失败，请重试', 'warn')
-      }).finally(() => {
+      void state.importDroppedPaths(paths, currentFolder(state.nav)).finally(() => {
         busyRef.current = false
         setBusy(false)
       })

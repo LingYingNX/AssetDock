@@ -11,7 +11,7 @@ import { ensureLibraryStorage, hasLibDb } from '../services/libraryDb'
 import {
   assertLibraryFolder, createLibraryFolder, exportLibraryAsset, insertCreatedFolderPath,
   listLibraryFolders, moveLibraryAsset, moveLibraryFolder, orderLibraryFolders, renameLibraryAsset,
-  renameLibraryFolder, resolveLibraryFolder
+  renameLibraryFolder, resolveLibraryFolder, removeEmptyFolderChain
 } from '../services/folders'
 import { removeThumbsIfUnused, retargetThumb } from '../services/thumbs'
 import { readShellAsset, readTextAsset, renameShellAlongside, writeShellAsset, writeTextAsset } from '../services/textAssets'
@@ -31,10 +31,51 @@ import { configuredToolPath, probeTool, type ExternalToolKey } from '../services
 import { countPdfPages } from '../services/aiPreview'
 import { importDroppedFiles } from '../services/fileImport'
 import { ensureDocumentPreview, removeDocumentPreviewIfUnused } from '../services/documentPreview'
+import { transferAssets, transferFolderTree } from '../services/assetTransfer'
+import { cacheFolderList, cachedFolderList, invalidateFolderList } from './folderListCache'
 
 function folderParent(path: string): string {
   const index = path.lastIndexOf('/')
   return index < 0 ? '' : path.slice(0, index)
+}
+
+/**
+ * 素材被搬走之后源目录可能就空了:摘掉空目录,并让两侧目录树重新读盘。
+ *
+ * 不摘的话侧栏会留一个 0 件的空文件夹,素材早就不在库里,点进去什么都没有;
+ * 只在真的摘掉了目录时才重排顺序/失效缓存,没搬空就不动用户排好的目录顺序。
+ */
+async function pruneEmptiedFolders(s: Scope, libraryId: number, relPaths: readonly string[]): Promise<number> {
+  let removed = 0
+  for (const folder of new Set(relPaths.map(folderParent).filter(Boolean))) {
+    removed += await removeEmptyFolderChain(s.libPath, folder)
+  }
+  if (removed > 0) {
+    replaceFolderOrders(
+      s.db,
+      libraryId,
+      orderLibraryFolders(await listLibraryFolders(s.libPath), listFolderOrders(s.db, libraryId))
+    )
+    invalidateFolderList(libraryId)
+  }
+  return removed
+}
+
+/**
+ * 跨库传输的进度外报(源库归属)。
+ *
+ * 几千件素材逐条 send 会把通道打满,所以按件数节流;但 0% 与 100% 一定发,
+ * 进度条要有起点和收尾。渲染层只在操作进行中显示,结束后由操作方清空。
+ */
+const TRANSFER_PROGRESS_STEP = 25
+
+function transferProgressReporter(libraryId: number): (done: number, total: number) => void {
+  let lastSent = 0
+  return (done, total) => {
+    if (done !== 0 && done !== total && done - lastSent < TRANSFER_PROGRESS_STEP) return
+    lastSent = done
+    send('transfer:progress', { libraryId, done, total })
+  }
 }
 
 function moveFolderBlock(paths: readonly string[], source: string, target: string, placement: 'before' | 'after' | 'inside'): string[] {
@@ -55,8 +96,12 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!s) return { error: '素材库不存在' }
     try {
+      const cached = cachedFolderList(libraryId)
+      if (cached) return { paths: cached }
       const physical = await listLibraryFolders(s.libPath)
-      return { paths: orderLibraryFolders(physical, listFolderOrders(s.db, libraryId)) }
+      const paths = orderLibraryFolders(physical, listFolderOrders(s.db, libraryId))
+      cacheFolderList(libraryId, paths)
+      return { paths }
     } catch {
       return { error: '无法读取素材库文件夹' }
     } finally {
@@ -77,6 +122,7 @@ export function registerAssetsIpc(): void {
         parentPath
       )
       replaceFolderOrders(s.db, libraryId, ordered)
+      cacheFolderList(libraryId, ordered)
       send('assets:changed', { libraryId })
       return { path }
     } catch (error) {
@@ -122,6 +168,7 @@ export function registerAssetsIpc(): void {
         }
       })
       send('assets:changed', { libraryId })
+      invalidateFolderList(libraryId)
       return { ok: true, removedAssets }
     } catch (error) {
       return { error: error instanceof Error ? error.message : '无法将文件夹移入回收站' }
@@ -139,6 +186,7 @@ export function registerAssetsIpc(): void {
       path = await withoutRootWatcher(libraryId, root, () => renameLibraryFolder(root, relPath, name))
       renameAssetFolder(s.db, libraryId, relPath, path)
       renameFolderOrders(s.db, libraryId, relPath, path)
+      invalidateFolderList(libraryId)
       send('assets:changed', { libraryId })
       return { path }
     } catch (error) {
@@ -196,6 +244,7 @@ export function registerAssetsIpc(): void {
         placement
       )
       replaceFolderOrders(s.db, libraryId, ordered)
+      cacheFolderList(libraryId, ordered)
       // 缩略图按指纹命名,文件夹移动后文件继续有效,只需同步清单里的路径记录
       if (path !== sourcePath) {
         const moved = s.db.prepare('SELECT fingerprint, rel_path FROM assets WHERE library_id = ? AND rel_path LIKE ?').all(libraryId, sourcePath + '/%') as { fingerprint: string; rel_path: string }[]
@@ -205,6 +254,7 @@ export function registerAssetsIpc(): void {
       return { path }
     } catch (error) {
       // 物理目录已移动但后续数据库/缩略图同步失败时，尽量恢复磁盘与索引一致。
+      invalidateFolderList(libraryId)
       try {
         if (movedOnDisk && path !== sourcePath) {
           await withoutRootWatcher(libraryId, root, () => moveLibraryFolder(root, path, sourcePath.includes('/') ? folderParent(sourcePath) : ''))
@@ -221,15 +271,84 @@ export function registerAssetsIpc(): void {
     }
   })
 
-  ipcMain.handle('assets:list', (_e, libraryId: number) => {
+  /**
+   * 文件夹跨库移动:整棵子树按原相对路径搬到目标库,搬空后摘掉源的空目录。
+   *
+   * 源/目标 id 分开传(与 assets:transfer 同规矩),两侧监听都要暂停 ——
+   * 目标库里新出现的文件不能被 target 的 watcher 当成外部新增再扫一遍。
+   * 结构映射与「只摘空目录」的策略都在 services/assetTransfer.ts 的 transferFolderTree 里。
+   */
+  ipcMain.handle('folders:transfer', async (
+    _e,
+    sourceLibraryId: number,
+    targetLibraryId: number,
+    relPath: string,
+    destFolder: string
+  ) => {
+    if (!Number.isInteger(sourceLibraryId) || !Number.isInteger(targetLibraryId)) return { error: '文件夹移动参数无效' }
+    if (typeof relPath !== 'string' || !relPath) return { error: '不能移动素材库根目录' }
+    if (typeof destFolder !== 'string') return { error: '文件夹移动参数无效' }
+    const from = scopeFor(sourceLibraryId)
+    const to = scopeFor(targetLibraryId)
+    if (!from || !to) {
+      if (from) releaseScope(from)
+      if (to) releaseScope(to)
+      return { error: '素材库不存在' }
+    }
+    try {
+      const run = async (): Promise<unknown> => {
+        const result = await transferFolderTree(
+          { libraryId: sourceLibraryId, root: from.libPath, db: from.db },
+          { libraryId: targetLibraryId, root: to.libPath, db: to.db },
+          relPath,
+          destFolder,
+          transferProgressReporter(sourceLibraryId)
+        )
+        /* 搬空的源目录已经从磁盘消失:清单缓存两侧都要失效,源库的目录顺序重排一次 */
+        if (result.removedFolders > 0) {
+          replaceFolderOrders(
+            from.db,
+            sourceLibraryId,
+            orderLibraryFolders(await listLibraryFolders(from.libPath), listFolderOrders(from.db, sourceLibraryId))
+          )
+        }
+        if (result.transferred > 0 || result.removedFolders > 0) {
+          invalidateFolderList(sourceLibraryId)
+          invalidateFolderList(targetLibraryId)
+          send('assets:changed', { libraryId: sourceLibraryId })
+          send('assets:changed', { libraryId: targetLibraryId, assetIds: result.targetIds })
+        }
+        if (result.transferred > 0) queueThumbWarmup(targetLibraryId, result.fingerprints)
+        return result
+      }
+      return sourceLibraryId === targetLibraryId
+        ? await withoutRootWatcher(sourceLibraryId, from.libPath, run)
+        : await withoutRootWatcher(sourceLibraryId, from.libPath, () =>
+            withoutRootWatcher(targetLibraryId, to.libPath, run)
+          )
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '移动文件夹失败' }
+    } finally {
+      releaseScope(from)
+      releaseScope(to)
+    }
+  })
+
+  ipcMain.handle('assets:list', async (_e, libraryId: number) => {
     const s = scopeFor(libraryId)
     if (!s) return { error: 'library not found' }
     try {
+      // 全量响应有几十 MB,序列化会独占主线程近一秒。先让同批到达的 folders:list
+      // 把目录树回包发出去,侧边栏不必陪着素材列表一起等。
+      await new Promise<void>((resolve) => setImmediate(resolve))
       const lib = getLibrary(getDb(), libraryId)!
-      const rows = listAssets(s.db, libraryId).map((r) => ({
-        ...r,
-        absPath: absPathFor(s, r.rel_path)
-      }))
+      const rows = listAssets(s.db, libraryId)
+        /* 文件已缺失的行任何视图都不展示(回收站里的例外:还要能清空),不再占 31% 的响应体 */
+        .filter((r) => !r.missing || r.deleted_at != null)
+        .map((r) => ({
+          ...r,
+          absPath: absPathFor(s, r.rel_path)
+        }))
       return {
         library: { id: lib.id, name: lib.name, path: lib.path },
         assets: rows
@@ -321,6 +440,15 @@ export function registerAssetsIpc(): void {
         } catch (error) {
           return { error: error instanceof Error ? error.message : `${row.format} 预览失败` }
         }
+      }
+      /*
+        HTML 是网页而不是纸张。走文档预览会把正文塞进白纸卡片并剥掉脚本,
+        原作动效直接失效、四周还多出内边距。这里只回原文件直链,
+        由渲染层的沙箱 iframe 按视口原样运行(脚本可执行,外部请求由 CSP 拦截)。
+      */
+      if (row.format === 'HTML') {
+        const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?v=${encodeURIComponent(row.fingerprint)}`
+        return { kind: 'html' as const, url }
       }
       if (formatSpec(row.format)?.type === 'document') {
         const preview = await ensureDocumentPreview(s.libPath, realPath, row.fingerprint, row.format, {
@@ -415,10 +543,13 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!s) return { assets: [] }
     try {
-      const rows = assetsByIds(s.db, libraryId, Array.isArray(ids) ? ids : []).map((r) => ({
-        ...r,
-        absPath: absPathFor(s, r.rel_path)
-      }))
+      /* 与 assets:list 同一口径:缺失行只在回收站里存在,不让它经增量事件重新混进内存列表 */
+      const rows = assetsByIds(s.db, libraryId, Array.isArray(ids) ? ids : [])
+        .filter((r) => !r.missing || r.deleted_at != null)
+        .map((r) => ({
+          ...r,
+          absPath: absPathFor(s, r.rel_path)
+        }))
       return { assets: rows }
     } finally {
       releaseScope(s)
@@ -550,6 +681,8 @@ export function registerAssetsIpc(): void {
       }
       send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
       if (imported.entries.length > 0) {
+        // 导入会在目标文件夹下建目录:目录树缓存必须作废
+        invalidateFolderList(libraryId)
         send('assets:changed', { libraryId })
         queueThumbWarmup(libraryId, imported.entries.map((entry) => entry.fingerprint))
       }
@@ -610,15 +743,81 @@ export function registerAssetsIpc(): void {
           } catch (error) {
             // 磁盘已成功移动的前缀必须先落库,否则重扫会把它们当成新素材,丢掉标签和评分。
             const moved = await commitMoved(movedItems)
+            await pruneEmptiedFolders(s, libraryId, movedItems.map((item) => item.rel_path))
             return { error: error instanceof Error ? error.message : '移动素材失败', moved }
           }
         }
 
         const moved = await commitMoved(movedItems)
+        await pruneEmptiedFolders(s, libraryId, movedItems.map((item) => item.rel_path))
         return { moved }
       })
     } finally {
       releaseScope(s)
+    }
+  })
+
+  /**
+   * 跨库复制/剪切:源库 id 与目标库 id 分开传,避免「用当前库的 scope 处理另一库的 id」。
+   * 两侧监听都要暂停,否则复制产生的文件会被当成外部新增再扫一遍。
+   */
+  ipcMain.handle('assets:transfer', async (
+    _e,
+    sourceLibraryId: number,
+    targetLibraryId: number,
+    assetIds: number[],
+    targetFolder: string,
+    mode: 'copy' | 'cut'
+  ) => {
+    if (!Array.isArray(assetIds) || assetIds.length === 0) return { error: '没有选择素材' }
+    if (!assetIds.every((id) => Number.isInteger(id))) return { error: '素材 ID 无效' }
+    if (typeof targetFolder !== 'string') return { error: '目标文件夹无效' }
+    if (mode !== 'copy' && mode !== 'cut') return { error: '未知的传输方式' }
+    const from = scopeFor(sourceLibraryId)
+    const to = scopeFor(targetLibraryId)
+    if (!from || !to) {
+      if (from) releaseScope(from)
+      if (to) releaseScope(to)
+      return { error: '素材库不存在' }
+    }
+    try {
+      /* 剪切会把源库里这些行删掉:先记下它们的目录,搬完再摘掉空掉的源目录 */
+      const sourceRelPaths = mode === 'cut' && sourceLibraryId !== targetLibraryId
+        ? assetsByIds(from.db, sourceLibraryId, assetIds).map((row) => row.rel_path)
+        : []
+      const run = async (): Promise<unknown> => {
+        const result = await transferAssets(
+          { libraryId: sourceLibraryId, root: from.libPath, db: from.db },
+          { libraryId: targetLibraryId, root: to.libPath, db: to.db },
+          assetIds,
+          targetFolder,
+          mode === 'cut',
+          transferProgressReporter(sourceLibraryId)
+        )
+        if (result.transferred > 0) {
+          invalidateFolderList(targetLibraryId)
+          if (mode === 'cut' && sourceLibraryId !== targetLibraryId) {
+            await pruneEmptiedFolders(from, sourceLibraryId, sourceRelPaths)
+          }
+          send('assets:changed', { libraryId: targetLibraryId, assetIds: result.targetIds })
+          if (mode === 'cut' && sourceLibraryId !== targetLibraryId) {
+            send('assets:changed', { libraryId: sourceLibraryId })
+          }
+          queueThumbWarmup(targetLibraryId, result.fingerprints)
+        }
+        return result
+      }
+      const gated = sourceLibraryId === targetLibraryId
+        ? await withoutRootWatcher(sourceLibraryId, from.libPath, run)
+        : await withoutRootWatcher(sourceLibraryId, from.libPath, () =>
+            withoutRootWatcher(targetLibraryId, to.libPath, run)
+          )
+      return gated
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : '传输素材失败' }
+    } finally {
+      releaseScope(from)
+      releaseScope(to)
     }
   })
 
@@ -795,6 +994,7 @@ export function registerAssetsIpc(): void {
         })
         upsertScanned(s.db, libraryId, imported.entries)
         send('library:scan', { libraryId, done: imported.imported, phase: 'done', added: imported.imported })
+        invalidateFolderList(libraryId)
         send('assets:changed', { libraryId })
         queueThumbWarmup(libraryId, imported.entries.map((entry) => entry.fingerprint))
         return { imported: imported.imported, multiFolderAssets: imported.multiFolderAssets }

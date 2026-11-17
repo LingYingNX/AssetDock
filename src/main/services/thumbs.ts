@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { fileExists, writeFileAtomically } from './cacheFiles'
@@ -267,6 +267,10 @@ export async function ensureThumb(
         // CSS 没有可解码像素:走离屏渲染截图,产出与位图同规格的 JPEG
         const { renderCssThumbFromFile } = await import('./cssThumb')
         buf = await renderCssThumbFromFile(libPath, absPath, THUMB_SIZE)
+      } else if (format === 'HTML') {
+        // HTML 正文多由运行时脚本挂载,走文档预览会被剥掉脚本变成空白页;直接渲染原文件
+        const { renderHtmlThumbFromFile } = await import('./cssThumb')
+        buf = await renderHtmlThumbFromFile(absPath, THUMB_SIZE)
       } else if (isDocumentThumb) {
         const { ensureDocumentPreview, documentThumbnailHtml } = await import('./documentPreview')
         const preview = await ensureDocumentPreview(libPath, absPath, fingerprint, format, meta)
@@ -393,12 +397,47 @@ export async function retargetThumb(libPath: string, fingerprint: string, relPat
   scheduleFlush(libPath)
 }
 
+/**
+ * 跨库搬素材时把源库那份缩略图一起搬过来。
+ *
+ * 缩略图目录是按库放的,而且指纹里含 mtime —— 复制后 mtime 变了,目标库的指纹
+ * 也不一样,所以这里按「新指纹」重新命名落地,清单条目(渲染器/骨架版本、外观签名)
+ * 一并照搬。少了条目这一步,SVG / CSS / 文档 / 3D 那几类会被 ensureThumb 判成
+ * 无法证明对应规则变化的孤儿文件删掉重渲染,正是搬家后要等几秒才出图的原因。
+ *
+ * 源库没有这条缩略图(或它本身是失败占位)就什么都不做,交给目标库正常生成。
+ */
+export async function adoptThumb(
+  sourceLibPath: string,
+  targetLibPath: string,
+  sourceFingerprint: string,
+  targetFingerprint: string,
+  relPath: string
+): Promise<boolean> {
+  if (!sourceFingerprint || !targetFingerprint || sourceLibPath === targetLibPath) return false
+  const entry = (await loadManifest(sourceLibPath)).entries[sourceFingerprint]
+  if (!entry || entry.failure) return false
+  const from = thumbPath(sourceLibPath, sourceFingerprint)
+  const manifest = await loadManifest(targetLibPath)
+  const existing = manifest.entries[targetFingerprint]
+  if (existing && (await fileExists(thumbPath(targetLibPath, targetFingerprint)))) return true
+  if (!(await fileExists(from))) return false
+  await mkdir(thumbsDir(targetLibPath), { recursive: true })
+  await copyFile(from, thumbPath(targetLibPath, targetFingerprint))
+  manifest.entries[targetFingerprint] = { ...entry, relPath }
+  scheduleFlush(targetLibPath)
+  return true
+}
+
 /** 孤儿回收:清单中存在但文件已不在的条目直接剔除;返回剔除数量 */
 export async function pruneMissingThumbs(libPath: string): Promise<number> {
   const manifest = await loadManifest(libPath)
+  // 目录一次读完再比对:34k 条逐条 fileExists 会在启动时把 libuv 线程池占满,
+  // 首屏的 folders:list 只能排在后面。
+  const names = new Set(await readdir(thumbsDir(libPath)).catch(() => [] as string[]))
   const gone: string[] = []
   for (const fingerprint of Object.keys(manifest.entries)) {
-    if (!(await fileExists(thumbPath(libPath, fingerprint)))) gone.push(fingerprint)
+    if (!names.has(thumbFileName(fingerprint))) gone.push(fingerprint)
   }
   for (const fingerprint of gone) delete manifest.entries[fingerprint]
   if (gone.length > 0) await flushManifest(libPath)
@@ -464,8 +503,10 @@ export interface ThumbJobRow {
 
 /**
  * Rows that need an eager thumbnail: raster/doc images, video keyframes, 3D models and CSS.
- * SVG is intentionally excluded because its Chromium render is expensive; it is generated
- * lazily when a card first requests ?thumb=1. Missing and trashed assets are excluded too.
+ * SVG and HTML are intentionally excluded because their Chromium render is expensive
+ * (HTML must boot a whole page and wait for its runtime script; 18000 documents would
+ * still take hours). They are generated lazily when a card first requests ?thumb=1.
+ * Missing and trashed assets are excluded too.
  */
 export function thumbJobRows(
   db: Database.Database,
@@ -477,7 +518,7 @@ export function thumbJobRows(
       `SELECT rel_path, fingerprint, format, mtime_ms, size_bytes FROM assets
        WHERE library_id = ? AND missing = 0 AND deleted_at IS NULL
          AND type IN ('image', 'video', 'model', 'style', 'document')
-         AND upper(format) <> 'SVG' AND fingerprint <> ''`
+         AND upper(format) NOT IN ('SVG', 'HTML', 'HTM') AND fingerprint <> ''`
     )
     .all(libraryId) as ThumbJobRow[]
   if (!fingerprints) return rows
@@ -488,6 +529,10 @@ export function thumbJobRows(
 /**
  * 全量预热:只处理清单里还没有的指纹,按队列串行生成并回报进度。
  * 已生成过的直接跳过,因此重复调用只补新素材;进度回调以「本次待生成总数」为分母。
+ *
+ * 必须串行:sharp 是 libvips 的 N-API 模块,同一进程里多个预热 worker 在
+ * 解码边界上重入会让原生栈保护触发 0xC0000409,整个主进程直接退出
+ * (表现为「窗口闪一下就没了」)。解码并发已由 ensureThumb 内部的 4 槽池负责。
  */
 export async function generateMissingThumbs(
   libPath: string,
@@ -501,7 +546,9 @@ export async function generateMissingThumbs(
   for (const job of jobs) {
     if (!job.fingerprint || seen.has(job.fingerprint)) continue
     seen.add(job.fingerprint)
-    if (manifest.entries[job.fingerprint] && await fileExists(thumbPath(libPath, job.fingerprint))) continue
+    // 只信清单,不逐个 fileExists:启动时 1 万次串行探测在机械盘上要 8s,
+    // 会把首屏 folders:list 一起拖住;被外部删掉的缩略图由请求路径的 ensureThumb 重建。
+    if (manifest.entries[job.fingerprint]) continue
     todo.push(job)
   }
   onProgress?.(0, todo.length)

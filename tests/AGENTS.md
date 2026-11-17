@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-06 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-13 -->
 
 # AGENTS.md — tests
 
@@ -21,6 +21,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `watch.test.ts` | chokidar 监听：`usePolling:false`、外部重命名后回调 |
 | `folders.test.ts` | 库内文件夹增删改移、素材移动、`exportLibraryAsset` 同名避让 |
 | `moveAssets.test.ts` | 批量移动成功子集落库，保留 id、标签和评分 |
+| `fileImport.test.ts` / `assetTransfer.test.ts` | 外部拖入路径归一化/同名避让/HTML 导入；跨库复制/剪切、元数据与 CSS 配套 HTML、嵌套库拒绝 |
 | `libraryConsistency.test.ts` | 同名相对路径在不同库间隔离、`realPathWithinRoot` 越界拦截、迁移 |
 | `store` 相关（`eagle` / `legacySourceMigration`） | Eagle 导入与旧库一次性迁移 |
 | `palette.test.ts` / `meta.test.ts` | k-means 主色、ffmpeg 文本解析（纯函数） |
@@ -33,7 +34,8 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `mime.test.ts` | `mimeForExtension` 的扩展名映射（含 CSS/HTML/TXT 与未知扩展名兜底） |
 | `clipboardFiles.test.ts` | 剪贴板路径的 PowerShell 数组转义（单引号双写，路径含单引号时不致整条命令失败） |
 | `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
-| `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
+| `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，SVG/HTML/视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
+| `htmlThumb.test.ts` | HTML 缩略图走原文件整页渲染，`.htm` 归一为 HTML |
 | `thumbnailDecoder.test.ts` / `imagePreview.test.ts` | 按注册表路由缩略图解码、原生失败后 ffmpeg 回退、视频关键帧失败后首帧回退、PSD/HEIC 灯箱大图缓存 |
 | `documentPreview.test.ts` / `documentMeta.test.ts` / `formats.test.ts` | 文档只读预览：TXT/MD/CSV、DOC、DOCX/DOCM、XLSX/XLSM、PPTX/PPTM、XLS/XLSB/ODS/FODS、RTF、ODT/OTT、ODP 的解析、缓存、失败分类与格式注册 |
 

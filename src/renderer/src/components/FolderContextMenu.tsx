@@ -10,6 +10,8 @@ interface MoveNode {
   label: string
   selectable: boolean
   children: MoveNode[]
+  /** 跨库移动的落点:选中的库与库内相对目录(库节点自身是库根) */
+  target?: { libraryId: number; destFolder: string }
 }
 
 function buildMoveTree(paths: string[], source: string): MoveNode {
@@ -35,6 +37,32 @@ function buildMoveTree(paths: string[], source: string): MoveNode {
   return prune(root) ?? { ...root, children: [] }
 }
 
+/** 目标库的文件夹层级:库节点本身是「移到库根」,子节点是库内各层目录。 */
+function buildLibraryTree(libraryId: number, label: string, paths: string[]): MoveNode {
+  const key = (item: string): string => `lib:${libraryId}/${item}`
+  const root: MoveNode = {
+    path: `lib:${libraryId}`,
+    label,
+    selectable: true,
+    children: [],
+    target: { libraryId, destFolder: '' }
+  }
+  const byPath = new Map<string, MoveNode>([[root.path, root]])
+  for (const item of paths) {
+    const cut = item.lastIndexOf('/')
+    const node: MoveNode = {
+      path: key(item),
+      label: cut < 0 ? item : item.slice(cut + 1),
+      selectable: true,
+      children: [],
+      target: { libraryId, destFolder: item }
+    }
+    byPath.set(node.path, node)
+    ;(byPath.get(cut < 0 ? root.path : key(item.slice(0, cut))) ?? root).children.push(node)
+  }
+  return root
+}
+
 /** 多级移动菜单:悬停展开子级,点击文件夹直接移入。 */
 function MoveLevel({
   node,
@@ -42,7 +70,7 @@ function MoveLevel({
   anchor
 }: {
   node: MoveNode
-  onPick: (path: string) => void
+  onPick: (node: MoveNode) => void
   anchor?: HTMLElement | null
 }): React.JSX.Element {
   const [open, setOpen] = useState<{ path: string; anchor: HTMLElement } | null>(null)
@@ -92,7 +120,7 @@ function MoveLevel({
             }
             onClick={(event) => {
               if (child.selectable) {
-                onPick(child.path)
+                onPick(child)
                 return
               }
               const row = event.currentTarget.parentElement as HTMLElement
@@ -138,6 +166,8 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const setFolderCtxMenu = useUI((s) => s.setFolderCtxMenu)
   const createFolder = useUI((s) => s.createFolder)
   const moveFolder = useUI((s) => s.moveFolder)
+  const moveFolderToLibrary = useUI((s) => s.moveFolderToLibrary)
+  const libraries = useUI((s) => s.libraries)
   const beginFolderRename = useUI((s) => s.beginFolderRename)
   const trashFolder = useUI((s) => s.trashFolder)
   const folderPaths = useUI((s) => s.folderPaths)
@@ -146,7 +176,9 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const [mounted, setMounted] = useState(folderCtxMenu != null)
   const [last, setLast] = useState(folderCtxMenu)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
-  const [subOpen, setSubOpen] = useState(false)
+  /* 两个子菜单共用一格状态:'move'(库内移动)与 'lib'(跨库移动)互斥,悬停另一个就换过去。
+     分成两个布尔会留下「点开一个、另一个还挂着」的中间态。 */
+  const [sub, setSub] = useState<'move' | 'lib' | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -171,11 +203,40 @@ export function FolderContextMenu(): React.JSX.Element | null {
     () => document.querySelector<HTMLElement>(`[data-folder-path="${CSS.escape(path)}"] .folder-main`)
   )
 
+  const moveRoot = useMemo(() => buildMoveTree(folderPaths, path), [folderPaths, path])
+  const libraryTargets = useMemo(
+    () => libraries.filter((lib) => lib.id !== menu?.libraryId),
+    [libraries, menu?.libraryId]
+  )
+  /* 各目标库的目录清单按库缓存:分开的库各有各的层级,菜单里要先看到再选。 */
+  const [libFolders, setLibFolders] = useState<Map<number, string[]>>(new Map())
+  const requestedLibs = useRef<Set<number>>(new Set())
+
   useEffect(() => {
-    setSubOpen(false)
+    setSub(null)
+    requestedLibs.current.clear()
   }, [menuKey])
 
-  const moveRoot = useMemo(() => buildMoveTree(folderPaths, path), [folderPaths, path])
+  const libraryTree = useMemo<MoveNode>(
+    () => ({
+      path: 'libs',
+      label: '资产库',
+      selectable: false,
+      children: libraryTargets.map((lib) => buildLibraryTree(lib.id, lib.name, libFolders.get(lib.id) ?? []))
+    }),
+    [libraryTargets, libFolders]
+  )
+
+  useEffect(() => {
+    if (sub !== 'lib') return
+    for (const lib of libraryTargets) {
+      if (requestedLibs.current.has(lib.id)) continue
+      requestedLibs.current.add(lib.id)
+      void window.windowApi.folders.list(lib.id).then((result) => {
+        setLibFolders((value) => new Map(value).set(lib.id, 'paths' in result ? result.paths : []))
+      }).catch(() => setLibFolders((value) => new Map(value).set(lib.id, [])))
+    }
+  }, [sub, libraryTargets])
 
   useLayoutEffect(() => {
     const element = menuRef.current
@@ -244,34 +305,62 @@ export function FolderContextMenu(): React.JSX.Element | null {
         <button
           type="button"
           role="menuitem"
-          onMouseEnter={() => setSubOpen(false)}
+          onMouseEnter={() => setSub(null)}
           onClick={() => act(() => createFolder(menu.path))}
         >
           <Icon name="folder-plus" />
           新增子文件夹
         </button>
-        <div className="menu-row" onMouseEnter={() => setSubOpen(true)}>
+        <div className="menu-row" onMouseEnter={() => setSub('move')}>
           <button
             type="button"
             role="menuitem"
             aria-haspopup="menu"
-            aria-expanded={subOpen}
+            aria-expanded={sub === 'move'}
             disabled={moveRoot.children.length === 0}
-            onFocus={() => setSubOpen(true)}
-            onClick={() => setSubOpen((open) => !open)}
+            onFocus={() => setSub('move')}
+            onClick={() => setSub((open) => (open === 'move' ? null : 'move'))}
           >
             <Icon name="folder" />
             移动
             <Icon name="chev-r" className="ic sub" />
           </button>
-          {subOpen ? (
-            <MoveLevel node={moveRoot} onPick={(target) => act(() => moveFolder(menu.path, target, 'inside'))} />
+          {sub === 'move' ? (
+            <MoveLevel
+              node={moveRoot}
+              onPick={(node) => act(() => moveFolder(menu.path, node.path, 'inside'))}
+            />
+          ) : null}
+        </div>
+        <div className="menu-row" onMouseEnter={() => setSub('lib')}>
+          <button
+            type="button"
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={sub === 'lib'}
+            disabled={libraryTargets.length === 0}
+            title={libraryTargets.length === 0 ? '没有其它资产库' : undefined}
+            onFocus={() => setSub('lib')}
+            onClick={() => setSub((open) => (open === 'lib' ? null : 'lib'))}
+          >
+            <Icon name="drive" />
+            移动到资产库
+            <Icon name="chev-r" className="ic sub" />
+          </button>
+          {sub === 'lib' ? (
+            <MoveLevel
+              node={libraryTree}
+              onPick={(node) => {
+                const target = node.target
+                if (target) act(() => moveFolderToLibrary(menu.libraryId, menu.path, target.libraryId, target.destFolder))
+              }}
+            />
           ) : null}
         </div>
         <button
           type="button"
           role="menuitem"
-          onMouseEnter={() => setSubOpen(false)}
+          onMouseEnter={() => setSub(null)}
           onClick={() => act(() => beginFolderRename(menu.path))}
         >
           <Icon name="edit" />
@@ -284,7 +373,7 @@ export function FolderContextMenu(): React.JSX.Element | null {
         <button
           type="button"
           role="menuitem"
-          onMouseEnter={() => setSubOpen(false)}
+          onMouseEnter={() => setSub(null)}
           onClick={() => act(openSource)}
         >
           <Icon name="external" />
@@ -297,7 +386,7 @@ export function FolderContextMenu(): React.JSX.Element | null {
           <button
             type="button"
             role="menuitem"
-            onMouseEnter={() => setSubOpen(false)}
+            onMouseEnter={() => setSub(null)}
             onClick={() => act(() => trashFolder(menu.path))}
           >
             <Icon name="trash" />

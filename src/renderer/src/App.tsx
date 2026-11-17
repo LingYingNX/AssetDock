@@ -98,29 +98,53 @@ export default function App(): React.JSX.Element {
       document.documentElement.dataset.maximized = p === true ? 'true' : 'false'
     })
     // 缩略图进度同理:同一帧内只保留最后一次进度快照,不逐条重渲染浮层
-    const progressBatch = createFrameBatcher<{ done: number; total: number } | null>(
+    const progressBatch = createFrameBatcher<{ libraryId: number; done: number; total: number } | null>(
       (_pending, next) => next,
       (d) => {
         useUI.getState().setThumbProgress(d)
       }
     )
     const un4 = window.windowApi.on('thumbs:progress', (p) => {
-      const d = p as { phase: string; done: number; total: number; fingerprint?: string }
+      const d = p as { libraryId: number; phase: string; done: number; total: number; fingerprint?: string }
       if (d.fingerprint) useUI.getState().markThumbReady(d.fingerprint)
-      progressBatch.push(d.phase === 'done' || d.total <= 0 ? null : { done: d.done, total: d.total })
+      /* 启动时会同时预热多个库;中央进度只属于当前页,否则会被后台库互相覆盖。 */
+      const st = useUI.getState()
+      const activeLibraryId = st.tabs.find((t) => t.id === st.activeTabId)?.libraryId ?? null
+      if (d.libraryId !== activeLibraryId) return
+      progressBatch.push(d.phase === 'done' || d.total <= 0
+        ? null
+        : { libraryId: d.libraryId, done: d.done, total: d.total })
     })
     const un2 = window.windowApi.on('library:scan', (p) => {
-      const d = p as { phase: string; done: number }
+      const d = p as { libraryId: number; phase: string; done: number }
+      const st = useUI.getState()
+      const activeLibraryId = st.tabs.find((t) => t.id === st.activeTabId)?.libraryId ?? null
+      /* 别的库扫描结束不该重拉当前库:那会让正在看的标签页白卡一秒 */
+      if (d.libraryId !== activeLibraryId) return
       useUI.setState({ scanProgress: d.phase === 'done' ? null : `扫描中 ${d.done} 项` })
       if (d.phase === 'done') useUI.getState().reloadActiveLibrary()
+    })
+    /* 跨库移动是用户主动发起的:不看当前标签页,否则把素材搬去别的库时进度条会消失 */
+    const transferBatch = createFrameBatcher<{ libraryId: number; done: number; total: number } | null>(
+      (_pending, next) => next,
+      (d) => {
+        useUI.getState().setTransferProgress(d)
+      }
+    )
+    const un5 = window.windowApi.on('transfer:progress', (p) => {
+      const d = p as { libraryId: number; done: number; total: number }
+      /* 到 100% 就撤:主进程还要写库/预热,那几百毫秒不该继续顶着进度条 */
+      transferBatch.push(d.total > 0 && d.done < d.total ? d : null)
     })
     return () => {
       un1()
       un2()
       un3()
       un4()
+      un5()
       deltaBatch.cancel()
       progressBatch.cancel()
+      transferBatch.cancel()
     }
   }, [])
 
@@ -172,9 +196,20 @@ export default function App(): React.JSX.Element {
         if (st.copySelected()) e.preventDefault()
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+        if (st.cutSelected()) e.preventDefault()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        if (st.pasteClipboard()) e.preventDefault()
+        return
+      }
       if (st.lightboxId) {
         const cur = st.assets.find((a) => a.id === st.lightboxId)
-        if (cur?.type === 'image' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        /* 双击打开素材后,左右键在所有类型上都是「上一个/下一个」:
+           换成图片才生效的旧行为,让视频/文档里按方向键毫无反馈。 */
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          if (e.altKey) return
           e.preventDefault()
           st.stepLightbox(e.key === 'ArrowLeft' ? -1 : 1)
           return
@@ -279,6 +314,9 @@ export default function App(): React.JSX.Element {
           <FilterBar />
           <ColorStrip />
           <Grid />
+          {/* 加载进度挂在素材工作区内:绝对定位在中央偏下,不占布局也不拦截指针。
+              灯箱(z-index 80)与投放层(70)会自然盖住它,不需要额外的显隐判断。 */}
+          <ThumbProgress />
           <DropZone active={mode === 'library' && !lightboxId} />
           {/* 灯箱只覆盖工作区(侧栏与检查器保持可用),全屏时才扩到整窗 */}
           <Lightbox />
@@ -288,11 +326,8 @@ export default function App(): React.JSX.Element {
       <ContextMenu />
       <FolderContextMenu />
       <PreferencesDialog />
-      {/* 两个浮层同处右下角:放进同一个纵向堆叠容器,进度在上、一次性提示贴住底边。
-          此前两者各自 position:fixed;right:18px;bottom:16px,锚点完全相同,同时出现时
-          必然互相压住;容器统一锚定后,子元素只负责自身尺寸与过渡。 */}
+      {/* 一次性提示固定在右下角;加载进度已经移入工作区,两者不会再互相遮挡。 */}
       <div className="overlay-stack">
-        <ThumbProgress />
         <Toast />
       </div>
     </div>

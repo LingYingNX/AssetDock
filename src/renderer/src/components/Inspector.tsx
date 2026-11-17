@@ -20,6 +20,10 @@ export function Inspector(): React.JSX.Element {
   const setSourceUrl = useUI((s) => s.setSourceUrl)
   const [tagInput, setTagInput] = useState('')
 
+  /* 推荐标签默认不出现:只在用户开始输入时给出匹配候选 */
+  const typedTag = tagInput.trim()
+  const tagSuggestions = typedTag ? SUGGESTED_TAGS.filter((name) => name.includes(typedTag)) : []
+
   /* 当前素材:激活项 > 选中第一项 */
   const a = assets.find((x) => x.id === activeId) ?? assets.find((x) => x.id === firstSelectedId)
   const spec = a ? formatSpec(a.format) : undefined
@@ -174,8 +178,9 @@ export function Inspector(): React.JSX.Element {
             />
             <kbd>Enter</kbd>
           </label>
+          {tagSuggestions.length > 0 && (
           <div className="sugg">
-            {SUGGESTED_TAGS.map((name) => {
+            {tagSuggestions.map((name) => {
               const used = a.tags.some((t) => t.name === name)
               return (
                 <button
@@ -191,6 +196,7 @@ export function Inspector(): React.JSX.Element {
               )
             })}
           </div>
+          )}
         </div>
 
         {a.absPath && (

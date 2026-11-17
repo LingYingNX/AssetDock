@@ -53,6 +53,7 @@ PSD/HEIC 的灯箱大图不复用卡片的 640px 缓存：首次打开按需解�
 | --- | --- | --- | --- | --- |
 | TXT | UTF-8、UTF-8 BOM、UTF-16、GB18030 识别 | 首段文本 640×480 JPEG | 只读文本滚动 | 中文 UTF-8 BOM 样本通过 |
 | Markdown | UTF-8 等编码识别 | 首屏静态 HTML 640×480 | 表格、代码、标题与库内图片 | 含表格、相对图片与脚本的样本通过；脚本被清理，相对图片内联为 `data:` |
+| HTML/HTM | UTF-8 等编码识别；`<title>` 不进入正文 | 原文件整页离屏渲染（脚本可执行）+ 内容裁边，640px JPEG | sandbox iframe 原样播放（`allow-scripts`，无 `allow-same-origin`） | 独立 HTML 可拖拽导入；内联动效正常执行，外部资源由 CSP 阻断 |
 | CSV | 分隔符探测、RFC 4180 引号与换行 | 首个表格区域 640×480 | 真实表格 | 含逗号、双引号与嵌入换行的样本通过 |
 | DOC | OLE/CFB Word 二进制解析 | 首页 HTML 640×480 | `@file-viewer/doc` 静态 HTML | 3 份真实中文样本通过；22 表、6 图与单图样本均正常，不依赖 Office/WPS/LibreOffice |
 | DOCX/DOCM | OOXML 解包与页数探测 | 首页 HTML 640×480 | `docx-preview` 静态 HTML | Apache POI 真实 DOCX（表格、页眉页脚、页眉图片、多级列表、3–4 页）与 `SimpleMacro.docm` 通过；页数按渲染 `section` 校准 |
@@ -64,6 +65,16 @@ PSD/HEIC 的灯箱大图不复用卡片的 640px 缓存：首次打开按需解�
 | ODP | 自研 `content.xml` 解析 | 首张幻灯片 640×480 | 按坐标定位的静态页面与翻页 | LibreOffice 官方测试样本（文本框、嵌入图片）通过；页面尺寸按母版取 28×15.75cm |
 
 SheetJS 社区版只暴露填充色与数字格式，字体、边框与对齐读不到，因此 `.xls/.xlsb/.ods/.fods` 的保真度低于 `.xlsx`，这是依赖能力上限而不是渲染遗漏。
+
+HTML/HTM 于 2026-11-11 补充验证：独立 HTML 经拖入导入路径入库，外部资源被阻断。
+2026-11-12 修正：灯箱改为 sandbox iframe 原样播放（`sandbox="allow-scripts"`），内联脚本执行、动效正常；
+外部请求由 `media://` 响应头的 CSP（`connect-src 'none'`）拦截。缩略图不再套 30px 内边距的白纸卡片，
+改为 900×675 铺满取景；`<title>` 不再混进正文。
+
+2026-11-12 再次修正缩略图：此前缩略图走文档预览（清洗 HTML 并关闭脚本），而组件站导出的 HTML 正文由
+运行时脚本挂载，`<body>` 只有一个空容器，结果缩略图全是空白，只有双击进灯箱才看得到内容。现在 HTML/HTM
+缩略图直接加载原文件、允许脚本执行，在独立 `html-thumb` 会话中渲染（`file:`/`data:`/`blob:` 放行，网络请求与
+弹窗一律拒绝），等内容出现后截图再按内容边界裁边。三份 ReUI 组件样本实测 0.5–0.8 s/张，输出 640px JPEG。
 
 文档预览缓存位于 `.mediahub/previews/documents/<fingerprint>/preview.json`，缩略图仍写入 `.mediahub/thumbs/`。失败类别包括 `corrupt`、`encrypted`、`missing-tool`、`too-large`、`timeout`、`unsupported`；失败按内容指纹缓存，显式重试会绕过失败缓存。
 
@@ -125,6 +136,8 @@ ODT/ODP/RTF 为自研解析，不新增依赖。评估过的 `officeparser` 8.3.
 | `e2e-huge.glb`（644MB） | GLB | 占位 | 拒绝加载并提示失败 | 通过（体积上限） |
 | `说明.txt`（UTF-8 BOM） | TXT | 640×480 JPEG | 只读文本 | 通过 |
 | `notes/README.md`（表格、相对图片、脚本） | Markdown | 640×480 JPEG | 表格与内联图片 | 通过；脚本未执行 |
+| `gemini-code-1794373765504.html`（页面样式、脚本、远程图片） | HTML | 640×480 JPEG | sandbox iframe 原样播放 | 通过；导入 1、跳过 0，内联脚本执行、远程图片被 CSP 阻断 |
+| `进度条加载.html`（`<title>` + 240px 卡片 + 定时脚本） | HTML | 铺满取景 JPEG | 灯箱铺满、进度 0% → 100% | 通过；CDP 实测 `#num` 变为 `100%`、`fetch("https://example.com")` 被拦 |
 | `data.csv`（引号与嵌入换行） | CSV | 640×480 JPEG | 真实表格 | 通过 |
 | `plan.docx`（标题、表格、分页） | DOCX | 640×480 JPEG | 静态 HTML，2 页 | 通过；页数回写后卡片同步为 2 |
 | `book.xlsx`（2 表、合并单元格、样式） | XLSX | 640×480 JPEG | 工作表标签切换 | 通过 |

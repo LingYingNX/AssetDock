@@ -381,6 +381,8 @@ export function Lightbox(): React.JSX.Element | null {
         setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
       } else if (result.kind === 'pdf') {
         setPreparedMedia({ id: a.id, url: result.url, pages: result.pages })
+      } else if (result.kind === 'html') {
+        setPreparedMedia({ id: a.id, url: result.url, progress: 100 })
       } else if (result.kind === 'document') {
         setPreparedMedia({ id: a.id, document: result.preview })
       } else if (result.kind === 'external') {
@@ -517,7 +519,9 @@ export function Lightbox(): React.JSX.Element | null {
         playback.toggle()
         return
       }
-      if (isVideo && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      /* 视频逐帧让位给 Alt+方向键:裸方向键在所有素材类型上统一是「上一个/下一个」,
+         否则同一个键在图片里翻片、在视频里逐帧,手感割裂。 */
+      if (isVideo && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault()
         const fps = a?.fps && a.fps > 0 ? a.fps : 30
         playback.stepBy((e.key === 'ArrowLeft' ? -1 : 1) / fps)
@@ -610,7 +614,7 @@ export function Lightbox(): React.JSX.Element | null {
         </button>
       </div>
 
-      <div className={`pv-body${isStyle ? ' style-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}${a.type === 'image' ? ' image-body' : ''}`}>
+      <div className={`pv-body${isStyle ? ' style-body' : ''}${a.format === 'HTML' ? ' html-body' : ''}${isVideo || isModel || isEnvMap ? ' video-body' : ''}${a.type === 'image' ? ' image-body' : ''}`}>
         {isStyle ? (
           <CssEditor a={a} />
         ) : (
@@ -744,6 +748,30 @@ export function Lightbox(): React.JSX.Element | null {
                   </label>
                 </div>
               </div>
+            ) : isDocument && a.format === 'HTML' ? (
+              /*
+                HTML 素材按网页原样播放:铺满舞台、不套白纸卡片、不加内边距。
+                脚本必须可执行(动效都在脚本里),但用 sandbox 只给 allow-scripts,
+                不给 allow-same-origin——它拿不到应用上下文,外部请求由响应头 CSP 拦。
+              */
+              prepared?.error ? (
+                <div className="pv3d">
+                  <MediaFallback label={prepared.error} />
+                  <div className="v3-bar">
+                    <button className="v3-chip" onClick={retryPreview}>重试</button>
+                    <button className="v3-chip" onClick={openExternally}>外部打开</button>
+                  </div>
+                </div>
+              ) : (
+                /* 这里不能加 referrerPolicy="no-referrer":media:// 请求会因此丢失 Referer,
+                   被媒体协议的来源校验拒成 403(forbidden)。外部请求已由响应头 CSP 拦截。 */
+                <iframe
+                  className="pv-html-doc"
+                  src={prepared?.url ?? ''}
+                  title={a.name}
+                  sandbox="allow-scripts"
+                />
+              )
             ) : isDocument ? (
               <DocumentStage
                 preview={prepared?.document}

@@ -75,6 +75,14 @@ describe('file import', () => {
     expect(result.entries[0]).toMatchObject({ relPath: 'notes.txt', type: 'document', format: 'TXT' })
   })
 
+  it('imports standalone HTML as a document instead of skipping it', async () => {
+    const source = join(outside, 'page.html')
+    await writeFile(source, '<!doctype html><html><body><div class="card">HTML</div></body></html>')
+    const result = await importDroppedFiles(root, '', [source])
+    expect(result).toMatchObject({ imported: 1, skipped: 0 })
+    expect(result.entries[0]).toMatchObject({ relPath: 'page.html', type: 'document', format: 'HTML' })
+  })
+
   it('rejects a target folder that junction-escapes the library root', async () => {
     await mkdir(join(root, 'ok'))
     const linked = join(root, 'linked')

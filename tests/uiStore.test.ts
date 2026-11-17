@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { queryAssets, DEFAULT_FILTERS } from '../src/renderer/src/data/query'
 import { tagNavKey } from '../src/renderer/src/data/tag-nav'
+import { DOCUMENT_RENDERER_VERSION, THUMB_CACHE_VERSION } from '../src/shared/thumbnailConfig'
 
 describe('UI store', () => {
   it('creates media URLs from the local library path', async () => {
@@ -25,7 +26,11 @@ describe('UI store', () => {
 
     // 原图 URL 不带 thumb;卡片预览 URL 指向缩略图缓存
     expect(asset.originalUrl).toBe('media://7/same.jpg?v=fp')
-    expect(asset.previewUrl).toBe('media://7/same.jpg?v=fp&thumb=1&tv=3')
+    // 缓存键要同时带缩略图版本与文档渲染器版本:只带前者时改了文档取景方式 URL 不变,
+    // 浏览器会一直回旧图,表现为「改了没效果」。
+    expect(asset.previewUrl).toBe(
+      `media://7/same.jpg?v=fp&thumb=1&tv=${THUMB_CACHE_VERSION}-${DOCUMENT_RENDERER_VERSION}`
+    )
   })
   it('does not request thumbnails for assets already in the trash', async () => {
     vi.stubGlobal('window', { windowApi: {} })
@@ -358,6 +363,42 @@ describe('UI store', () => {
     expect(useUI.getState().selectedIds).toEqual(['a', 'b'])
   })
 
+  it('selects sidebar folders with the same plain/shift/ctrl semantics, scoped to one library', async () => {
+    vi.stubGlobal('window', { windowApi: {} })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    const order = ['人物', '人物/头像', '场景']
+    useUI.setState({ nav: 'all', folderSelection: null })
+
+    // 无修饰键是单选,替换上一次的选中
+    useUI.getState().clickFolder(1, '人物', { order })
+    expect(useUI.getState().folderSelection).toEqual({ libraryId: 1, paths: ['人物'], anchor: '人物' })
+    useUI.getState().clickFolder(1, '场景', { order })
+    expect(useUI.getState().folderSelection?.paths).toEqual(['场景'])
+
+    // Shift 从锚点按可见顺序取区间,锚点不动,所以再 Shift 能收窄
+    useUI.getState().clickFolder(1, '人物', { order })
+    useUI.getState().clickFolder(1, '场景', { order, shift: true })
+    expect(useUI.getState().folderSelection?.paths).toEqual(['人物', '人物/头像', '场景'])
+    useUI.getState().clickFolder(1, '人物/头像', { order, shift: true })
+    expect(useUI.getState().folderSelection?.paths).toEqual(['人物', '人物/头像'])
+
+    // Ctrl 单项切换,其余保持
+    useUI.getState().clickFolder(1, '场景', { order, toggle: true })
+    expect(useUI.getState().folderSelection?.paths).toEqual(['人物', '人物/头像', '场景'])
+    useUI.getState().clickFolder(1, '场景', { order, toggle: true })
+    expect(useUI.getState().folderSelection?.paths).toEqual(['人物', '人物/头像'])
+
+    // 另一个库的选中不会继承上一个库的选区
+    useUI.getState().clickFolder(2, '人物', { order, shift: true })
+    expect(useUI.getState().folderSelection).toEqual({ libraryId: 2, paths: ['人物'], anchor: '人物' })
+
+    // 离开文件夹视图(系统视图)清空选中;folder: 视图保留
+    useUI.getState().setNav('folder:人物' as never)
+    expect(useUI.getState().folderSelection?.paths).toEqual(['人物'])
+    useUI.getState().setNav('all')
+    expect(useUI.getState().folderSelection).toBeNull()
+  })
+
   it('single-selects the target without building an order list (right-click and Space)', async () => {
     vi.stubGlobal('window', { windowApi: {} })
     const { useUI } = await import('../src/renderer/src/store/ui')
@@ -427,6 +468,7 @@ describe('restoreUiPrefs', () => {
         modelHdrStrength: 2,
         modelHdrOpacity: 0.3,
         modelHdrBlur: 0.8,
+        stripOpen: false,
         tagGroups: {
           '7': [{ id: 'g1', name: '人物', tagNames: ['克鲁鲁'] }]
         }
@@ -442,6 +484,7 @@ describe('restoreUiPrefs', () => {
     expect(s.modelHdrStrength).toBe(2)
     expect(s.modelHdrOpacity).toBe(0.3)
     expect(s.modelHdrBlur).toBe(0.8)
+    expect(s.stripOpen).toBe(false)
     expect(s.tagGroups).toEqual({
       '7': [{ id: 'g1', name: '人物', tagNames: ['克鲁鲁'] }]
     })
@@ -460,6 +503,8 @@ describe('restoreUiPrefs', () => {
     expect(s.modelHdrOpacity).toBe(0)
     expect(s.modelHdrBlur).toBe(0.5)
     expect(s.tagGroups).toEqual({})
+    // 胶片带默认展开:老库里没有这个键时不能把用户的传送带弄没
+    expect(s.stripOpen).toBe(true)
   })
 
   it('ignores malformed JSON instead of throwing', async () => {
@@ -494,6 +539,20 @@ describe('restoreUiPrefs', () => {
     expect(s.modelHdrOpacity).toBe(0)
     expect(s.modelHdrBlur).toBe(0.5)
   })
+
+  it('toggles the filmstrip and persists the new state', async () => {
+    vi.resetModules()
+    const set = vi.fn(async () => ({ ok: true }))
+    vi.stubGlobal('window', {
+      windowApi: { state: { get: async () => null, set } }
+    })
+    const mod = await import('../src/renderer/src/store/ui')
+    expect(mod.useUI.getState().stripOpen).toBe(true)
+
+    mod.useUI.getState().toggleStrip()
+    expect(mod.useUI.getState().stripOpen).toBe(false)
+    expect(set).toHaveBeenCalledWith('uiPrefs', expect.stringContaining('"stripOpen":false'))
+  })
 })
 
 describe('restoreUiPrefs: 导航记忆', () => {
@@ -513,11 +572,16 @@ describe('restoreUiPrefs: 导航记忆', () => {
     await expect(loadNav(JSON.stringify({ nav: 'folder:壁纸图/壁纸' }))).resolves.toBe('folder:壁纸图/壁纸')
   })
 
-  it('restores simple and tag nav keys', async () => {
+  it('restores simple nav keys', async () => {
     await expect(loadNav(JSON.stringify({ nav: 'fav' }))).resolves.toBe('fav')
-    await expect(loadNav(JSON.stringify({ nav: 'tag:参考' }))).resolves.toBe('tag:参考')
+  })
+
+  /* 侧栏标签组已删除:标签导航没有界面入口,持久化的 tag: 键必须退回「全部素材」, */
+  /* 否则重启后会停在一个没有任何界面指示的标签过滤视图上 */
+  it('falls back to all for persisted tag nav keys', async () => {
+    await expect(loadNav(JSON.stringify({ nav: 'tag:参考' }))).resolves.toBe('all')
     const multi = tagNavKey(['壁纸', '二次元'])
-    await expect(loadNav(JSON.stringify({ nav: multi }))).resolves.toBe(multi)
+    await expect(loadNav(JSON.stringify({ nav: multi }))).resolves.toBe('all')
   })
 
   it('falls back to all for unknown or malformed nav values', async () => {
@@ -747,6 +811,41 @@ describe('library load failure visibility', () => {
     await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(1))
     expect(useUI.getState().assets[0].name).toBe('fresh')
     expect(useUI.getState().mode).toBe('library')
+  })
+})
+
+describe('collapsed folder state across libraries', () => {
+  it('keeps collapsed folders when the active library does not contain them', async () => {
+    const foldersList = vi.fn().mockResolvedValue({ paths: [] })
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      windowApi: {
+        assets: { list: vi.fn().mockResolvedValue({ assets: [] }) },
+        folders: { list: foldersList }
+      }
+    })
+    vi.resetModules()
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [
+        { id: 't1', name: '素材', libraryId: 1 },
+        { id: 't2', name: 'UI组件', libraryId: 2 }
+      ],
+      activeTabId: 't2',
+      collapsedFolders: ['图', '图/壁纸'],
+      folderPaths: [],
+      mode: 'library'
+    })
+
+    // 启动/切到另一个库:该库没有这些目录,折叠记忆也不能被清空
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(foldersList).toHaveBeenCalledWith(2))
+    expect(useUI.getState().collapsedFolders).toEqual(['图', '图/壁纸'])
+
+    useUI.getState().refreshFolders()
+    await vi.waitFor(() => expect(foldersList).toHaveBeenCalledTimes(2))
+    expect(useUI.getState().collapsedFolders).toEqual(['图', '图/壁纸'])
   })
 })
 
@@ -1256,5 +1355,99 @@ describe('selection and library switch hygiene', () => {
     expect(state.lightboxId).toBeNull()
     expect(state.cssDirty).toBe(false)
     expect(reload).toHaveBeenCalled()
+  })
+
+  it('imports dropped paths into the requested folder and reports the result', async () => {
+    const importPaths = vi.fn().mockResolvedValue({ imported: 1, skipped: 0 })
+    const reload = vi.fn()
+    const toasts: string[] = []
+    vi.stubGlobal('window', { windowApi: { assets: { importPaths } } })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
+      activeTabId: 'library-1',
+      showToast: (text: string) => toasts.push(text),
+      reloadActiveLibrary: reload
+    })
+
+    await useUI.getState().importDroppedPaths(['C:/Users/test/进度条加载.html'], '我的分类')
+
+    expect(importPaths).toHaveBeenCalledWith(1, ['C:/Users/test/进度条加载.html'], '我的分类')
+    expect(toasts).toEqual(['已导入 1 个素材'])
+    expect(reload).toHaveBeenCalled()
+  })
+})
+
+describe('asset cache across library tabs', () => {
+  const stubWindow = (list: ReturnType<typeof vi.fn>): void => {
+    vi.stubGlobal('window', {
+      setTimeout,
+      clearTimeout,
+      windowApi: {
+        assets: { list },
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) },
+        library: { open: vi.fn().mockResolvedValue({ ok: true }) },
+        tabs: { save: vi.fn().mockResolvedValue(undefined) },
+        state: { set: vi.fn().mockResolvedValue({ ok: true }) }
+      }
+    })
+  }
+
+  it('shows the cached library again without refetching it', async () => {
+    const list = vi.fn(async (libraryId: number) => ({
+      assets: libraryId === 71 ? [ROW(1, 'a'), ROW(2, 'b')] : [ROW(3, 'c')]
+    }))
+    stubWindow(list)
+    vi.resetModules()
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [
+        { id: 'a71', name: 'A', libraryId: 71 },
+        { id: 'b72', name: 'B', libraryId: 72 }
+      ],
+      activeTabId: 'a71',
+      assets: [],
+      mode: 'empty'
+    })
+
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(2))
+    useUI.getState().openTab('b72')
+    await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(1))
+
+    useUI.getState().openTab('a71')
+    // 缓存命中是同步的:不经过 IPC 就有上一个库的完整列表
+    expect(useUI.getState().assets).toHaveLength(2)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes the cached library when it changed while inactive', async () => {
+    const list = vi.fn(async (libraryId: number) => ({
+      assets: libraryId === 81 ? [ROW(1, 'old'), ROW(2, 'b')] : [ROW(3, 'c')]
+    }))
+    stubWindow(list)
+    vi.resetModules()
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [
+        { id: 'a81', name: 'A', libraryId: 81 },
+        { id: 'b82', name: 'B', libraryId: 82 }
+      ],
+      activeTabId: 'a81',
+      assets: [],
+      mode: 'empty'
+    })
+
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(2))
+    useUI.getState().openTab('b82')
+    await vi.waitFor(() => expect(useUI.getState().assets).toHaveLength(1))
+
+    useUI.getState().applyAssetDelta(81, [1])
+    useUI.getState().openTab('a81')
+    expect(useUI.getState().assets).toHaveLength(2)
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(3))
+    expect(list).toHaveBeenLastCalledWith(81)
   })
 })

@@ -58,7 +58,7 @@ export interface AssetRow {
   tags: AssetTag[]
 }
 
-export type DocumentShape = 'text' | 'markdown' | 'sheet' | 'doc' | 'slides'
+export type DocumentShape = 'text' | 'markdown' | 'html' | 'sheet' | 'doc' | 'slides'
 
 export type DocumentFailureKind =
   | 'corrupt'
@@ -208,6 +208,16 @@ export interface ThumbsProgressPayload {
   fingerprint?: string
 }
 
+/**
+ * 跨库传输进度(assets:transfer / folders:transfer)。
+ * libraryId 是源库:素材是从它那里减出去的,进度条也挂它的页面上。
+ */
+export interface TransferProgressPayload {
+  libraryId: number
+  done: number
+  total: number
+}
+
 export interface TranscodeProgressPayload {
   libraryId: number
   assetId: number
@@ -223,4 +233,5 @@ export interface EventChannelMap {
   'window:maximized': boolean
   'thumbs:progress': ThumbsProgressPayload
   'transcode:progress': TranscodeProgressPayload
+  'transfer:progress': TransferProgressPayload
 }

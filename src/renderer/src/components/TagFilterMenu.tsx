@@ -289,11 +289,14 @@ export function TagFilterMenu({
           ) : null}
         </div>
         <div className="tag-filter-head-tools">
-          <select value={sort} name="tag-sort" aria-label="标签排序" onChange={(event) => setSort(event.target.value as TagSort)}>
-            <option value="count-desc">数量 ↓</option>
-            <option value="count-asc">数量 ↑</option>
-            <option value="name-asc">名称 A-Z</option>
-          </select>
+          <span className="tag-filter-sort">
+            <select value={sort} name="tag-sort" aria-label="标签排序" onChange={(event) => setSort(event.target.value as TagSort)}>
+              <option value="count-desc">数量 ↓</option>
+              <option value="count-asc">数量 ↑</option>
+              <option value="name-asc">名称 A-Z</option>
+            </select>
+            <Icon name="chev-d" />
+          </span>
           <button
             type="button"
             className={value.length === 0 ? 'on' : ''}
@@ -426,7 +429,7 @@ export function TagFilterMenu({
                     >
                       <span
                         className="tag-filter-dot"
-                        style={{ background: item.dotColor, boxShadow: `0 0 3px ${item.dotColor}` }}
+                        style={{ background: item.dotColor }}
                       />
                       <span className="tag-filter-name">{item.label}</span>
                       <span className="tag-filter-count">{fmtCount(item.count)}</span>

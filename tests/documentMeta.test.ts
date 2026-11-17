@@ -38,6 +38,10 @@ describe('document metadata', () => {
     expect(documentMetaFromParts({ format: 'PPTX', slideNames: [] })).toEqual({ slideCount: 0 })
   })
 
+  it('detects text encoding for standalone HTML', () => {
+    expect(documentMetaFromParts({ format: 'HTML', text: Buffer.from('<p>中文</p>') })).toEqual({ textEncoding: 'UTF-8' })
+  })
+
   it('counts ODP pages but not page thumbnails inside speaker notes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mediahub-odp-meta-'))
     try {

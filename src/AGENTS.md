@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-06 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-13 -->
 
 # AGENTS.md — src
 
@@ -12,10 +12,10 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 |----|------|------|
 | main | `src/main/index.ts` | 单实例锁、窗口创建、`media://` 协议注册、退出前 checkpoint 各库 |
 | main | `src/main/ipc.ts` | 薄注册壳：按域组装 handler，并导出 watcher/thumb 启动入口 |
-| main | `src/main/ipc/*` | `libraries` / `assets` / `context` / `watch` / `thumbs` 分域实现；`scopeFor()` 在 `context.ts` |
+| main | `src/main/ipc/*` | `libraries` / `assets` / `context` / `watch` / `thumbs` 分域实现与 `folderListCache`；`scopeFor()` 在 `context.ts` |
 | main | `src/main/events.ts` | 向渲染层推送；通道白名单同步在 `preload/index.ts` 的 `on:` 联合类型里，**加事件要两处都改**（当前：`library:scan` / `assets:changed` / `window:maximized` / `thumbs:progress`） |
 | preload | `src/preload/index.ts` | `contextBridge.exposeInMainWorld('windowApi', api)`；`index.d.ts` 声明 Window 类型 |
-| renderer | `src/renderer/src/App.tsx` | 启动引导、全局快捷键、Ctrl+滚轮列宽 |
+| renderer | `src/renderer/src/App.tsx` | 启动引导、库标签页恢复、事件合帧、全局快捷键、Ctrl+滚轮列宽 |
 
 ## Key Files
 
@@ -34,10 +34,15 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `fingerprint.ts` | 缓存指纹 sha1(前 64KB + size + mtime) 截 20 位 |
 | `cacheFiles.ts` | 原子写（临时文件 + rename）与 `isWithinRoot`；**所有落盘都走它，别自己 writeFile** |
 | `folders.ts` | 库内文件夹增删改移、素材移动/导出，含 `..` 逃逸与保留名校验 |
+| `assetTransfer.ts` / `fileImport.ts` | 跨库复制/剪切（迁移评分/标签/备注、CSS 配套 HTML、嵌套库根拒绝）与外部拖入导入（路径归一化、同名避让） |
 | `media.ts` | `media://<libraryId>/<relPath>` 协议，支持 Range；`mimeForExtension` 是导出的纯函数 |
-| `thumbs.ts` | 缩略图缓存 `<库>/.mediahub/thumbs/`：指纹命名 + `index.json` 清单；`ensureThumb` 串行队列，CSS 走离屏截图分支 |
+| `thumbs.ts` | 缩略图缓存 `<库>/.mediahub/thumbs/`：指纹命名 + `index.json` 清单；`ensureThumb` 串行队列，CSS/HTML 走离屏 Chromium，SVG 按需生成 |
 | `palette.ts` | k-means 主色提取（worker_threads） |
 | `videoMeta.ts` | ffmpeg 抽视频元数据；解析函数与进程调用分离，便于测试 |
+| `ffmpeg.ts` | 受控 ffmpeg/ffprobe 子进程：超时、输出上限、取消与原子写媒体文件 |
+| `formatProbe.ts` / `thumbnailDecoder.ts` | 格式元数据探测与缩略图解码路由；PDF/PSD/HEIC/视频失败分类 |
+| `imagePreview.ts` / `aiPreview.ts` / `transcode.ts` | PSD/HEIC 大图、AI 分页、视频 1080p 转码缓存（均按指纹命名） |
+| `modelThumb.ts` / `externalPreview.ts` / `externalTools.ts` | 3D 离屏封面、BLEND→GLB 外部预览、Blender/Cinema 4D 探测 |
 | `textAssets.ts` | 文本素材（CSS）读写：原子替换回写 + 同步 size/fingerprint/mtime |
 | `clipboardFiles.ts` | 把文件写进系统剪贴板（CF_HDROP）；**绕开 Electron clipboard，走 PowerShell Set-Clipboard** |
 | `cssPreview.ts` | CSS 预览骨架的主进程侧：定位同目录同名 `.html`（纯拼接逻辑在 `src/shared/`） |
@@ -86,6 +91,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 
 - **加一个 IPC 能力**：在 `ipc/<domain>.ts` 加 handler（含 `libraryId` 作用域解析）→ `ipc.ts` 确认注册 → `preload/index.ts` 的 `api` 暴露；事件白名单改 `src/shared/types.ts` 的 `EventChannelMap` → 改完**重启 Electron**（HMR 不重载 preload）。
 - **加一个库内文件操作**：写进 `folders.ts`，复用 `libraryPath()` 做路径校验，不要在各 handler 里自己拼路径。
+- **加跨库操作**：走 `services/assetTransfer.ts`，同时持有源/目标两个库 scope，两侧 watcher 都要暂停；目标库变化后先失效目录缓存再发 `assets:changed`，别在 handler 里直接复制文件。
 - **加一个素材类型**（如已有 `.css`）：五处联动，缺一处就出现「能扫到但用不了」——
   1. `ignore.ts` 的 `EXT_WHITELIST` 加扩展名，并扩 `AssetKind` 联合类型；
   2. `src/shared/types.ts` 的 `AssetKind`/`AssetRow.type` 与 `renderer/src/data/types.ts` 的 `AssetType`/`AssetFormat` 跟随；
