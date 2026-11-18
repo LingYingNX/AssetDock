@@ -136,6 +136,21 @@ export function migrateSchema(d: Database.Database): void {
     if (!assetColumns.includes('slide_count')) d.exec('ALTER TABLE assets ADD COLUMN slide_count INTEGER')
     if (!assetColumns.includes('text_encoding')) d.exec('ALTER TABLE assets ADD COLUMN text_encoding TEXT')
   })
+  step(7, () => {
+    // 每库库有此表;全局注册表也建一份,让 upsertScanned 对任意 Database 都成立。
+    d.exec(`CREATE TABLE IF NOT EXISTS purged_paths (
+      library_id INTEGER NOT NULL,
+      rel_path TEXT NOT NULL,
+      purged_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY(library_id, rel_path)
+    )`)
+  })
+  step(8, () => {
+    const assetColumns = columns('assets')
+    if (assetColumns.includes('library_id') && assetColumns.includes('imported_at')) {
+      d.exec('CREATE INDEX IF NOT EXISTS idx_assets_lib_imported ON assets(library_id, imported_at DESC, id DESC)')
+    }
+  })
 }
 
 export function getDb(): Database.Database {
@@ -150,6 +165,13 @@ export function openMemoryDb(): Database.Database {
   d.exec(SCHEMA_V3)
   d.exec(SCHEMA_V4)
   d.exec(SCHEMA_V5)
+  d.exec(`CREATE TABLE IF NOT EXISTS purged_paths (
+    library_id INTEGER NOT NULL,
+    rel_path TEXT NOT NULL,
+    purged_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(library_id, rel_path)
+  )`)
+  d.exec('CREATE INDEX IF NOT EXISTS idx_assets_lib_imported ON assets(library_id, imported_at DESC, id DESC)')
   // source_index_id 的 ALTER 在 initDb 的 step(3) 里幂等执行,这里需单独补齐,
   // 否则 migrateLibrary 的 SELECT * 拿不到该列、INSERT 命名参数缺字段
   const cols = (d.pragma('table_info(assets)') as { name: string }[]).map((c) => c.name)

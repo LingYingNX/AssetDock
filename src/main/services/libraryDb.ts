@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS assets (
   UNIQUE(library_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_assets_lib ON assets(library_id);
+CREATE INDEX IF NOT EXISTS idx_assets_lib_imported ON assets(library_id, imported_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_assets_fp ON assets(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_assets_src ON assets(source_index_id);
 CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, color TEXT NOT NULL);
@@ -80,6 +81,12 @@ CREATE TABLE IF NOT EXISTS folder_orders (
   path TEXT NOT NULL,
   position INTEGER NOT NULL,
   PRIMARY KEY(library_id, path)
+);
+CREATE TABLE IF NOT EXISTS purged_paths (
+  library_id INTEGER NOT NULL,
+  rel_path TEXT NOT NULL,
+  purged_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(library_id, rel_path)
 );
 CREATE TABLE IF NOT EXISTS open_tabs (
   library_id INTEGER PRIMARY KEY,

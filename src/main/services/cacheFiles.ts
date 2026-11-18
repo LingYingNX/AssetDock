@@ -1,6 +1,6 @@
-import { access, mkdir, rename, rm, rmdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { dirname, isAbsolute, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 
 const writeLocks = new Map<string, Promise<void>>()
 
@@ -66,4 +66,20 @@ export async function removeFileAndPrune(path: string, stopRoot: string): Promis
     }
     dir = dirname(dir)
   }
+}
+
+/**
+ * 扫描期孤儿清理的通用形态:缓存文件名一律是 `<指纹>.<ext>` 或 `<指纹>-<页>.jpg`,
+ * 指纹不在活集合里就删。跳过 `tmp-` 前缀:那是正在进行的任务留下的临时产物。
+ */
+export async function collectOrphanFingerprintFiles(root: string, live: ReadonlySet<string>): Promise<number> {
+  let removed = 0
+  for (const name of await readdir(root).catch(() => [] as string[])) {
+    if (name.startsWith('tmp-')) continue
+    const fingerprint = name.replace(/-\d+\.jpg$/i, '').replace(/\.[a-z0-9]+$/i, '')
+    if (live.has(fingerprint)) continue
+    await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined)
+    removed++
+  }
+  return removed
 }

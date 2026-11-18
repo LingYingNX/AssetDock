@@ -248,7 +248,9 @@ export default function App(): React.JSX.Element {
         }
         case 'Delete': {
           const ids = st.selectedIds.length > 0 ? st.selectedIds : st.activeId ? [st.activeId] : []
-          if (ids.length > 0) st.trashAssets(ids)
+          if (ids.length === 0) break
+          if (st.nav === 'trash') st.purgeAssets(ids)
+          else st.trashAssets(ids)
           break
         }
         case 'i':

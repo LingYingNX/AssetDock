@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import type { AssetKind } from './ignore'
-import type { AssetRow, AssetTag, LibraryRow } from '../../shared/types'
+import type { AssetRow, AssetTag, LibraryRow, AssetListPage } from '../../shared/types'
 
 /** 标签默认色板(与设计稿标签色一致,超出按序循环) */
 const TAG_COLORS = ['#22D3EE', '#F97316', '#3ECF8E', '#E8A33D', '#FF7A93', '#3B82F6', '#A855F7', '#64748B']
@@ -55,6 +55,23 @@ export function listAssets(d: Database, libraryId: number): AssetRow[] {
     .all(libraryId) as (Omit<AssetRow, 'tags'> & { tags?: unknown })[]
   attachTags(d, rows)
   return rows as AssetRow[]
+}
+
+export function listAssetPage(d: Database, libraryId: number, page: AssetListPage): { assets: AssetRow[]; next?: { importedAt: string; id: number } } {
+  const before = page.before
+  if (before && (typeof before.importedAt !== 'string' || !Number.isSafeInteger(before.id))) {
+    throw new Error('素材分页游标无效')
+  }
+  const rows = d.prepare(
+    `SELECT * FROM assets WHERE library_id = ? AND (missing = 0 OR deleted_at IS NOT NULL)
+     ${before ? 'AND (imported_at, id) < (?, ?)' : ''}
+     ORDER BY imported_at DESC, id DESC LIMIT 513`
+  ).all(...(before ? [libraryId, before.importedAt, before.id] : [libraryId])) as AssetRow[]
+  const more = rows.length > 512
+  if (more) rows.pop()
+  attachTags(d, rows)
+  const last = rows[rows.length - 1]
+  return { assets: rows, ...(more && last ? { next: { importedAt: last.imported_at, id: last.id } } : {}) }
 }
 
 /** 按 id 取资产行(含标签),S1-7 增量合并用;不存在或已删除(硬删)的 id 自然缺席 */
@@ -302,6 +319,10 @@ export interface ScanUpsertResult {
 }
 
 export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry[]): ScanUpsertResult[] {
+  const purged = new Set(
+    (d.prepare('SELECT rel_path FROM purged_paths WHERE library_id = ?').all(libraryId) as { rel_path: string }[])
+      .map((row) => row.rel_path.toLowerCase())
+  )
   const existing = d.prepare(
     'SELECT id, size_bytes, mtime_ms, fingerprint, missing FROM assets WHERE library_id = ? AND rel_path = ?'
   )
@@ -345,6 +366,7 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
   d.transaction(() => {
     for (const e of entries) {
       const relPath = e.relPath
+      if (purged.has(relPath.toLowerCase())) continue
       const row = existing.get(libraryId, relPath) as
         | { id: number; size_bytes: number; mtime_ms: number; fingerprint: string; missing: number }
         | undefined
@@ -386,6 +408,18 @@ export function upsertScanned(d: Database, libraryId: number, entries: ScanEntry
     }
   })()
   return results
+}
+
+/** 记录被彻底清除的相对路径;扫描/监听/导入都经 upsertScanned 统一跳过,磁盘原文件不动。 */
+export function addPurgedPaths(d: Database, libraryId: number, relPaths: readonly string[]): void {
+  const insert = d.prepare('INSERT OR IGNORE INTO purged_paths(library_id, rel_path) VALUES (?, ?)')
+  const now = new Date().toISOString()
+  const stamp = d.prepare('UPDATE purged_paths SET purged_at = ? WHERE library_id = ? AND rel_path = ?')
+  d.transaction(() => {
+    for (const relPath of new Set(relPaths)) {
+      if (insert.run(libraryId, relPath).changes === 0) stamp.run(now, libraryId, relPath)
+    }
+  })()
 }
 
 /* ---- 标签页持久化 ---- */

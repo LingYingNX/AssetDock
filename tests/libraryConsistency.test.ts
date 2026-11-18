@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { openMemoryDb } from '../src/main/services/db'
 import { isPathWithinRoot, realPathWithinRoot } from '../src/main/services/libResolve'
 import { closeAllLibHandles, ensureLibraryStorage, openLibDb } from '../src/main/services/libraryDb'
-import { addTag, assetById, listAssets, removeTag, renameAssetFolder, updateAsset, upsertScanned } from '../src/main/services/store'
+import { addTag, assetById, listAssetPage, listAssets, removeTag, renameAssetFolder, updateAsset, upsertScanned } from '../src/main/services/store'
 
 const entry = (relPath: string, fingerprint: string, mtimeMs = 1) => ({
   relPath, name: relPath.slice(0, relPath.lastIndexOf('.')), type: 'image' as const, format: 'JPG', sizeBytes: 1, mtimeMs, fingerprint
@@ -20,6 +20,30 @@ describe('library consistency', () => {
     upsertScanned(db, 2, [entry('sub/a.jpg', 'two')])
     expect(listAssets(db, 1)[0].fingerprint).toBe('one')
     expect(listAssets(db, 2)[0].fingerprint).toBe('two')
+    db.close()
+  })
+
+  it('pages asset rows in imported order', () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', 'C:/one')
+    upsertScanned(db, 1, [entry('a.jpg', 'a'), entry('b.jpg', 'b'), entry('c.jpg', 'c')])
+    const first = listAssetPage(db, 1, {})
+    expect(first.assets).toHaveLength(3)
+    expect(first.next).toBeUndefined()
+    expect(first.assets.map((row) => row.rel_path)).toEqual(['c.jpg', 'b.jpg', 'a.jpg'])
+    db.close()
+  })
+
+  it('returns a cursor when more than one page exists', () => {
+    const db = openMemoryDb()
+    db.prepare('INSERT INTO libraries(id, name, path) VALUES (?, ?, ?)').run(1, 'one', 'C:/one')
+    upsertScanned(db, 1, Array.from({ length: 513 }, (_, i) => entry(`${String(i).padStart(4, '0')}.jpg`, `fp-${i}`)))
+    const first = listAssetPage(db, 1, {})
+    expect(first.assets).toHaveLength(512)
+    expect(first.next).toBeDefined()
+    const second = listAssetPage(db, 1, { before: first.next })
+    expect(second.assets).toHaveLength(1)
+    expect(second.next).toBeUndefined()
     db.close()
   })
 

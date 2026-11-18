@@ -10,6 +10,9 @@ import { listLibraryFolders, orderLibraryFolders } from '../services/folders'
 import { hasLibDb, migrateLibrary } from '../services/libraryDb'
 import { collectOrphanThumbs, pruneMissingThumbs } from '../services/thumbs'
 import { collectOrphanDocumentPreviews } from '../services/documentPreview'
+import { collectOrphanAiPreviews } from '../services/aiPreview'
+import { collectOrphanImagePreviews } from '../services/imagePreview'
+import { collectOrphanTranscodes } from '../services/transcode'
 import { watchLibrary, type FSWatcher } from '../services/watch'
 import { migrateLegacySources } from '../services/legacySourceMigration'
 import { send } from '../events'
@@ -178,6 +181,7 @@ const reconciledLibraries = new Set<number>()
 const RECONCILE_DELAY_MS = 15000
 /** 首屏目录树读盘优先:chokidar 首轮遍历会占满 libuv 线程池,推迟到目录树返回之后再挂 */
 const WATCHER_ATTACH_DELAY_MS = 5000
+const THUMB_WARMUP_DELAY_MS = 15000
 
 /** 启动对账：静默重扫资源库根目录，幂等更新新增与缺失素材。 */
 async function reconcileRoot(libraryId: number, root: string): Promise<void> {
@@ -349,12 +353,16 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
           )
           await collectOrphanThumbs(s.libPath, live).catch(() => undefined)
           await collectOrphanDocumentPreviews(s.libPath, live).catch(() => undefined)
+          await collectOrphanAiPreviews(s.libPath, live).catch(() => undefined)
+          await collectOrphanImagePreviews(s.libPath, live).catch(() => undefined)
+          await collectOrphanTranscodes(s.libPath, live).catch(() => undefined)
         } finally {
           releaseScope(s)
         }
       })()
       void enrichMissingMeta(l.id)
-      queueThumbWarmup(l.id)
+      const warmup = setTimeout(() => queueThumbWarmup(l.id), THUMB_WARMUP_DELAY_MS)
+      warmup.unref?.()
       void enrichMissingPalette(l.id)
     }
   }, WATCHER_ATTACH_DELAY_MS)

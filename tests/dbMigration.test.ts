@@ -19,7 +19,7 @@ describe('database schema migration', () => {
       expect(columns).toContain('sheet_count')
       expect(columns).toContain('slide_count')
       expect(columns).toContain('text_encoding')
-      expect(db.pragma('user_version', { simple: true })).toBe(6)
+      expect(db.pragma('user_version', { simple: true })).toBe(8)
     } finally {
       db.close()
     }

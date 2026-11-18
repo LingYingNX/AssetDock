@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
@@ -8,6 +8,7 @@ import { MEDIA_ASSETS_DRAG_TYPE, downloadUrlForPath, encodeAssetDrag } from '../
 import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { formatSpec } from '../../../shared/formats'
+import { onceInView } from '../data/viewport'
 /** 视频/三维格式徽章圆点颜色(规格第 10 节) */
 const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
   MP4: '#3B82F6',
@@ -57,7 +58,15 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
     ? (a.dbId != null ? thumbSrc : `/@fs/${a.previewUrl}`)
     : ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
+  const [inView, setInView] = useState(false)
+  const cardRef = useRef<HTMLElement | null>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const card = cardRef.current
+    if (!card) return
+    return onceInView(card, () => setInView(true))
+  }, [])
 
   const cls = [
     'card',
@@ -104,6 +113,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
 
   return (
     <figure
+      ref={cardRef}
       className={cardCls}
       data-asset-id={a.id}
       tabIndex={0}
@@ -187,7 +197,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         style={ar ? ({ ['--ar' as string]: ar } as React.CSSProperties) : undefined}
         aria-hidden="true"
       >
-        {previewSrc ? (
+        {inView && previewSrc ? (
           <img
             src={previewSrc}
             alt={a.name}

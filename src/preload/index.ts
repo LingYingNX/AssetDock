@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AssetImportResponse, AssetListResponse, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
+import type { AssetImportResponse, AssetListResponse, AssetListPage, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
 import type { DocumentPreview } from '../shared/types'
 
 const api = {
@@ -59,8 +59,8 @@ const api = {
   },
 
   assets: {
-    list: (libraryId: number): Promise<AssetListResponse | { error: string }> =>
-      ipcRenderer.invoke('assets:list', libraryId),
+    list: (libraryId: number, page?: AssetListPage): Promise<AssetListResponse | { error: string }> =>
+      ipcRenderer.invoke('assets:list', libraryId, page),
     rows: (libraryId: number, ids: number[]): Promise<AssetRowsResponse> =>
       ipcRenderer.invoke('assets:rows', libraryId, ids),
     update: (libraryId: number, id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>

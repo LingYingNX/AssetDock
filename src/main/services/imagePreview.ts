@@ -2,7 +2,7 @@ import { mkdir, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import type { AssetFormat } from '../../shared/formats'
-import { fileExists } from './cacheFiles'
+import { collectOrphanFingerprintFiles, fileExists } from './cacheFiles'
 import { decodeThumbnailSource } from './thumbnailDecoder'
 
 const active = new Map<string, Promise<string>>()
@@ -56,4 +56,12 @@ export function ensureImagePreview(
 
 export function resetImagePreviewTasks(): void {
   active.clear()
+}
+
+/** 扫描期孤儿清理:PSD/HEIC 大图缓存是纯派生数据,指纹失效即删。 */
+export function collectOrphanImagePreviews(
+  libPath: string,
+  liveFingerprints: ReadonlySet<string>
+): Promise<number> {
+  return collectOrphanFingerprintFiles(imagePreviewDir(libPath), liveFingerprints)
 }

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { fileExists } from './cacheFiles'
+import { collectOrphanFingerprintFiles, fileExists } from './cacheFiles'
 import { runFfmpeg, writeMediaFileAtomically } from './ffmpeg'
 
 const active = new Map<string, Promise<string>>()
@@ -10,6 +10,14 @@ export function transcodesDir(libPath: string): string {
 
 export function transcodePath(libPath: string, fingerprint: string): string {
   return join(transcodesDir(libPath), `${fingerprint}.mp4`)
+}
+
+/** 扫描期孤儿清理:转码 MP4 是纯派生缓存,指纹失效即删。 */
+export function collectOrphanTranscodes(
+  libPath: string,
+  liveFingerprints: ReadonlySet<string>
+): Promise<number> {
+  return collectOrphanFingerprintFiles(transcodesDir(libPath), liveFingerprints)
 }
 
 export function transcodeArgs(absPath: string, outputPath: string): string[] {

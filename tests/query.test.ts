@@ -11,6 +11,11 @@ const asset = (patch: Partial<Asset>): Asset => ({
 const query = (assets: Asset[], nav: NavKey = 'all', patch: Partial<Filters> = {}) => queryAssets(assets, { nav, search: '', filters: { ...filters, ...patch }, stripColor: null })
 
 describe('queryAssets', () => {
+  it('reuses the same result for the same asset snapshot and view', () => {
+    const assets = [asset({ id: 'one', folders: ['图'] })]
+    const opts = { nav: 'all' as const, search: '', filters, stripColor: null }
+    expect(queryAssets(assets, opts)).toBe(queryAssets(assets, opts))
+  })
   it('filters real folder paths and omits deleted or missing assets', () => {
     const assets = [asset({ id: 'one', folders: ['图', '图/壁纸'] }), asset({ id: 'two', folders: ['图'], missing: true }), asset({ id: 'three', folders: ['图'], deletedAt: '2026-09-10T00:00' })]
     expect(query(assets, 'folder:图').map((item) => item.id)).toEqual(['one'])

@@ -161,6 +161,11 @@ export interface AssetListRow extends AssetRow {
 export interface AssetListResponse {
   library: LibraryRow
   assets: AssetListRow[]
+  next?: { importedAt: string; id: number }
+}
+
+export interface AssetListPage {
+  before?: { importedAt: string; id: number }
 }
 
 /** folders:list 响应 */

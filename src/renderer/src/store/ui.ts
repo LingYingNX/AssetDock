@@ -864,24 +864,32 @@ export const useUI = create<UIState>((set, get) => {
       })
       /* 切回未变更的库:缓存就是最新,不再拉几十 MB */
       if (reuseCache && cached && !dirtyLibraries.has(libraryId)) return
-      void window.windowApi.assets.list(libraryId).then((r) => {
+      void (async () => {
+        const pages: Record<string, unknown>[] = []
+        let before: { importedAt: string; id: number } | undefined
+        let library: unknown
+        for (;;) {
+          const r = before
+            ? await window.windowApi.assets.list(libraryId, { before })
+            : await window.windowApi.assets.list(libraryId)
+          if (!('assets' in r) || !Array.isArray(r.assets)) {
+            fail()
+            return
+          }
+          library = r.library
+          pages.push(...(r.assets as unknown as Record<string, unknown>[]))
+          if (!r.next) break
+          before = r.next
+          await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        }
+        const r = { library, assets: pages }
         if (superseded()) return
-        const data = r as {
-          library?: unknown
-          assets?: Record<string, unknown>[]
-        }
-        const assets = data.assets
-        if (!Array.isArray(assets)) {
-          /* 主进程回了结构不对的响应(例如 {error}):与请求失败同待遇,不把上次的集合当当前结果 */
-          fail()
-          return
-        }
-        const list = assets.map(rowToAsset)
+        const list = r.assets.map(rowToAsset)
         assetCache.set(libraryId, list)
         dirtyLibraries.delete(libraryId)
         loadedLibraryId = libraryId
         set({ assets: list, mode: 'library' })
-      }).catch(fail)
+      })().catch(fail)
     },
     folderPaths: [],
     physicalFolderPaths: [],

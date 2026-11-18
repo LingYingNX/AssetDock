@@ -1,7 +1,7 @@
 import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { fileExists } from './cacheFiles'
+import { collectOrphanFingerprintFiles, fileExists } from './cacheFiles'
 import { renderPdfPagePng } from './thumbnailDecoder'
 
 const active = new Map<string, Promise<string>>()
@@ -59,4 +59,12 @@ export function ensureAiPagePreview(
 
 export function resetAiPreviewTasks(): void {
   active.clear()
+}
+
+/** 扫描期孤儿清理:AI 页面图是纯派生缓存,指纹失效即删。 */
+export function collectOrphanAiPreviews(
+  libPath: string,
+  liveFingerprints: ReadonlySet<string>
+): Promise<number> {
+  return collectOrphanFingerprintFiles(aiPreviewDir(libPath), liveFingerprints)
 }

@@ -4,8 +4,8 @@ import { access } from 'node:fs/promises'
 import { getDb } from '../services/db'
 import {
   addTag, removeTag, applyMovedAssets, deleteFolderTree, renameAssetFolder, renameFolderOrders,
-  listFolderOrders, replaceFolderOrders, listAssets, updateAsset, getLibrary, sanitizeAssetPatch,
-  upsertScanned, getAppState, type AssetPatch
+  listFolderOrders, replaceFolderOrders, listAssetPage, updateAsset, getLibrary, sanitizeAssetPatch,
+  upsertScanned, addPurgedPaths, getAppState, type AssetPatch
 } from '../services/store'
 import { ensureLibraryStorage, hasLibDb } from '../services/libraryDb'
 import {
@@ -33,10 +33,15 @@ import { importDroppedFiles } from '../services/fileImport'
 import { ensureDocumentPreview, removeDocumentPreviewIfUnused } from '../services/documentPreview'
 import { transferAssets, transferFolderTree } from '../services/assetTransfer'
 import { cacheFolderList, cachedFolderList, invalidateFolderList } from './folderListCache'
+import type { AssetListPage } from '../../shared/types'
 
 function folderParent(path: string): string {
   const index = path.lastIndexOf('/')
   return index < 0 ? '' : path.slice(0, index)
+}
+
+function compactAssetRow(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null))
 }
 
 /**
@@ -334,24 +339,22 @@ export function registerAssetsIpc(): void {
     }
   })
 
-  ipcMain.handle('assets:list', async (_e, libraryId: number) => {
+  ipcMain.handle('assets:list', async (_e, libraryId: number, page?: AssetListPage) => {
     const s = scopeFor(libraryId)
     if (!s) return { error: 'library not found' }
     try {
-      // 全量响应有几十 MB,序列化会独占主线程近一秒。先让同批到达的 folders:list
-      // 把目录树回包发出去,侧边栏不必陪着素材列表一起等。
+      // 每页最多 512 行,让大库响应分段返回;同批到达的 folders:list 仍优先回包。
       await new Promise<void>((resolve) => setImmediate(resolve))
       const lib = getLibrary(getDb(), libraryId)!
-      const rows = listAssets(s.db, libraryId)
+      const batch = listAssetPage(s.db, libraryId, page ?? {})
+      const rows = batch.assets
         /* 文件已缺失的行任何视图都不展示(回收站里的例外:还要能清空),不再占 31% 的响应体 */
         .filter((r) => !r.missing || r.deleted_at != null)
-        .map((r) => ({
-          ...r,
-          absPath: absPathFor(s, r.rel_path)
-        }))
+        .map((r) => compactAssetRow({ ...r, absPath: absPathFor(s, r.rel_path) }))
       return {
         library: { id: lib.id, name: lib.name, path: lib.path },
-        assets: rows
+        assets: rows,
+        ...(batch.next ? { next: batch.next } : {})
       }
     } finally {
       releaseScope(s)
@@ -904,11 +907,12 @@ export function registerAssetsIpc(): void {
     const s = scopeFor(libraryId)
     if (!s) return { ok: false }
     try {
-      const doomed = s.db.prepare('SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').all(libraryId) as { fingerprint: string }[]
+      const targets = s.db.prepare('SELECT fingerprint, rel_path FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').all(libraryId) as { fingerprint: string; rel_path: string }[]
       const purged = s.db.prepare('DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL').run(libraryId).changes
+      addPurgedPaths(s.db, libraryId, targets.map((row) => row.rel_path))
       // 原图记录被清除时同步删除缩略图与清单条目
-      await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
-      for (const row of doomed) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
+      await removeThumbsIfUnused(s.libPath, s.db, libraryId, targets.map((r) => r.fingerprint))
+      for (const row of targets) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       return { ok: true, purged }
     } finally {
       releaseScope(s)
@@ -927,18 +931,20 @@ export function registerAssetsIpc(): void {
       const CHUNK = 500
       let purged = 0
       const doomed: { fingerprint: string }[] = []
+      const purgedPaths: string[] = []
       for (let i = 0; i < clean.length; i += CHUNK) {
         const batch = clean.slice(i, i + CHUNK)
         const placeholders = batch.map(() => '?').join(',')
-        doomed.push(
-          ...(s.db
-            .prepare(`SELECT fingerprint FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND id IN (${placeholders})`)
-            .all(libraryId, ...batch) as { fingerprint: string }[])
-        )
+        const targets = s.db
+          .prepare(`SELECT fingerprint, rel_path FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND id IN (${placeholders})`)
+          .all(libraryId, ...batch) as { fingerprint: string; rel_path: string }[]
+        doomed.push(...targets)
+        purgedPaths.push(...targets.map((row) => row.rel_path))
         purged += s.db
           .prepare(`DELETE FROM assets WHERE library_id = ? AND deleted_at IS NOT NULL AND id IN (${placeholders})`)
           .run(libraryId, ...batch).changes
       }
+      addPurgedPaths(s.db, libraryId, purgedPaths)
       await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
       for (const row of doomed) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       return { ok: true, purged }

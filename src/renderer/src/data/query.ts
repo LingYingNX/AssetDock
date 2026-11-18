@@ -110,6 +110,13 @@ export interface QueryOptions {
   stripColor: string | null
 }
 
+const queryCache = new WeakMap<readonly Asset[], Map<string, Asset[]>>()
+const QUERY_CACHE_MAX = 32
+
+function queryCacheKey(opts: QueryOptions): string {
+  return JSON.stringify([opts.nav, opts.search, opts.filters, opts.stripColor])
+}
+
 const RES_PX = (a: Asset): number => Math.max(a.width ?? 0, a.height ?? 0)
 
 /** 「最近导入」阈值:7 天(S3-3,matchNav 与计数共用) */
@@ -187,6 +194,11 @@ function matchFilters(a: Asset, f: Filters): boolean {
 }
 
 export function queryAssets(assets: readonly Asset[], opts: QueryOptions): Asset[] {
+  const key = queryCacheKey(opts)
+  let cached = queryCache.get(assets)
+  if (!cached) queryCache.set(assets, cached = new Map())
+  const hit = cached.get(key)
+  if (hit) return hit
   const kw = opts.search.trim().toLowerCase()
   const matched = assets.filter((a) => {
     if (!matchNav(a, opts.nav)) return false
@@ -198,6 +210,12 @@ export function queryAssets(assets: readonly Asset[], opts: QueryOptions): Asset
     }
     return true
   })
+  cached.set(key, matched)
+  while (cached.size > QUERY_CACHE_MAX) {
+    const oldest = cached.keys().next().value
+    if (oldest === undefined) break
+    cached.delete(oldest)
+  }
   return matched
 }
 

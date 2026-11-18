@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   openLibDb,
+  openMemoryLibDb,
   hasLibDb,
   getLibHandle,
   releaseLibHandle,
@@ -13,6 +14,7 @@ import {
   libDbPath,
   mediaDir
 } from '../src/main/services/libraryDb'
+import { addPurgedPaths, upsertScanned } from '../src/main/services/store'
 
 let root: string
 
@@ -53,6 +55,35 @@ describe('迁移幂等', () => {
     writeFileSync(libDbPath(root) + '.tmp-999', 'garbage')
     const db = openLibDb(root)
     expect(db.prepare('SELECT COUNT(*) AS c FROM assets').get()).toEqual({ c: 0 })
+    db.close()
+  })
+
+  it('旧库升级后补建 purged_paths 墓碑表', () => {
+    mkdirSync(mediaDir(root), { recursive: true })
+    const legacyDb = openLibDb(root)
+    legacyDb.exec('DROP TABLE purged_paths')
+    legacyDb.close()
+
+    const db = openLibDb(root)
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purged_paths'").get()).toBeDefined()
+    db.close()
+  })
+
+  it('墓碑路径不会被扫描重新入库', () => {
+    const db = openMemoryLibDb()
+    const entry = {
+      relPath: 'gone.jpg',
+      name: 'gone',
+      type: 'image' as const,
+      format: 'JPG',
+      sizeBytes: 1,
+      mtimeMs: 1,
+      fingerprint: 'fp'
+    }
+    expect(upsertScanned(db, 1, [entry])).toHaveLength(1)
+    addPurgedPaths(db, 1, ['gone.jpg'])
+    expect(upsertScanned(db, 1, [entry])).toEqual([])
+    expect((db.prepare('SELECT COUNT(*) AS c FROM assets').get() as { c: number }).c).toBe(1)
     db.close()
   })
 })
