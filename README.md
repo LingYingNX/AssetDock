@@ -37,10 +37,8 @@ src/renderer/src/   React 界面：组件、纯视图逻辑、zustand store、�
 src/shared/         跨进程共享的纯逻辑（无 fs / 无 electron）
 tests/              Vitest 用例
 tools/              开发与无头验证脚本
-openspec/           能力规范与变更记录
 ```
 
-架构与格式支持细节见 `docs/ARCHITECTURE.md`、`docs/FORMAT_SUPPORT.md`，能力规范见 `openspec/specs/`。
 
 ## 说明
 

@@ -6,3 +6,14 @@ artifacts/
 design-review/
 tools/.dev-log.txt
 .agents/
+
+# 只推送源码：AI 说明、知识库/规范、工具产物、设计稿、启动脚本不入库
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.zcode/
+.zcodeignore
+openspec/
+docs/
+design-concepts/
+启动.bat
