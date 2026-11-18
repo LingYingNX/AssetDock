@@ -769,7 +769,7 @@ export function Lightbox(): React.JSX.Element | null {
                   className="pv-html-doc"
                   src={prepared?.url ?? ''}
                   title={a.name}
-                  sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-same-origin"
                 />
               )
             ) : isDocument ? (

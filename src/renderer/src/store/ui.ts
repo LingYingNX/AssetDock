@@ -62,6 +62,8 @@ interface UiPrefs {
   sideWidth: number
   /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留。跨库共享,切库时不能按当前库的路径清空 */
   collapsedFolders: string[]
+  /** 格式下拉里已折叠的分类(图片/视频/三维/代码/文档);跨重启保留 */
+  collapsedFormatGroups: string[]
   /** 三维预览模式与 HDR 环境:跨重启保留 */
   modelShade: ModelShade
   modelHdr: HdrId
@@ -105,6 +107,7 @@ function persistUiPrefs(): void {
       nav: s.nav,
       sideWidth: s.sideWidth,
       collapsedFolders: [...s.collapsedFolders],
+      collapsedFormatGroups: [...s.collapsedFormatGroups],
       modelShade: s.modelShade,
       modelHdr: s.modelHdr,
       modelHdrRotation: s.modelHdrRotation,
@@ -179,6 +182,7 @@ export async function restoreUiPrefs(): Promise<void> {
         nav: parseNav(parsed.nav),
         sideWidth: parsed.sideWidth == null ? SIDEBAR_DEFAULT : clampSidebarWidth(Number(parsed.sideWidth)),
         collapsedFolders: parseCollapsedFolders(parsed.collapsedFolders),
+        collapsedFormatGroups: parseCollapsedFolders(parsed.collapsedFormatGroups),
         modelShade: parsed.modelShade === 'render' ? 'render' : 'solid',
         modelHdr: parseHdrPreset(parsed.modelHdr),
         modelHdrRotation: hdr.rotation,
@@ -315,6 +319,9 @@ interface UIState {
   /** 已折叠的文件夹路径;跨重启保留,深树不必每次重新收起 */
   collapsedFolders: string[]
   toggleFolderCollapsed: (path: string) => void
+  /** 格式下拉里已折叠的分类,跨重启保留 */
+  collapsedFormatGroups: string[]
+  toggleFormatGroup: (type: string) => void
   refreshFolders: () => void
   createFolder: (parentPath?: string) => void
   renameFolder: (path: string, name: string) => void
@@ -901,6 +908,15 @@ export const useUI = create<UIState>((set, get) => {
         collapsedFolders: s.collapsedFolders.includes(path)
           ? s.collapsedFolders.filter((p) => p !== path)
           : [...s.collapsedFolders, path]
+      }))
+      persistUiPrefs()
+    },
+    collapsedFormatGroups: [],
+    toggleFormatGroup: (type) => {
+      set((s) => ({
+        collapsedFormatGroups: s.collapsedFormatGroups.includes(type)
+          ? s.collapsedFormatGroups.filter((t) => t !== type)
+          : [...s.collapsedFormatGroups, type]
       }))
       persistUiPrefs()
     },

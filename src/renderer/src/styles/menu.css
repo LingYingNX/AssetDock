@@ -109,8 +109,29 @@
 .menu.pick-menu button.on:hover{background:var(--acc-soft)}
 .menu.pick-menu button.on .ic{color:var(--acc2)}
 .menu.pick-menu .sep{margin:4px 2px}
-/* 右对齐定位的菜单(筛选/视图下拉)从触发按钮的右下方生长,与左对齐菜单区分原点 */
-.menu.pick-menu.menu-anchor-right{transform-origin:top right}
+/* 筛选/视图下拉:高亮贴满菜单宽度,文字保持原有排版(标签靠左、副文本靠右)。
+   原先菜单留 4px 内边距 + 按钮 5px 圆角,高亮块四周空出一圈菜单底色,
+   读起来像「色块没占满」;去掉内边距并把按钮圆角归零后,色块直达菜单边缘。
+   选中标识只靠满宽高亮承担,左缘 3px 竖条已删除(用户明确不要)。
+   展开方向(左/右锚)由 Dropdown 按按钮位置内联决定,这里只管菜单内部。 */
+.menu.pick-menu.menu-filter{padding:0}
+.menu.pick-menu.menu-filter button{border-radius:0}
+.menu.pick-menu.menu-filter button.on::before{content:none}
+/* 筛选菜单不再画横向分组线(用户要求),分组靠标题与留白区分。 */
+.menu.pick-menu.menu-filter .sep{display:none}
+/* 可折叠分组标题:左侧箭头 + 分类名,点击展开/收起。箭头展开时转 90°。
+   内边距与普通项 10px 对齐;悬停给一层底色,表明标题本身也可点。 */
+.menu button.menu-fold{display:flex;align-items:center;gap:4px;min-height:0;padding:8px 10px 4px;border-radius:0;
+  font-size:var(--fs-cap);font-weight:600;letter-spacing:.05em;color:var(--t3);text-align:left}
+.menu button.menu-fold:hover{background:var(--bg3);color:var(--t2)}
+.menu button.menu-fold .ic{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);
+  transition:transform var(--dur-hover) var(--ease-out)}
+.menu button.menu-fold .ic.open{transform:rotate(90deg)}
+/* 满宽高亮后,10px 的全局滚动条会在右缘留一条灰带,看起来仍像内边距。
+   收到 3px,与 tag-filter-scroll 同档,高亮基本贴到边框。 */
+.menu.pick-menu.menu-filter::-webkit-scrollbar{width:3px}
+.menu.pick-menu.menu-filter::-webkit-scrollbar-track{background:transparent}
+.menu.pick-menu.menu-filter::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border:0;border-radius:2px}
 
 /* 标签筛选面板:尺寸固定,避免标签增多后把筛选条撑宽。
    左栏保留内置入口和用户总分类;右侧每行严格 4 条、间距 4px。

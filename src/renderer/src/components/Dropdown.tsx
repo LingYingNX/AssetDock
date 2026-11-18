@@ -16,6 +16,9 @@ export interface MenuItem {
   /** 分组标题:渲染在每一项之前,不可点。用于把一段平铺的同类项按类目切开,
       例如格式下拉的「图片 / 视频 / 三维」。 */
   heading?: string
+  /** 可折叠分组标题:提供 onToggleGroup 后标题变成按钮,groupOpen 决定箭头方向与子项是否渲染 */
+  groupOpen?: boolean
+  onToggleGroup?: () => void
 }
 
 interface DropdownProps {
@@ -85,9 +88,19 @@ export function Dropdown({ id, items, value, compact = false, onPick, onPointerE
     if (id.startsWith('tab-')) {
       el.style.left = `${r.left}px`
       el.style.right = 'auto'
+      el.style.transformOrigin = 'top left'
     } else {
-      el.style.left = 'auto'
-      el.style.right = `${Math.max(8, window.innerWidth - r.right)}px`
+      /* 筛选/视图下拉从触发按钮左缘向右展开;原来右缘对齐会让菜单盒向左
+         盖住相邻按钮。右侧放不下时翻回右缘对齐,避免溢出视口。 */
+      if (r.left + el.offsetWidth > window.innerWidth - 8) {
+        el.style.left = 'auto'
+        el.style.right = `${Math.max(8, window.innerWidth - r.right)}px`
+        el.style.transformOrigin = 'top right'
+      } else {
+        el.style.left = `${r.left}px`
+        el.style.right = 'auto'
+        el.style.transformOrigin = 'top left'
+      }
     }
   }, [open, mounted, id])
 
@@ -116,13 +129,27 @@ export function Dropdown({ id, items, value, compact = false, onPick, onPointerE
   const node = (
     <div
       ref={ref}
-      className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-anchor-right'}${shown ? ' open' : ' closing'}`}
+      className={`menu glass-menu pick-menu${compact ? ' compact-menu' : ''}${id.startsWith('tab-') ? '' : ' menu-filter'}${shown ? ' open' : ' closing'}`}
       role="menu"
       onPointerEnter={onPointerEnter}
       onPointerLeave={() => setOpenMenu(null)}
     >
       {items.map((it) => {
         const on = it.id === value
+        if (it.onToggleGroup) {
+          return (
+            <button
+              key={it.id}
+              type="button"
+              className="menu-fold"
+              aria-expanded={it.groupOpen}
+              onClick={it.onToggleGroup}
+            >
+              <Icon name="chev-r" className={it.groupOpen ? 'open' : undefined} />
+              <span>{it.heading}</span>
+            </button>
+          )
+        }
         return (
           <div key={it.id}>
             {it.heading ? <div className="menu-head">{it.heading}</div> : null}

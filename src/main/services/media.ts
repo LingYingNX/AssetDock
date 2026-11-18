@@ -49,7 +49,14 @@ const CORS_HEADERS = { 'access-control-allow-origin': '*' }
  * sandbox="allow-scripts" 已经把它隔离出应用上下文,这里再补一层资源策略。
  */
 export const HTML_PREVIEW_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+  "default-src 'none'; " +
+  "script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; " +
+  "style-src 'unsafe-inline' https: http: data:; " +
+  "img-src media: data: blob: https: http:; " +
+  "font-src data: https: http: media:; " +
+  "media-src media: data: blob: https: http:; " +
+  "connect-src https: http: data: blob: media:; " +
+  "frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 
 /** 扩展名 → MIME;未知扩展名按二进制流处理(纯函数,便于测试) */
 export function mimeForExtension(ext: string): string {

@@ -1,13 +1,13 @@
 import type { CSSProperties } from 'react'
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { useUI } from '../store/ui'
-import { fmtCount, queryAssets, statsOf } from '../data/query'
-import { tagMenuItemsForView } from '../data/filter-menu'
+import { DEFAULT_FILTERS, fmtCount, queryAssets, statsOf } from '../data/query'
+import { formatMenuGroups, tagMenuItemsForView } from '../data/filter-menu'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
 import { TagFilterMenu } from './TagFilterMenu'
 import { COLW_STEPS, colwToSlider, sliderToColw } from '../data/colw'
-import { FORMAT_GROUPS, type AssetFormat } from '../../../shared/formats'
+import type { AssetFormat } from '../../../shared/formats'
 
 /* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
    纵向压到 ±0.4——筛选条只有 36px 高,照抄 35px 的幅度会飞出条外。 */
@@ -34,16 +34,6 @@ const FORMAT_LABELS: Partial<Record<AssetFormat, string>> = {
   MPEG: 'MPEG / MPG',
   VRML: 'VRML / WRL'
 }
-
-const FORMAT_ITEMS: MenuItem[] = [
-  { id: 'all', label: '全部格式', groupEnd: true },
-  ...FORMAT_GROUPS.flatMap((group, groupIndex) => group.formats.map((format, formatIndex) => ({
-    id: format,
-    label: FORMAT_LABELS[format] ?? format,
-    heading: formatIndex === 0 ? group.label : undefined,
-    groupEnd: formatIndex === group.formats.length - 1 && groupIndex < FORMAT_GROUPS.length - 1
-  })))
-]
 
 const SHAPE_ITEMS: MenuItem[] = [
   { id: 'all', label: '全部形状', groupEnd: true },
@@ -89,6 +79,8 @@ export function FilterBar(): React.JSX.Element {
   const nav = useUI((s) => s.nav)
   const stripColor = useUI((s) => s.stripColor)
   const scanProgress = useUI((s) => s.scanProgress)
+  const collapsedFormatGroups = useUI((s) => s.collapsedFormatGroups)
+  const toggleFormatGroup = useUI((s) => s.toggleFormatGroup)
   const hoverTimer = useRef<number | null>(null)
   const hoverCloseTimer = useRef<number | null>(null)
 
@@ -141,6 +133,33 @@ export function FilterBar(): React.JSX.Element {
     () => tagMenuItemsForView(assets, { nav, search, filters, stripColor }),
     [assets, nav, search, filters, stripColor]
   )
+  /* 格式菜单只列当前视图(当前文件夹/导航项)真实存在的格式,避免几十个空格式。
+     过滤条件不参与统计——它是「这个文件夹有什么」,不是「当前筛选结果有什么」,
+     否则选中某个格式后其余格式会整批消失。 */
+  const folderFormats = useMemo(() => {
+    const set = new Set<string>()
+    for (const asset of queryAssets(assets, { nav, search: '', filters: DEFAULT_FILTERS, stripColor: null })) {
+      set.add(asset.format)
+    }
+    return set
+  }, [assets, nav])
+  const formatItems = useMemo<MenuItem[]>(() => {
+    const items: MenuItem[] = [{ id: 'all', label: '全部格式' }]
+    for (const group of formatMenuGroups(folderFormats, filters.format, collapsedFormatGroups)) {
+      items.push({
+        id: `group:${group.type}`,
+        label: '',
+        heading: group.label,
+        groupOpen: group.open,
+        onToggleGroup: () => toggleFormatGroup(group.type)
+      })
+      if (!group.open) continue
+      for (const format of group.formats) {
+        items.push({ id: format, label: FORMAT_LABELS[format as AssetFormat] ?? format })
+      }
+    }
+    return items
+  }, [folderFormats, filters.format, collapsedFormatGroups, toggleFormatGroup])
   const result = selectedStats.count > 0
     ? { label: '已选中', count: selectedStats.count, size: selectedStats.size }
     : { label: '筛选结果', count: stats.count, size: stats.size }
@@ -148,7 +167,7 @@ export function FilterBar(): React.JSX.Element {
   const zoomPct = (colwToSlider(colw) / COLW_STEPS) * 100
 
   const dropdowns: { key: Exclude<keyof typeof filters, 'tags'>; label: string; items: MenuItem[] }[] = [
-    { key: 'format', label: '格式', items: FORMAT_ITEMS },
+    { key: 'format', label: '格式', items: formatItems },
     { key: 'shape', label: '形状', items: SHAPE_ITEMS },
     { key: 'size', label: '尺寸', items: SIZE_ITEMS },
     { key: 'rating', label: '评分', items: RATE_ITEMS }

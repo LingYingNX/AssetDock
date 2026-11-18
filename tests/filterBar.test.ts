@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assignTagToGroup,
+  formatMenuGroups,
   parseTagGroups,
   tagItemsForCategory,
   tagMenuItems,
@@ -24,6 +25,26 @@ const asset = (id: string, tags: Asset['tags'], patch: Partial<Asset> = {}): Ass
   note: '',
   palette: [],
   ...patch
+})
+
+describe('format filter menu', () => {
+  it('keeps only formats present in the current view and respects collapse state', () => {
+    const groups = formatMenuGroups(new Set(['HTML', 'SVG']), 'all', ['image'])
+    expect(groups.map((group) => ({
+      type: group.type,
+      formats: [...group.formats],
+      open: group.open
+    }))).toEqual([
+      { type: 'image', formats: ['SVG'], open: false },
+      { type: 'document', formats: ['HTML'], open: true }
+    ])
+  })
+
+  it('keeps the selected format available and drops empty groups', () => {
+    const groups = formatMenuGroups(new Set(['HTML']), 'JPG', [])
+    expect(groups.map((group) => group.type)).toEqual(['image', 'document'])
+    expect(groups[0].formats).toEqual(['JPG'])
+  })
 })
 
 describe('tag filter menu', () => {

@@ -49,11 +49,10 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .side-title-add .ic{width:var(--ic-sm);height:var(--ic-sm)}
 .nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 10px;border-radius:var(--r-md);color:var(--t2);font-size:var(--fs-body);text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .nav-item:hover{background:var(--bg3);color:var(--t1)}
-/* 左缘指示条:两态都常驻、只切换 scaleX,才能与背景同步过渡;
-   若仅在 .on 上创建伪元素,切换时是凭空出现而非展开,过渡不会播放 */
-.nav-item::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--acc);opacity:0;transform:scaleX(.94);transform-origin:left center;transition:transform var(--dur-press) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+/* 点击导航不播放按压缩放/降透明:选中态直接落位 */
+.nav-item:active:not([disabled]),
+.folder-main:active:not([disabled]){transform:none;opacity:1}
 .nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
-.nav-item.on::before{opacity:1;transform:scaleX(1)}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
 .nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
@@ -78,7 +77,6 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .nav-item.folder-row.on{background:none;color:var(--acc2)}
 .nav-item.folder-row.on,.nav-item.folder-edit{font-weight:400}
 .folder-edit{border-radius:var(--r-xs)}
-.nav-item.folder-edit::before{display:none}
 .folder-row.drop-target{background:var(--acc-soft);outline:1.5px solid var(--acc);outline-offset:-1.5px;color:var(--acc2);transition:none}
 .folder-row.folder-drop-inside{background:var(--acc-soft);outline:1.5px solid var(--acc);outline-offset:-1.5px;color:var(--acc2);transition:none}
 .folder-row.folder-drop-before::after,.folder-row.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;height:2px;border-radius:1px;background:var(--acc);z-index:2;pointer-events:none}

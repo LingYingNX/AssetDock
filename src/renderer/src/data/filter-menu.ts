@@ -1,5 +1,6 @@
 import type { Asset } from './types'
 import { queryAssets, type QueryOptions } from './query'
+import { FORMAT_GROUPS } from '../../../shared/formats'
 
 export interface TagMenuItem {
   id: string
@@ -36,6 +37,36 @@ export function tagMenuItemsForView(assets: readonly Asset[], opts: QueryOptions
     ...opts,
     filters: { ...opts.filters, tags: [] }
   }))
+}
+
+export interface FormatMenuGroup {
+  type: string
+  label: string
+  formats: readonly string[]
+  open: boolean
+}
+
+/**
+ * 格式下拉的分组只保留当前视图真实存在的格式;空分类整组不出现。
+ * 已选格式即使本文件夹没有也要保留,否则菜单里找不到当前选中项。
+ */
+export function formatMenuGroups(
+  available: ReadonlySet<string>,
+  selected: string,
+  collapsed: readonly string[]
+): FormatMenuGroup[] {
+  const groups: FormatMenuGroup[] = []
+  for (const group of FORMAT_GROUPS) {
+    const formats = group.formats.filter((format) => available.has(format) || format === selected)
+    if (formats.length === 0) continue
+    groups.push({
+      type: group.type,
+      label: group.label,
+      formats,
+      open: !collapsed.includes(group.type)
+    })
+  }
+  return groups
 }
 
 /** uiPrefs 中的分类表只收数字库 id;坏条目逐项丢弃,不阻断其它库的分类。 */

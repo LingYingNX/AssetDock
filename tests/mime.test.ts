@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mimeForExtension } from '../src/main/services/media'
+import { mimeForExtension, HTML_PREVIEW_CSP } from '../src/main/services/media'
 
 describe('media mime map', () => {
   it('serves css and html as text', () => {
@@ -22,5 +22,12 @@ describe('media mime map', () => {
   it('falls back to a binary stream for unknown extensions', () => {
     expect(mimeForExtension('.xyz')).toBe('application/octet-stream')
     expect(mimeForExtension('')).toBe('application/octet-stream')
+  })
+
+  it('allows external script, style and font CDN resources in HTML_PREVIEW_CSP for UI components', () => {
+    expect(HTML_PREVIEW_CSP).toContain("script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:;")
+    expect(HTML_PREVIEW_CSP).toContain("style-src 'unsafe-inline' https: http: data:;")
+    expect(HTML_PREVIEW_CSP).toContain("img-src media: data: blob: https: http:;")
+    expect(HTML_PREVIEW_CSP).toContain("font-src data: https: http: media:;")
   })
 })

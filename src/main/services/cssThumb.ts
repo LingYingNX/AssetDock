@@ -85,7 +85,7 @@ function getHtmlThumbSession(): Session {
   // 不给素材页留磁盘缓存:每个页面只截一次图,缓存目录纯属残留
   const ses = session.fromPartition('html-thumb', { cache: false })
   ses.webRequest.onBeforeRequest((details, callback) => {
-    callback({ cancel: !/^(file|data|blob|about|devtools):/i.test(details.url) })
+    callback({ cancel: !/^(file|data|blob|about|devtools|https?):/i.test(details.url) })
   })
   ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
   htmlThumbSession = ses
