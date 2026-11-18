@@ -5,3 +5,4 @@ out/
 artifacts/
 design-review/
 tools/.dev-log.txt
+.agents/

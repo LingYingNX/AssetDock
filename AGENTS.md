@@ -32,7 +32,7 @@ Ponytail 技能已安装在本机，编码任务默认遵循其懒惰阶梯：YA
 ## OpenSpec 接手
 
 新会话开始处理任务前，如果项目根目录存在 `openspec/`，先运行 `openspec list --json` 和 `openspec list --specs --json` 查看当前进行中的 change 和已有 spec，结合任务判断是否需要继续某个 change 或创建新 change。已有 change 且 tasks 有未完成项时，使用 `openspec-apply-change` 继续；tasks 全部完成时提示用户归档。
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-17 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-18 -->
 
 # AGENTS.md
 
@@ -63,7 +63,7 @@ src/main/services/  单一职责服务（库/扫描/监听/缩略图/文档与�
 src/shared/         跨进程共享的纯逻辑（无 fs / 无 electron），两侧 tsconfig 都 include
 src/preload/        contextBridge 暴露 windowApi
 src/renderer/src/   React：components（界面块）/ data（纯视图逻辑）/ store（zustand）/ styles
-tests/              vitest 用例（69 个 .test.ts）   tools/ 开发与无头验证脚本   openspec/ 规范
+tests/              vitest 用例（70 个 .test.ts）   tools/ 开发与无头验证脚本   openspec/ 规范
 ```
 
 ## Scoped AGENTS.md (MUST read when working in these directories)
@@ -92,6 +92,11 @@ tests/              vitest 用例（69 个 .test.ts）   tools/ 开发与无头�
 | 素材文件明明在盘上却一直显示缺失、侧栏 0 | `missing=1` 的行只有再被扫描写回才会复活；`upsertScanned` 判 `unchanged` 必须带上 `missing`，否则跳过 UPDATE 后缺口永远清不掉 |
 | 移动/剪切后源库留一个 0 件空文件夹 | 搬完要摘空目录（`assets.ts` 的 `pruneEmptiedFolders`）并失效**源库**目录清单缓存；只失效目标库会让空壳在侧栏一直挂着 |
 | HTML 缩略图/预览空白 | HTML 是网页：缩略图渲染原文件，预览回 `media://` 原文件给沙箱 iframe；不要走文档清洗（脚本会被剥掉） |
+| 清空回收站/彻底删除后，重启又冒出同一批素材 | 删除必须写墓碑：`assets:emptyTrash` / `assets:purge` 会写 `purged_paths`（`user_version` 7 起建表，当前 8），`upsertScanned` 按 rel_path 跳过；手工 `DELETE FROM assets` 不写墓碑，下一次扫描就把磁盘文件扫回来。语义上只删记录与缩略图缓存，**不删磁盘原文件** |
+| 分页翻页只返回第一页、或页数无限增长 | `assets:list` 返回的 `next` 是游标而不是下一页参数：渲染层必须包成 `{ before: next }` 再传回；直接把 `next` 当 page 传入会永远命中第一页 |
+| 派生缓存只增不减（AI 页图 / PSD-HEIC 大图 / 转码 MP4 删了还在） | 孤儿清理统一是 `collectOrphanFingerprintFiles`（`cacheFiles.ts`），各域包装成 `collectOrphan*` 挂在 `src/main/ipc/watch.ts` 的扫描期那一串；新增一类派生缓存必须同时挂清扫，否则只增不减 |
+| `openspec archive` 报 MODIFIED 失败，或归档后主规格少了场景 | delta 的 `MODIFIED` 块场景必须覆盖主规格现有场景（主规格后来新增的场景要补进 delta 再归档），否则工具会拒绝或把缺失场景当「已删除」处理。归档后跑 `openspec validate --specs` 复核 |
+| 调试桥 9223 返回 403 或连不上 | token 在 `<userData>/debug-bridge-token`；`tools/hhead.mjs` 只读默认 `%APPDATA%\MediaHub`，隔离 userData 实例要么读 `<tmp>/debug-bridge-token`，要么改用 `tools/cdp.mjs`（9222 CDP） |
 
 ## Boundaries
 

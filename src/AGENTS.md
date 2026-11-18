@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-13 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-18 -->
 
 # AGENTS.md — src
 
@@ -32,7 +32,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `watch.ts` | chokidar 增量监听（`awaitWriteFinish` + 300ms 防抖，`usePolling:false`） |
 | `ignore.ts` | 扩展名白名单与忽略规则（扫描/监听共用，勿另写一份） |
 | `fingerprint.ts` | 缓存指纹 sha1(前 64KB + size + mtime) 截 20 位 |
-| `cacheFiles.ts` | 原子写（临时文件 + rename）与 `isWithinRoot`；**所有落盘都走它，别自己 writeFile** |
+| `cacheFiles.ts` | 原子写（临时文件 + rename）、`isWithinRoot` 与派生缓存孤儿清理 `collectOrphanFingerprintFiles`；**所有落盘都走它，别自己 writeFile** |
 | `folders.ts` | 库内文件夹增删改移、素材移动/导出，含 `..` 逃逸与保留名校验 |
 | `assetTransfer.ts` / `fileImport.ts` | 跨库复制/剪切（迁移评分/标签/备注、CSS 配套 HTML、嵌套库根拒绝）与外部拖入导入（路径归一化、同名避让） |
 | `media.ts` | `media://<libraryId>/<relPath>` 协议，支持 Range；`mimeForExtension` 是导出的纯函数 |
@@ -41,7 +41,7 @@ Electron 三段式源码。数据跨进程只有一条口子：`preload` 暴露�
 | `videoMeta.ts` | ffmpeg 抽视频元数据；解析函数与进程调用分离，便于测试 |
 | `ffmpeg.ts` | 受控 ffmpeg/ffprobe 子进程：超时、输出上限、取消与原子写媒体文件 |
 | `formatProbe.ts` / `thumbnailDecoder.ts` | 格式元数据探测与缩略图解码路由；PDF/PSD/HEIC/视频失败分类 |
-| `imagePreview.ts` / `aiPreview.ts` / `transcode.ts` | PSD/HEIC 大图、AI 分页、视频 1080p 转码缓存（均按指纹命名） |
+| `imagePreview.ts` / `aiPreview.ts` / `transcode.ts` | PSD/HEIC 大图、AI 分页、视频 1080p 转码缓存（均按指纹命名），各自导出 `collectOrphan*` 供 `ipc/watch.ts` 扫描期清扫 |
 | `modelThumb.ts` / `externalPreview.ts` / `externalTools.ts` | 3D 离屏封面、BLEND→GLB 外部预览、Blender/Cinema 4D 探测 |
 | `textAssets.ts` | 文本素材（CSS）读写：原子替换回写 + 同步 size/fingerprint/mtime |
 | `clipboardFiles.ts` | 把文件写进系统剪贴板（CF_HDROP）；**绕开 Electron clipboard，走 PowerShell Set-Clipboard** |

@@ -1,4 +1,4 @@
-<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-13 -->
+<!-- Managed by agent: keep sections and order; edit content, not structure. Last updated: 2026-11-18 -->
 
 # AGENTS.md — tests
 
@@ -35,6 +35,7 @@ vitest 用例，直接 import `src/` 下的真实模块（无 fixtures 目录）
 | `clipboardFiles.test.ts` | 剪贴板路径的 PowerShell 数组转义（单引号双写，路径含单引号时不致整条命令失败） |
 | `thumbs.test.ts` | 缩略图缓存：指纹命名、清单对账、`fingerprintInUse` 不误删共用缓存、CSS 纳入预热集合 |
 | `thumbsDb.test.ts` | 缩略图任务选行：CSS/位图纳入，SVG/HTML/视频/3D/回收站/缺失项排除；共享指纹延迟删缓存 |
+| `cacheOrphans.test.ts` | 派生缓存孤儿清理：单文件/页图/转码 MP4 的指纹解析、活指纹保留、`tmp-` 目录跳过、目录缺失不抛错 |
 | `htmlThumb.test.ts` | HTML 缩略图走原文件整页渲染，`.htm` 归一为 HTML |
 | `thumbnailDecoder.test.ts` / `imagePreview.test.ts` | 按注册表路由缩略图解码、原生失败后 ffmpeg 回退、视频关键帧失败后首帧回退、PSD/HEIC 灯箱大图缓存 |
 | `documentPreview.test.ts` / `documentMeta.test.ts` / `formats.test.ts` | 文档只读预览：TXT/MD/CSV、DOC、DOCX/DOCM、XLSX/XLSM、PPTX/PPTM、XLS/XLSB/ODS/FODS、RTF、ODT/OTT、ODP 的解析、缓存、失败分类与格式注册 |
