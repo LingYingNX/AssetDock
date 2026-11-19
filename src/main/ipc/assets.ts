@@ -1,10 +1,10 @@
 import { ipcMain, dialog, clipboard, shell } from 'electron'
 import { spawn } from 'node:child_process'
-import { access } from 'node:fs/promises'
 import { getDb } from '../services/db'
 import {
-  addTag, removeTag, applyMovedAssets, deleteFolderTree, renameAssetFolder, renameFolderOrders,
-  listFolderOrders, replaceFolderOrders, listAssetPage, updateAsset, getLibrary, sanitizeAssetPatch,
+  addTag, removeTag, applyMovedAssets, deleteFolderTree, renameAssetFolder, renameFolderOrders, renameFolderStyles,
+  pruneFolderStyles,
+  listFolderOrders, replaceFolderOrders, listFolderStyles, setFolderStyles, listAssetPage, updateAsset, getLibrary, sanitizeAssetPatch,
   upsertScanned, addPurgedPaths, getAppState, type AssetPatch
 } from '../services/store'
 import { ensureLibraryStorage, hasLibDb } from '../services/libraryDb'
@@ -29,6 +29,7 @@ import { ensureBlendPreview } from '../services/externalPreview'
 import { ensureImagePreview } from '../services/imagePreview'
 import { configuredToolPath, probeTool, type ExternalToolKey } from '../services/externalTools'
 import { countPdfPages } from '../services/aiPreview'
+import { playerWrapperUrl } from '../services/htmlPlayer'
 import { importDroppedFiles } from '../services/fileImport'
 import { ensureDocumentPreview, removeDocumentPreviewIfUnused } from '../services/documentPreview'
 import { transferAssets, transferFolderTree } from '../services/assetTransfer'
@@ -114,6 +115,40 @@ export function registerAssetsIpc(): void {
     }
   })
 
+  ipcMain.handle('folders:styles', async (_e, libraryId: number) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    try {
+      return { styles: listFolderStyles(s.db, libraryId) }
+    } finally {
+      releaseScope(s)
+    }
+  })
+
+  ipcMain.handle('folders:setStyles', async (
+    _e,
+    libraryId: number,
+    paths: string[],
+    patch: { icon?: string | null; color?: string | null }
+  ) => {
+    const s = scopeFor(libraryId)
+    if (!s) return { error: '素材库不存在' }
+    const icon = patch?.icon === undefined ? undefined : patch.icon
+    const color = patch?.color === undefined ? undefined : patch.color
+    // 只接受内置图标键与十六进制色;null 表示清除
+    if (icon !== undefined && icon !== null && !/^[a-z-]{1,24}$/.test(icon)) return { error: '图标无效' }
+    if (color !== undefined && color !== null && !/^#[0-9a-f]{6}$/i.test(color)) return { error: '颜色无效' }
+    try {
+      const requested = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string' && p !== '') : []
+      // 只接受当前真实存在的目录:过期路径(切库残留、刚被删掉的目录)不许写进库
+      const known = cachedFolderList(libraryId) ?? await listLibraryFolders(s.libPath)
+      if (!cachedFolderList(libraryId)) cacheFolderList(libraryId, known)
+      const ok = setFolderStyles(s.db, libraryId, requested.filter((path) => known.includes(path)), { icon, color })
+      return ok ? { ok: true } : { error: '没有可设置的文件夹' }
+    } finally {
+      releaseScope(s)
+    }
+  })
   ipcMain.handle('folders:create', async (_e, libraryId: number, parentPath = '') => {
     const root = libRootOf(libraryId)
     const s = scopeFor(libraryId)
@@ -191,6 +226,7 @@ export function registerAssetsIpc(): void {
       path = await withoutRootWatcher(libraryId, root, () => renameLibraryFolder(root, relPath, name))
       renameAssetFolder(s.db, libraryId, relPath, path)
       renameFolderOrders(s.db, libraryId, relPath, path)
+      renameFolderStyles(s.db, libraryId, relPath, path)
       invalidateFolderList(libraryId)
       send('assets:changed', { libraryId })
       return { path }
@@ -225,6 +261,7 @@ export function registerAssetsIpc(): void {
     let movedOnDisk = false
     let assetsRenamed = false
     let ordersRenamed = false
+    let stylesRenamed = false
     try {
       const physical = await listLibraryFolders(root)
       if (!physical.includes(sourcePath)) return { error: '只能调整资源库中的本地文件夹' }
@@ -241,6 +278,8 @@ export function registerAssetsIpc(): void {
         assetsRenamed = true
         renameFolderOrders(s.db, libraryId, sourcePath, path)
         ordersRenamed = true
+        renameFolderStyles(s.db, libraryId, sourcePath, path)
+        stylesRenamed = true
       }
       const ordered = moveFolderBlock(
         orderLibraryFolders(await listLibraryFolders(root), listFolderOrders(s.db, libraryId)),
@@ -265,6 +304,7 @@ export function registerAssetsIpc(): void {
           await withoutRootWatcher(libraryId, root, () => moveLibraryFolder(root, path, sourcePath.includes('/') ? folderParent(sourcePath) : ''))
         }
         if (ordersRenamed) renameFolderOrders(s.db, libraryId, path, sourcePath)
+        if (stylesRenamed) renameFolderStyles(s.db, libraryId, path, sourcePath)
         if (assetsRenamed) renameAssetFolder(s.db, libraryId, path, sourcePath)
         if (beforeOrders) replaceFolderOrders(s.db, libraryId, beforeOrders)
       } catch {
@@ -311,11 +351,13 @@ export function registerAssetsIpc(): void {
         )
         /* 搬空的源目录已经从磁盘消失:清单缓存两侧都要失效,源库的目录顺序重排一次 */
         if (result.removedFolders > 0) {
+          const remaining = await listLibraryFolders(from.libPath)
           replaceFolderOrders(
             from.db,
             sourceLibraryId,
-            orderLibraryFolders(await listLibraryFolders(from.libPath), listFolderOrders(from.db, sourceLibraryId))
+            orderLibraryFolders(remaining, listFolderOrders(from.db, sourceLibraryId))
           )
+          pruneFolderStyles(from.db, sourceLibraryId, remaining)
         }
         if (result.transferred > 0 || result.removedFolders > 0) {
           invalidateFolderList(sourceLibraryId)
@@ -394,13 +436,14 @@ export function registerAssetsIpc(): void {
     if (!s) return { error: '素材库不存在' }
     try {
       const row = s.db
-        .prepare('SELECT rel_path, fingerprint, format, duration, missing FROM assets WHERE library_id = ? AND id = ?')
+        .prepare('SELECT rel_path, fingerprint, format, duration, missing, page_count FROM assets WHERE library_id = ? AND id = ?')
         .get(libraryId, id) as {
           rel_path: string
           fingerprint: string
           format: string
           duration: number | null
           missing: number
+          page_count: number | null
         } | undefined
       if (!row) return { error: '素材不存在' }
       if (row.missing) return { error: '素材文件已缺失' }
@@ -408,7 +451,12 @@ export function registerAssetsIpc(): void {
       if (!realPath) return { error: '素材路径越界' }
       if (row.format === 'AI') {
         try {
-          const pages = await countPdfPages(realPath)
+          /* 页数只在首次打开时数一次并入库:重复渲染第 1 页把每次打开都拖成几百毫秒 */
+          let pages = row.page_count ?? 0
+          if (pages <= 0) {
+            pages = await countPdfPages(realPath)
+            s.db.prepare('UPDATE assets SET page_count = ? WHERE library_id = ? AND id = ?').run(pages, libraryId, id)
+          }
           const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?aiPage=1&page=1&v=${encodeURIComponent(row.fingerprint)}`
           return { kind: 'pdf' as const, url, pages }
         } catch {
@@ -447,10 +495,16 @@ export function registerAssetsIpc(): void {
       /*
         HTML 是网页而不是纸张。走文档预览会把正文塞进白纸卡片并剥掉脚本,
         原作动效直接失效、四周还多出内边距。这里只回原文件直链,
-        由渲染层的沙箱 iframe 按视口原样运行(脚本可执行,外部请求由 CSP 拦截)。
+        由渲染层的沙箱 iframe 按视口原样运行(脚本可执行,外部请求由 CSP 拦截);
+        21st 播放器外壳走本地播放宿主,否则跨域消息必被丢弃。
       */
       if (row.format === 'HTML') {
-        const url = `media://${libraryId}/${encodeURIComponent(row.rel_path)}?v=${encodeURIComponent(row.fingerprint)}`
+        /*
+          21st 在线播放器外壳只接受 localhost:3000 / 21st.dev 来源的 postMessage,
+          media:// 的 origin 会被播放器丢弃,灯箱永远黑屏。这类页面改由本地播放宿主回放。
+        */
+        const playerUrl = await playerWrapperUrl(realPath).catch(() => null)
+        const url = playerUrl ?? `media://${libraryId}/${encodeURIComponent(row.rel_path)}?v=${encodeURIComponent(row.fingerprint)}`
         return { kind: 'html' as const, url }
       }
       if (formatSpec(row.format)?.type === 'document') {
@@ -785,7 +839,7 @@ export function registerAssetsIpc(): void {
     }
     try {
       /* 剪切会把源库里这些行删掉:先记下它们的目录,搬完再摘掉空掉的源目录 */
-      const sourceRelPaths = mode === 'cut' && sourceLibraryId !== targetLibraryId
+      const sourceRelPaths = mode === 'cut'
         ? assetsByIds(from.db, sourceLibraryId, assetIds).map((row) => row.rel_path)
         : []
       const run = async (): Promise<unknown> => {
@@ -799,11 +853,12 @@ export function registerAssetsIpc(): void {
         )
         if (result.transferred > 0) {
           invalidateFolderList(targetLibraryId)
-          if (mode === 'cut' && sourceLibraryId !== targetLibraryId) {
+          /* 同库剪切也会把源目录搬空:两侧都要摘空目录,否则侧栏留下 0 件的空壳 */
+          if (mode === 'cut' && sourceRelPaths.length > 0) {
             await pruneEmptiedFolders(from, sourceLibraryId, sourceRelPaths)
           }
           send('assets:changed', { libraryId: targetLibraryId, assetIds: result.targetIds })
-          if (mode === 'cut' && sourceLibraryId !== targetLibraryId) {
+          if (mode === 'cut') {
             send('assets:changed', { libraryId: sourceLibraryId })
           }
           queueThumbWarmup(targetLibraryId, result.fingerprints)
@@ -948,30 +1003,6 @@ export function registerAssetsIpc(): void {
       await removeThumbsIfUnused(s.libPath, s.db, libraryId, doomed.map((r) => r.fingerprint))
       for (const row of doomed) await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, row.fingerprint)
       return { ok: true, purged }
-    } finally {
-      releaseScope(s)
-    }
-  })
-
-  /* 清理缺失记录:missing=1 且文件确实不存在(二重校验),不动任何磁盘文件 */
-  ipcMain.handle('assets:purgeMissing', async (_e, libraryId: number) => {
-    const s = scopeFor(libraryId)
-    if (!s) return { purged: 0 }
-    try {
-      const rows = s.db
-        .prepare('SELECT id, rel_path, fingerprint FROM assets WHERE library_id = ? AND missing = 1')
-        .all(libraryId) as { id: number; rel_path: string; fingerprint: string }[]
-      let purged = 0
-      for (const r of rows) {
-        const gone = await access(absPathFor(s, r.rel_path)).then(() => false, () => true)
-        // 文件其实还在盘上(临时不可见/误标):保留记录与缩略图,只报告不动手
-        if (!gone) continue
-        s.db.prepare('DELETE FROM assets WHERE id = ?').run(r.id)
-        await removeThumbsIfUnused(s.libPath, s.db, libraryId, [r.fingerprint])
-        await removeDocumentPreviewIfUnused(s.libPath, s.db, libraryId, r.fingerprint)
-        purged++
-      }
-      return { purged }
     } finally {
       releaseScope(s)
     }

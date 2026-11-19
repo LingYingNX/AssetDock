@@ -36,7 +36,7 @@ function copyMetadata(db: Database, libraryId: number, assetId: number, row: Ass
     `UPDATE assets SET rating = ?, favorite = ?, review_flag = ?, note = ?, source_url = ?, palette = ?, material_info = ?,
        width = COALESCE(?, width), height = COALESCE(?, height), duration = COALESCE(?, duration),
        codec = COALESCE(?, codec), fps = COALESCE(?, fps), face_count = COALESCE(?, face_count),
-       vertices = COALESCE(?, vertices), imported_at = ?
+       vertices = COALESCE(?, vertices)
      WHERE id = ? AND library_id = ?`
   ).run(
     row.rating,
@@ -53,7 +53,6 @@ function copyMetadata(db: Database, libraryId: number, assetId: number, row: Ass
     row.fps,
     row.face_count,
     row.vertices,
-    row.imported_at,
     assetId,
     libraryId
   )

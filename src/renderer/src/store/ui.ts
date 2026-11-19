@@ -13,6 +13,7 @@ import {
 } from '../data/hdr-presets'
 import type { ModelShade } from '../components/Viewer3D'
 import { DOCUMENT_RENDERER_VERSION, THUMB_CACHE_VERSION } from '../../../shared/thumbnailConfig'
+import type { FolderStyle } from '../data/folderStyles'
 import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../data/sidebar-width'
 import { COLW_DEFAULT, clampColw } from '../data/colw'
 import { parseTagGroups, type TagGroupDefinition } from '../data/filter-menu'
@@ -47,10 +48,40 @@ function rebaseFolderNav(nav: NavKey, source: string, target: string): NavKey {
   return path.startsWith(`${source}/`) ? `folder:${target}${path.slice(source.length)}` : nav
 }
 
+/** 文件夹路径变了,按路径索引的自定义图标/颜色也要跟着搬,否则改名即丢样式 */
+function rebaseStyleMap(map: Record<string, FolderStyle>, source: string, target: string): Record<string, FolderStyle> {
+  const next: Record<string, FolderStyle> = {}
+  for (const [path, style] of Object.entries(map)) next[rebaseFolderPath(path, source, target)] = style
+  return next
+}
+
 /* ---------- 界面偏好持久化(视图/列宽/信息面板/色带/导航) ---------- */
 
 const UI_PREFS_KEY = 'uiPrefs'
 
+/** 卡片上显示的元信息与动图播放方式:随 uiPrefs 持久化 */
+export interface DisplayPrefs {
+  res: boolean
+  size: boolean
+  fmt: boolean
+  hiddenFormats: string[]
+  name: boolean
+  gif: 'auto' | 'hover'
+}
+
+const DISPLAY_DEFAULT: DisplayPrefs = { res: true, size: false, fmt: true, hiddenFormats: [], name: true, gif: 'hover' }
+
+function parseDisplay(value: unknown): DisplayPrefs {
+  const v = (value ?? {}) as Partial<Record<keyof DisplayPrefs, unknown>>
+  return {
+    res: v.res !== false,
+    size: v.size === true,
+    fmt: v.fmt !== false,
+    hiddenFormats: Array.isArray(v.hiddenFormats) ? v.hiddenFormats.filter((f): f is string => typeof f === 'string') : [],
+    name: v.name !== false,
+    gif: v.gif === 'auto' ? 'auto' : 'hover'
+  }
+}
 interface UiPrefs {
   view: ViewMode
   colw: number
@@ -75,6 +106,7 @@ interface UiPrefs {
   tagGroups: Record<string, TagGroupDefinition[]>
   /** 灯箱底部胶片带是否展开:收起后仍留一条可点开的窄条 */
   stripOpen: boolean
+  display: DisplayPrefs
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -115,7 +147,8 @@ function persistUiPrefs(): void {
       modelHdrOpacity: s.modelHdrOpacity,
       modelHdrBlur: s.modelHdrBlur,
       tagGroups: s.tagGroups,
-      stripOpen: s.stripOpen
+      stripOpen: s.stripOpen,
+      display: s.display
     }
     void window.windowApi.state.set(UI_PREFS_KEY, JSON.stringify(prefs)).catch(() => {})
   } catch { /* ignore */ }
@@ -190,6 +223,7 @@ export async function restoreUiPrefs(): Promise<void> {
         modelHdrOpacity: hdr.opacity,
         modelHdrBlur: hdr.blur,
         tagGroups: parseTagGroups(parsed.tagGroups),
+        display: parseDisplay(parsed.display),
         stripOpen: parsed.stripOpen !== false
       })
     } catch {
@@ -316,6 +350,9 @@ interface UIState {
   folderPaths: string[]
   physicalFolderPaths: string[]
   folderEditPath: string | null
+  /** 文件夹自定义图标/颜色,按路径索引;未设置的路径取默认值 */
+  folderStyles: Record<string, FolderStyle>
+  applyFolderStyle: (paths: string[], patch: { icon?: string | null; color?: string | null }) => void
   /** 已折叠的文件夹路径;跨重启保留,深树不必每次重新收起 */
   collapsedFolders: string[]
   toggleFolderCollapsed: (path: string) => void
@@ -363,6 +400,9 @@ interface UIState {
   setView: (v: ViewMode) => void
   colw: number
   setColw: (n: number) => void
+  /** 卡片信息与动图播放方式 */
+  display: DisplayPrefs
+  setDisplay: (patch: Partial<DisplayPrefs>) => void
   sideWidth: number
   setSideWidth: (n: number) => void
   inspHidden: boolean
@@ -473,6 +513,8 @@ const dirtyLibraries = new Set<number>()
 let loadedLibraryId: number | null = null
 /** 目录树同样按库缓存:主进程已缓存读盘结果,这里省掉一次 IPC 往返,也避免切库瞬间显示上一个库的树 */
 const folderCache = new Map<number, string[]>()
+/** 文件夹样式按库缓存:切库时先画缓存,再等 IPC 校准 */
+const folderStyleCache = new Map<number, Record<string, FolderStyle>>()
 
 /** 离开一个库前保存它的最新集合(含增量、乐观编辑),切回时才有正确首帧 */
 function rememberLoadedAssets(): void {
@@ -817,8 +859,8 @@ export const useUI = create<UIState>((set, get) => {
       const cachedFolders = folderCache.get(libraryId)
       /* 切库瞬间先把树换成目标库的:主进程虽已缓存,一次 IPC 往返也足够让上一个库的目录闪在屏幕上 */
       set(cachedFolders
-        ? { folderPaths: cachedFolders, physicalFolderPaths: cachedFolders }
-        : { folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
+        ? { folderPaths: cachedFolders, physicalFolderPaths: cachedFolders, folderStyles: folderStyleCache.get(libraryId) ?? {} }
+        : { folderPaths: [], physicalFolderPaths: [], folderEditPath: null, folderStyles: {} })
       /* 第一次打开这个库没有缓存:宁可短暂空网格,也不让上一个库的卡片留在新标签页下被误操作 */
       if (reuseCache && !cached) {
         loadedLibraryId = null
@@ -869,7 +911,18 @@ export const useUI = create<UIState>((set, get) => {
         set({ folderPaths: [], physicalFolderPaths: [], folderEditPath: null })
         get().showToast('素材库文件夹加载失败，请重试', 'warn')
       })
-      /* 切回未变更的库:缓存就是最新,不再拉几十 MB */
+      /* preload 未更新时该方法可能缺席:HMR 只重载渲染层,不能因为一个样式接口就让整个切库链路抛错 */
+      const stylesApi = window.windowApi.folders.styles
+      const stylesPromise = stylesApi
+        ? stylesApi(libraryId)
+        : Promise.resolve({ styles: [] as { path: string; icon: string; color: string }[] })
+      void stylesPromise.then((r) => {
+        if (superseded() || !('styles' in r)) return
+        const map: Record<string, FolderStyle> = {}
+        for (const style of r.styles) map[style.path] = { icon: style.icon, color: style.color }
+        folderStyleCache.set(libraryId, map)
+        set({ folderStyles: map })
+      }).catch(() => undefined)      /* 切回未变更的库:缓存就是最新,不再拉几十 MB */
       if (reuseCache && cached && !dirtyLibraries.has(libraryId)) return
       void (async () => {
         const pages: Record<string, unknown>[] = []
@@ -901,6 +954,7 @@ export const useUI = create<UIState>((set, get) => {
     folderPaths: [],
     physicalFolderPaths: [],
     folderEditPath: null,
+    folderStyles: {},
     folderSelection: null,
     collapsedFolders: [],
     toggleFolderCollapsed: (path) => {
@@ -920,7 +974,26 @@ export const useUI = create<UIState>((set, get) => {
       }))
       persistUiPrefs()
     },
-    refreshFolders: () => {
+    applyFolderStyle: (paths, patch) => {
+      const t = get().tabs.find((x) => x.id === get().activeTabId)
+      const libraryId = t?.libraryId
+      if (libraryId == null || paths.length === 0) return
+      set((s) => {
+        const next = { ...s.folderStyles }
+        for (const path of paths) {
+          const current = next[path] ?? { icon: '', color: '' }
+          const icon = patch.icon === undefined ? current.icon : patch.icon ?? ''
+          const color = patch.color === undefined ? current.color : patch.color ?? ''
+          if (!icon && !color) delete next[path]
+          else next[path] = { icon, color }
+        }
+        folderStyleCache.set(libraryId, next)
+        return { folderStyles: next }
+      })
+      void window.windowApi.folders.setStyles(libraryId, paths, patch).then((r) => {
+        if ('error' in r) get().showToast(r.error, 'warn')
+      }).catch(() => get().showToast('文件夹样式保存失败', 'warn'))
+    },    refreshFolders: () => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       const libraryId = t?.libraryId
       if (libraryId == null) return
@@ -967,16 +1040,22 @@ export const useUI = create<UIState>((set, get) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       set({ folderEditPath: null })
       if (t?.libraryId == null) return
-      void window.windowApi.folders.rename(t.libraryId, path, name).then((r) => {
+      const libraryId = t.libraryId
+      void window.windowApi.folders.rename(libraryId, path, name).then((r) => {
         if ('error' in r) {
           get().showToast(r.error, 'warn')
           get().refreshFolders()
           return
         }
-        set((s) => ({
-          nav: rebaseFolderNav(s.nav, path, r.path),
-          collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, path, r.path))
-        }))
+        set((s) => {
+          const folderStyles = rebaseStyleMap(s.folderStyles, path, r.path)
+          folderStyleCache.set(libraryId, folderStyles)
+          return {
+            nav: rebaseFolderNav(s.nav, path, r.path),
+            collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, path, r.path)),
+            folderStyles
+          }
+        })
         get().refreshFolders()
       })
     },
@@ -989,19 +1068,23 @@ export const useUI = create<UIState>((set, get) => {
     moveFolder: (source, target, placement) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
+      const libraryId = t.libraryId
       const optimistic = optimisticFolderMove(get().folderPaths, source, target, placement)
       if (optimistic.conflict) {
         get().showToast('目标位置已有同名文件夹', 'warn')
         return
       }
+      const optimisticStyles = rebaseStyleMap(get().folderStyles, source, optimistic.path)
+      folderStyleCache.set(libraryId, optimisticStyles)
       set((s) => ({
         folderPaths: optimistic.paths,
         physicalFolderPaths: optimistic.paths,
         nav: rebaseFolderNav(s.nav, source, optimistic.path),
         folderEditPath: s.folderEditPath ? rebaseFolderPath(s.folderEditPath, source, optimistic.path) : s.folderEditPath,
         collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, source, optimistic.path)),
+        folderStyles: optimisticStyles,
         assets: s.assets.map((asset) => {
-          if (asset.libraryId !== t.libraryId || !asset.relPath) return asset
+          if (asset.libraryId !== libraryId || !asset.relPath) return asset
           const relPath = rebaseFolderPath(asset.relPath, source, optimistic.path)
           if (relPath === asset.relPath) return asset
           const fingerprint = encodeURIComponent(String(asset.fingerprint ?? ''))
@@ -1016,16 +1099,21 @@ export const useUI = create<UIState>((set, get) => {
           }
         })
       }))
-      void window.windowApi.folders.move(t.libraryId, source, target, placement).then((r) => {
+      void window.windowApi.folders.move(libraryId, source, target, placement).then((r) => {
         if (!('path' in r) || typeof r.path !== 'string') {
           get().showToast('error' in r ? r.error : '移动文件夹失败,请重试', 'warn')
           get().reloadActiveLibrary()
           return
         }
-        set((s) => ({
-          nav: rebaseFolderNav(s.nav, optimistic.path, r.path),
-          collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, optimistic.path, r.path))
-        }))
+        set((s) => {
+          const folderStyles = rebaseStyleMap(s.folderStyles, optimistic.path, r.path)
+          folderStyleCache.set(libraryId, folderStyles)
+          return {
+            nav: rebaseFolderNav(s.nav, optimistic.path, r.path),
+            collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, optimistic.path, r.path)),
+            folderStyles
+          }
+        })
         get().reloadActiveLibrary()
       }).catch(() => {
         get().showToast('移动文件夹失败,请重试', 'warn')
@@ -1134,7 +1222,13 @@ export const useUI = create<UIState>((set, get) => {
           get().reloadActiveLibrary()
           return
         }
-        set((s) => clearDeletedState(s))
+        set((s) => {
+          const folderStyles = Object.fromEntries(
+            Object.entries(s.folderStyles).filter(([item]) => item !== path && !item.startsWith(prefix))
+          )
+          folderStyleCache.set(libraryId, folderStyles)
+          return { ...clearDeletedState(s), folderStyles }
+        })
         /* 整棵子树已删:缓存先扣掉这些路径,不用重读盘也不会留着幽灵目录 */
         const stale = folderCache.get(libraryId)
         if (stale) folderCache.set(libraryId, stale.filter((item) => item !== path && !item.startsWith(prefix)))
@@ -1215,6 +1309,11 @@ export const useUI = create<UIState>((set, get) => {
       persistUiPrefs()
     },
     colw: COLW_DEFAULT,
+    display: DISPLAY_DEFAULT,
+    setDisplay: (patch) => {
+      set((s) => ({ display: { ...s.display, ...patch } }))
+      persistUiPrefs()
+    },
     setColw: (colw) => {
       set({ colw })
       // S2-9:Ctrl+滚轮每 tick 都到这,落库防抖 300ms(与主窗口 resize 防抖策略对齐),

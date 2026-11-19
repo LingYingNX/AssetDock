@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { canDropFolder } from '../data/folder-drag'
+import { FOLDER_COLORS, FOLDER_ICONS } from '../data/folderStyles'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
 import { useMenuFocus } from './useMenuFocus'
@@ -82,7 +83,6 @@ function MoveLevel({
     const menu = ref.current
     if (!menu) return
     const margin = 8
-    menu.classList.toggle('has-more', menu.scrollHeight > menu.clientHeight + 1)
     const width = menu.offsetWidth
     const height = menu.offsetHeight
     if (!nested) {
@@ -172,13 +172,16 @@ export function FolderContextMenu(): React.JSX.Element | null {
   const trashFolder = useUI((s) => s.trashFolder)
   const folderPaths = useUI((s) => s.folderPaths)
   const showToast = useUI((s) => s.showToast)
+  const folderStyles = useUI((s) => s.folderStyles)
+  const applyFolderStyle = useUI((s) => s.applyFolderStyle)
+  const folderSelection = useUI((s) => s.folderSelection)
 
   const [mounted, setMounted] = useState(folderCtxMenu != null)
   const [last, setLast] = useState(folderCtxMenu)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   /* 两个子菜单共用一格状态:'move'(库内移动)与 'lib'(跨库移动)互斥,悬停另一个就换过去。
      分成两个布尔会留下「点开一个、另一个还挂着」的中间态。 */
-  const [sub, setSub] = useState<'move' | 'lib' | null>(null)
+  const [sub, setSub] = useState<'move' | 'lib' | 'style' | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -194,6 +197,16 @@ export function FolderContextMenu(): React.JSX.Element | null {
 
   const menu = folderCtxMenu ?? last
   const path = menu?.path ?? ''
+  /* 在已多选的集合里右键 → 批量应用;否则只改当前这一个 */
+  const styleTargets = useMemo(() => {
+    if (folderSelection && folderSelection.libraryId === menu?.libraryId && folderSelection.paths.includes(path)) {
+      return folderSelection.paths
+    }
+    return path ? [path] : []
+  }, [folderSelection, menu?.libraryId, path])
+  const currentStyle = folderStyles[path]
+  const currentIcon = currentStyle?.icon || 'folder'
+  const currentColor = currentStyle?.color || ''
   const menuKey = folderCtxMenu ? `${folderCtxMenu.libraryId}:${path}:${folderCtxMenu.x}:${folderCtxMenu.y}` : ''
   useMenuFocus(
     folderCtxMenu != null && mounted,
@@ -292,7 +305,7 @@ export function FolderContextMenu(): React.JSX.Element | null {
     >
       <div
         ref={menuRef}
-        className={`menu glass-menu ctx-menu${folderCtxMenu ? ' open' : ' closing'}`}
+        className={`menu glass-menu ctx-menu folder-ctx-menu${folderCtxMenu ? ' open' : ' closing'}`}
         style={{
           top: pos?.top ?? menu.y,
           left: pos?.left ?? menu.x,
@@ -367,6 +380,63 @@ export function FolderContextMenu(): React.JSX.Element | null {
           重命名
           <span className="k">F2</span>
         </button>
+<div className="menu-row">
+          <button
+            type="button"
+            role="menuitem"
+            aria-haspopup="true"
+            aria-expanded={sub === 'style'}
+            onClick={() => setSub((open) => (open === 'style' ? null : 'style'))}
+          >
+            <Icon name="spark" />
+            图标与颜色
+            <Icon name="chev-r" className="ic sub" />
+          </button>
+        </div>
+        {sub === 'style' ? (
+          <div className="folder-style-panel" role="group" aria-label="文件夹图标与颜色">
+            <div className="fsp-icons" role="radiogroup" aria-label="文件夹图标">
+              {FOLDER_ICONS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={currentIcon === item.key}
+                  aria-label={item.label}
+                  title={item.label}
+                  className={currentIcon === item.key ? 'on' : undefined}
+                  onClick={() => applyFolderStyle(styleTargets, { icon: item.key })}
+                >
+                  <Icon name={item.key} />
+                </button>
+              ))}
+            </div>
+            <div className="fsp-colors" role="radiogroup" aria-label="文件夹颜色">
+              {FOLDER_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  role="radio"
+                  aria-checked={currentColor.toLowerCase() === color.toLowerCase()}
+                  aria-label={`颜色 ${color}`}
+                  title={color}
+                  className={currentColor.toLowerCase() === color.toLowerCase() ? 'on' : undefined}
+                  onClick={() => applyFolderStyle(styleTargets, { color })}
+                >
+                  <span style={{ background: color }} />
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="fsp-reset"
+              onClick={() => applyFolderStyle(styleTargets, { icon: null, color: null })}
+            >
+              <Icon name="sync" />
+              还原样式
+            </button>
+          </div>
+        ) : null}
 
         <div className="sep" />
 

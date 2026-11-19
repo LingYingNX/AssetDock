@@ -145,7 +145,6 @@ export function Inspector(): React.JSX.Element {
           <div className="tags">
             {a.tags.map((t) => (
               <span key={t.name} className="tag">
-                <span className="dot" style={{ background: t.color }} />
                 {t.name}
                 <button
                   type="button"
@@ -160,7 +159,6 @@ export function Inspector(): React.JSX.Element {
             ))}
           </div>
           <label className="tagin">
-            <Icon name="plus" />
             <input
               type="text"
               placeholder="输入标签，Enter 添加"

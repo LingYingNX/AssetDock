@@ -75,7 +75,7 @@ export async function removeFileAndPrune(path: string, stopRoot: string): Promis
 export async function collectOrphanFingerprintFiles(root: string, live: ReadonlySet<string>): Promise<number> {
   let removed = 0
   for (const name of await readdir(root).catch(() => [] as string[])) {
-    if (name.startsWith('tmp-')) continue
+    if (name.startsWith('tmp-') || name.includes('.tmp-')) continue
     const fingerprint = name.replace(/-\d+\.jpg$/i, '').replace(/\.[a-z0-9]+$/i, '')
     if (live.has(fingerprint)) continue
     await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined)

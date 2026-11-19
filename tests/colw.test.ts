@@ -6,6 +6,7 @@ import {
   COLW_STEPS,
   clampColw,
   colwToSlider,
+  fitColumns,
   sliderToColw
 } from '../src/renderer/src/data/colw'
 
@@ -44,5 +45,19 @@ describe('缩略图列宽刻度', () => {
     for (let width = COLW_MIN; width <= COLW_MAX; width++) {
       expect(sliderToColw(colwToSlider(width))).toBe(width)
     }
+  })
+})
+
+describe('虚拟化列宽摊分', () => {
+  it('列数确定后把剩余宽度摊回每列', () => {
+    const { cols, width } = fitColumns(1147, 170, 10)
+    expect(cols).toBe(6)
+    const used = cols * width + (cols - 1) * 10
+    expect(used).toBeLessThanOrEqual(1147)
+    expect(1147 - used).toBeLessThan(cols)
+  })
+
+  it('不足一列时铺满容器', () => {
+    expect(fitColumns(150, 170, 10)).toEqual({ cols: 1, width: 150 })
   })
 })

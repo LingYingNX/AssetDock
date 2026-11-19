@@ -162,7 +162,8 @@ export function registerMediaProtocol(): void {
       const rel = decodeURIComponent(parsed?.[2] ?? '')
       const params = new URLSearchParams(parsed?.[3] ?? '')
       const lib = registryLib(libId)
-      if (!lib || !rel || rel.includes('..')) {
+      /* 只看路径段:文件名本身含 '..'(如 a..b.png)是合法素材;越界由 realPathWithinRoot 兜底 */
+      if (!lib || !rel || rel.split(/[\\/]/).some((part) => part === '..')) {
         return new Response('forbidden', { status: 403 })
       }
       const abs = join(lib.path, rel)

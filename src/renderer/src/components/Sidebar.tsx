@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUI } from '../store/ui'
+import type { FolderStyle } from '../data/folderStyles'
 import { fmtCount, sidebarCounts } from '../data/query'
 import { MEDIA_ASSETS_DRAG_TYPE, decodeAssetDrag, isAssetDrag } from '../data/asset-drag'
 import { isExternalFileDrag } from '../data/drop-files'
@@ -134,6 +135,7 @@ function DirTree({
   depth,
   nav,
   selectedFolders,
+  folderStyles,
   onFolderClick,
   editingPath,
   onCommit,
@@ -157,6 +159,7 @@ function DirTree({
   depth: number
   nav: string
   selectedFolders: Set<string>
+  folderStyles: Record<string, FolderStyle>
   onFolderClick: (path: string, event: React.MouseEvent<HTMLElement>) => void
   editingPath: string | null
   onCommit: (path: string, name: string) => void
@@ -182,13 +185,16 @@ function DirTree({
         const key = `folder:${n.path}`
         const on = nav === key
         const collapsed = collapsedPaths.has(n.path)
+        const style = folderStyles[n.path]
+        const folderIcon = style?.icon || 'folder'
+        const folderIconStyle = style?.color ? { color: style.color } : undefined
         return (
           <div key={n.path}>
             {editingPath === n.path ? (
               <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 16px))` }}>
                 <span className="folder-arrow-spacer" aria-hidden="true" />
                 <div className="folder-main">
-                  <Icon name="folder" />
+                  <Icon name={folderIcon} style={folderIconStyle} />
                   <FolderNameEditor name={n.label} onCommit={(name) => onCommit(n.path, name)} onCancel={onCancel} />
                   <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
                 </div>
@@ -274,7 +280,7 @@ function DirTree({
                   aria-current={on ? 'page' : undefined}
                   aria-pressed={selectedFolders.has(n.path)}
                 >
-                  <Icon name="folder" />
+                  <Icon name={folderIcon} style={folderIconStyle} />
                   <span className="folder-label">{n.label}</span>
                   <span className={`cnt${n.count > 0 ? ' has-items' : ''}`}>{fmtCount(n.count)}</span>
                 </button>
@@ -286,6 +292,7 @@ function DirTree({
                 depth={depth + 1}
                 nav={nav}
                 selectedFolders={selectedFolders}
+                folderStyles={folderStyles}
                 onFolderClick={onFolderClick}
                 editingPath={editingPath}
                 onCommit={onCommit}
@@ -454,6 +461,7 @@ export function Sidebar(): React.JSX.Element {
   const moveAssetsToFolder = useUI((s) => s.moveAssetsToFolder)
   const collapsedFolders = useUI((s) => s.collapsedFolders)
   const toggleFolderCollapsed = useUI((s) => s.toggleFolderCollapsed)
+  const folderStyles = useUI((s) => s.folderStyles)
   const [folderDragging, setFolderDragging] = useState(false)
   const assetDropTargetRef = useRef<HTMLElement | null>(null)
   const folderDragPreviewRef = useRef<HTMLDivElement | null>(null)
@@ -640,6 +648,7 @@ export function Sidebar(): React.JSX.Element {
                 depth={0}
                 nav={nav}
                 selectedFolders={selectedFolders}
+                folderStyles={folderStyles}
                 onFolderClick={handleFolderClick}
                 editingPath={folderEditPath}
                 onCommit={renameFolder}

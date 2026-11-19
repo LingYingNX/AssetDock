@@ -9,16 +9,6 @@ import { Icon } from './Icons'
 import { Cube3D } from './Cube3D'
 import { formatSpec } from '../../../shared/formats'
 import { onceInView } from '../data/viewport'
-/** 视频/三维格式徽章圆点颜色(规格第 10 节) */
-const FORMAT_DOT: Partial<Record<Asset['format'], string>> = {
-  MP4: '#3B82F6',
-  MOV: '#F97316',
-  PSD: '#8B5CF6',
-  GLB: '#22D3EE',
-  FBX: '#22D3EE',
-  OBJ: '#22D3EE'
-}
-
 function documentStructure(a: Asset): string {
   const spec = formatSpec(a.format)
   const shape = spec && 'documentShape' in spec ? spec.documentShape : undefined
@@ -53,6 +43,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const thumbRevision = useUI((s) => a.fingerprint ? (s.thumbRevisions[a.fingerprint] ?? 0) : 0)
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
+  const disp = useUI((s) => s.display)
   // 已解码过的预览直接以可见态挂载:切换文件夹时卡片会重挂载,
   // 若从 opacity:0 重新淡入,用户看到的就是缩略图重新刷新。
   const previewKey = a.previewUrl ?? ''
@@ -64,6 +55,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
     ? (a.dbId != null ? thumbSrc : `/@fs/${a.previewUrl}`)
     : ''
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
+  /* GIF 缩略图是静态帧,悬停时换成原图让浏览器播动画;离开即卸载,停掉解码与合成 */
+  const [gifLive, setGifLive] = useState(false)
+  /* 原图没解码完就换上会先闪一下空框,解码完再显形 */
+  const [gifReady, setGifReady] = useState(false)
   const [inView, setInView] = useState(false)
   const cardRef = useRef<HTMLElement | null>(null)
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
@@ -80,6 +75,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
     a.type === 'model' ? 'c3d' : '',
     selected ? 'is-selected' : '',
     selected && selEnd ? 'sel-end' : '',
+    disp.name ? '' : 'no-name',
     `glass-card`
   ]
     .filter(Boolean)
@@ -113,7 +109,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         : a.type === 'document'
           ? documentStructure(a)
           : formatResolution(a)
-  const cardCls = `${cls}${!isImage && meta[0] ? ' has-meta' : ''}`
+  const cardCls = cls
 
   const isVideo = a.type === 'video'
   const canMove = a.dbId != null && a.libraryId != null && !a.missing && !a.deletedAt
@@ -156,6 +152,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           dragPreviewRef.current = null
         }, 1000)
       }}
+      onPointerEnter={() => { if (a.format === 'GIF' && disp.gif === 'hover') setGifLive(true) }}
+      onPointerLeave={() => { setGifLive(false); setGifReady(false) }}
       onDragEnd={() => {
         dragPreviewRef.current?.remove()
         dragPreviewRef.current = null
@@ -222,29 +220,25 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
           </div>
         ) : null}
 
+        {(gifLive || (disp.gif === 'auto' && inView)) && a.originalUrl ? (
+          <img className={gifReady ? 'gif-live loaded' : 'gif-live'} src={a.originalUrl} alt="" draggable={false} onLoad={() => setGifReady(true)} />
+        ) : null}
         {isVideo && (
           <span className="play-big"><Icon name="play" /></span>
         )}
-        {isImage && resLabel !== '—' && resLabel !== '矢量' ? <span className="res-chip">{resLabel}</span> : null}
-        {!isImage ? (
-          <span className="type-chip">
-            {FORMAT_DOT[a.format] ? (
-              <span className="dot" style={{ background: FORMAT_DOT[a.format] }} />
-            ) : null}
-            {a.format}
-          </span>
-        ) : null}
+        {isImage && disp.res && resLabel !== '—' && resLabel !== '矢量' ? <span className="res-chip">{resLabel}</span> : null}
+        {disp.fmt && !disp.hiddenFormats.includes(a.format) ? <span className="fmt-chip">{a.format}</span> : null}
         {isVideo && a.duration ? <span className="dur">{a.duration}</span> : null}
+        {disp.size ? <span className={'size-chip' + (isVideo && a.duration ? ' above' : '')}>{formatBytes(a.sizeBytes)}</span> : null}
       </div>
       <figcaption>
-        <div className="name-row">
-          <span className="name">{a.name}</span>
-        </div>
-        {!isImage && meta[0] ? (
-          <div className="meta-row">
-            <span>{meta[0]}</span>
+        {disp.name ? (
+          <div className="name-row">
+            <span className="name">{a.name}</span>
           </div>
         ) : null}
+        {/* 说明栏只留名字一行 */}
+
         <span className="lc lc-type">{isImage ? '图片' : a.format}</span>
         <span className="lc lc-res">{listRes === '矢量' ? '' : listRes}</span>
         <span className="lc lc-size">{formatBytes(a.sizeBytes)}</span>

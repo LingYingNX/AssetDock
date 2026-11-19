@@ -3,13 +3,13 @@
 .gridwrap.is-empty{display:flex;flex-direction:column}
 
 /* 瀑布流(默认) */
-.grid{column-width:var(--colw);column-gap:14px;padding:20px 24px 36px}
+.grid{column-width:var(--colw);column-gap:10px;padding:9px 11px 32px}
 /* 网格 */
-.grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:14px}
+.grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:10px}
 .v-grid .thumb{aspect-ratio:4/3}
 /* 列表 */
 /* 列表铺满内容区宽度:左右留 12px 会在行两端露出内容底色,像两条全高的竖线 */
-.grid.v-list{columns:auto;display:flex;flex-direction:column;gap:0;padding:0 0 24px}
+.grid.v-list{columns:auto;display:flex;flex-direction:column;gap:1px;padding:0 0 24px}
 .lhead,.v-list .card{display:grid;grid-template-columns:96px minmax(0,1.7fr) 52px 92px 76px 60px 96px 34px;gap:12px;align-items:center}
 .lhead{display:none;position:sticky;top:0;z-index:5;padding:0 12px;height:34px;margin:0 -4px 6px;background:var(--bg2);backdrop-filter:blur(16px) saturate(1.2);border-bottom:1px solid var(--ctl-line);font-size:var(--fs-cap);color:var(--t3)}
 .v-list .lhead{display:grid;margin:0;padding:0 14px}
@@ -23,7 +23,7 @@
 .v-list .card.is-selected{box-shadow:inset 1.5px 0 0 var(--acc),inset -1.5px 0 0 var(--acc),inset 0 1.5px 0 var(--acc)}
 .v-list .card.is-selected.sel-end{box-shadow:inset 1.5px 0 0 var(--acc),inset -1.5px 0 0 var(--acc),inset 0 1.5px 0 var(--acc),inset 0 -1.5px 0 var(--acc)}
 .v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:var(--r-sm);flex:none}
-.v-list .thumb .type-chip,.v-list .thumb .res-chip,.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
+.v-list .thumb .res-chip,.v-list .thumb .fmt-chip,.v-list .thumb .size-chip,.v-list .thumb .gif-live,.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
 /* 同一批立方体不该有两种转速:基准 24s,列表视图只改尺寸 */
 .v-list .thumb .cube3d{--cs:30px}
 .v-list figcaption{display:contents;position:static;padding:0;border:0;background:none;backdrop-filter:none}
@@ -57,7 +57,7 @@
    反而是 pointer。光标是最廉价的可点击性线索,这里必须与真实行为一致。 */
 /* 卡片是第三层容器:悬停抬 2px + 投影,不再只换一圈描边色。网格里十几张卡并排,
    只变边框的话整屏都在闪,却看不出「鼠标停在哪张」 */
-.card{break-inside:avoid;margin-bottom:14px;border:1px solid var(--card-line);border-radius:var(--r-card);overflow:hidden;cursor:pointer;position:relative;box-shadow:0 1px 2px rgba(10,20,40,.05);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
+.card{break-inside:avoid;margin-bottom:10px;border:1px solid var(--card-line);border-radius:4px;overflow:hidden;cursor:pointer;position:relative;box-shadow:0 1px 2px rgba(10,20,40,.05);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
 .v-grid .card{margin-bottom:0}
 .card:hover{border-color:var(--ctl-line-hover);transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(10,20,40,.35)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
@@ -84,10 +84,13 @@
 .g-slate{background:radial-gradient(circle at 26% 22%,rgba(255,255,255,.28),transparent 40%),linear-gradient(165deg,#B7C0CE 0%,#6E7B90 50%,#2C3444 100%)}
 .g-gold{background:radial-gradient(circle at 66% 30%,#FFF7D6 0%,transparent 40%),linear-gradient(170deg,#F7D774 0%,#D9930D 55%,#6E3B0A 100%)}
 
-.type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:700;letter-spacing:.06em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
-.type-chip .dot{width:6px;height:6px}
-.res-chip{position:absolute;left:8px;top:8px;z-index:2;height:20px;padding:0 8px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
-.dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:2px 7px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.res-chip{position:absolute;left:5px;top:5px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
+/* 图片此前只有左上分辨率,分不出 GIF / PNG / JPG;格式挂右上,分辨率留左上 */
+.fmt-chip{position:absolute;right:5px;top:5px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
+/* 悬停时盖上的原图:GIF 只有原图会动,缩略图是静态单帧 */
+.gif-live{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.thumb.uw .gif-live,.thumb.uh .gif-live{object-fit:contain}
+.dur{position:absolute;right:5px;bottom:5px;z-index:2;padding:2px 7px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 /* 选中环:未选中 1px --line,选中再叠一层 box-shadow 外环就变成视觉 2px 蓝框,
    比 1px 灰框「厚」一档——卡片在选中瞬间像被撑了一下。改成只切 border-color,
    线宽不随状态变化。原来用 box-shadow 是当时的妥协:描边曾走 outline(不参与过渡),
@@ -139,3 +142,14 @@ figcaption{position:relative;height:24px;padding:0 8px;display:flex;flex-directi
   /* 列宽下限 170px 时分辨率放不下,锁死单行、溢出裁掉。 */
   white-space:nowrap;overflow:hidden}
 .meta-row>span{flex:none}
+
+/* 关掉名字时整条说明栏一起去掉,否则留下一条空槽 */
+.card.no-name figcaption{display:none}
+.v-list .card.no-name figcaption{display:contents}
+
+/* 角标随缩略图宽度缩放:固定 11px 在 150px 小卡上会盖住画面 */
+.thumb{container-type:inline-size}
+.thumb .res-chip,.thumb .fmt-chip,.thumb .dur{height:auto;min-height:17px;padding:2px 6px;font-size:clamp(9px,4.4cqw,11px)}
+/* 文件大小:右下角;视频有时长时上移一行,不和时长叠在一起 */
+.thumb .size-chip{position:absolute;right:5px;bottom:5px;z-index:2;height:auto;min-height:17px;padding:2px 6px;border-radius:4px;font-size:clamp(9px,4.4cqw,11px);font-weight:600;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
+.thumb .size-chip.above{bottom:27px}

@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
+import { playerWrapperUrl } from './htmlPlayer'
 
 /**
  * CSS 缩略图:把预览页离屏渲染后截图。
@@ -19,6 +20,9 @@ const RENDER_HEIGHT = 675
 const RENDER_TIMEOUT_MS = 5000
 /** HTML 整页渲染要等脚本挂载 DOM,比静态 CSS 预览慢,单独给更宽的超时 */
 const HTML_RENDER_TIMEOUT_MS = 8000
+/** 在线播放器外壳要先拉播放器与视频包,首帧更慢 */
+const HTML_PLAYER_RENDER_TIMEOUT_MS = 20000
+const HTML_PLAYER_WAIT_MS = 4000
 const HTML_SETTLE_MS = 300
 const HTML_CONTENT_WAIT_MS = 2500
 
@@ -114,6 +118,8 @@ async function waitForHtmlContent(win: BrowserWindow): Promise<void> {
 
 /** 按原文件渲染整页并截图;脚本可执行,网络与弹窗被隔离会话挡住。 */
 async function renderHtmlPagePng(absPath: string): Promise<Buffer> {
+  // 在线播放器外壳必须从 http://localhost:3000 加载:播放器只接受白名单 origin 的消息
+  const playerUrl = await playerWrapperUrl(absPath).catch(() => null)
   const win = new BrowserWindow({
     width: RENDER_WIDTH,
     height: RENDER_HEIGHT,
@@ -136,17 +142,24 @@ async function renderHtmlPagePng(absPath: string): Promise<Buffer> {
     win.webContents.on('will-navigate', (event) => event.preventDefault())
     let timer: NodeJS.Timeout | undefined
     const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('html thumbnail render timed out')), HTML_RENDER_TIMEOUT_MS)
+      timer = setTimeout(
+        () => reject(new Error('html thumbnail render timed out')),
+        playerUrl ? HTML_PLAYER_RENDER_TIMEOUT_MS : HTML_RENDER_TIMEOUT_MS
+      )
     })
     try {
       // loadFile 不转义 # 与 ?:文件名含这两个字符时会被当成 hash/query,整页加载失败
-      const loaded = win.loadURL(pathToFileURL(absPath).href)
+      const loaded = win.loadURL(playerUrl ?? pathToFileURL(absPath).href)
       loaded.catch(() => undefined)
       await Promise.race([loaded, timeout])
       // 超时先返回时这个 Promise 还会继续跑,先吞掉它的拒绝,避免 unhandledRejection
-      const content = waitForHtmlContent(win)
+      const content = playerUrl
+        ? new Promise((resolve) => setTimeout(resolve, HTML_PLAYER_WAIT_MS))
+        : waitForHtmlContent(win)
       content.catch(() => undefined)
       await Promise.race([content, timeout])
+      // 截图的滚动条会变成卡片右侧一条白边,缩略图里不能带
+      await win.webContents.insertCSS('html,body{overflow:hidden!important}::-webkit-scrollbar{display:none!important}')
     } finally {
       if (timer) clearTimeout(timer)
     }

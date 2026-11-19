@@ -164,23 +164,25 @@ function matchFilters(a: Asset, f: Filters): boolean {
     }
     if (!(legacy[f.format] ?? [f.format]).includes(fm)) return false
   }
-  if (f.shape !== 'all' && f.shape !== 'none' && a.type === 'document') return false
-  if (f.shape !== 'all' && f.shape !== 'none' && a.type !== 'model' && a.type !== 'document') {
+  /* 形状只对位图/视频有意义:文档与三维模型没有宽高比,任何形状筛选下都不展示 */
+  if (f.shape === 'none' && a.type !== 'document') return false
+  if (f.shape !== 'all' && f.shape !== 'none' && (a.type === 'document' || a.type === 'model')) return false
+  if (f.shape !== 'all' && f.shape !== 'none') {
     const ar = (a.width ?? 1) / (a.height ?? 1)
     if (f.shape === 'landscape' && !(ar > 1.2 && ar <= 2.2)) return false
     if (f.shape === 'portrait' && !(ar < 0.83)) return false
     if (f.shape === 'square' && !(ar >= 0.83 && ar <= 1.2)) return false
     if (f.shape === 'pano' && ar <= 2.2) return false
   }
-  if (f.shape === 'none' && a.type !== 'document') return false
-  if (f.size !== 'all' && f.size !== 'none' && a.type === 'document') return false
-  if (f.size !== 'all' && f.size !== 'none' && a.type !== 'document') {
+  /* 尺寸同理:模型没有像素尺寸,不能同时落进「小」和「大」 */
+  if (f.size === 'none' && a.type !== 'document') return false
+  if (f.size !== 'all' && f.size !== 'none' && (a.type === 'document' || a.type === 'model')) return false
+  if (f.size !== 'all' && f.size !== 'none') {
     const px = RES_PX(a)
     if (f.size === 'small' && px > 1920) return false
     if (f.size === 'medium' && !(px > 1920 && px < 3840)) return false
-    if (f.size === 'large' && px < 3840 && a.type !== 'model') return false
+    if (f.size === 'large' && px < 3840) return false
   }
-  if (f.size === 'none' && a.type !== 'document') return false
   if (f.rating !== 'all') {
     if (f.rating === '5' && a.rating !== 5) return false
     if (f.rating === '4up' && a.rating < 4) return false

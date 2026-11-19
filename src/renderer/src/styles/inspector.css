@@ -46,7 +46,6 @@
 /* 标签:中性填充 + 彩色圆点,强调色只留给选中态;全部染蓝会把 accent 稀释成装饰 */
 .tag{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--r-pill);font-size:var(--fs-cap);font-weight:500;background:var(--field-bg);border:1px solid transparent;color:var(--t1)}
 .tag:hover{background:var(--acc-tint);color:var(--t1)}
-.tag .dot{width:7px;height:7px}
 .tag .x{display:grid;place-items:center;width:var(--ic-xs);height:var(--ic-xs);padding:0;border:0;background:none;color:inherit;opacity:.5;cursor:pointer}
 .tag .x:hover{opacity:1;color:var(--t1)}
 .tagin{display:flex;align-items:center;gap:6px;margin-top:6px;height:30px;padding:0 10px;background:var(--field-bg);border:1px solid var(--field-line);box-shadow:var(--field-shadow);border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body);transition:border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out)}

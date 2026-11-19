@@ -746,7 +746,7 @@ describe('library load failure visibility', () => {
       clearTimeout,
       windowApi: {
         assets: { list },
-        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }), styles: vi.fn().mockResolvedValue({ styles: [] }) }
       }
     })
     vi.resetModules()
@@ -781,7 +781,7 @@ describe('library load failure visibility', () => {
       clearTimeout,
       windowApi: {
         assets: { list },
-        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }), styles: vi.fn().mockResolvedValue({ styles: [] }) }
       }
     })
     vi.resetModules()
@@ -822,7 +822,7 @@ describe('collapsed folder state across libraries', () => {
       clearTimeout,
       windowApi: {
         assets: { list: vi.fn().mockResolvedValue({ assets: [] }) },
-        folders: { list: foldersList }
+        folders: { list: foldersList, styles: vi.fn().mockResolvedValue({ styles: [] }) }
       }
     })
     vi.resetModules()
@@ -872,7 +872,7 @@ describe('destructive operations ask first', () => {
           purge: calls.purge,
           list: vi.fn().mockResolvedValue({ assets: [] })
         },
-        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) }
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }), styles: vi.fn().mockResolvedValue({ styles: [] }) }
       }
     })
     vi.resetModules()
@@ -1385,7 +1385,7 @@ describe('asset cache across library tabs', () => {
       clearTimeout,
       windowApi: {
         assets: { list },
-        folders: { list: vi.fn().mockResolvedValue({ paths: [] }) },
+        folders: { list: vi.fn().mockResolvedValue({ paths: [] }), styles: vi.fn().mockResolvedValue({ styles: [] }) },
         library: { open: vi.fn().mockResolvedValue({ ok: true }) },
         tabs: { save: vi.fn().mockResolvedValue(undefined) },
         state: { set: vi.fn().mockResolvedValue({ ok: true }) }

@@ -205,6 +205,11 @@ export async function renameLibraryFolder(root: string, relPath: string, newName
   const target = libraryPath(root, relative(resolve(root), destination))
   if (target.abs === source.abs) return source.rel
   if (!(await lstat(source.abs)).isDirectory()) fail('文件夹不存在')
+  /* 只改大小写:Windows 是大小写不敏感文件系统,存在性检查会命中源目录本身,直接 rename */
+  if (target.abs.toLowerCase() === source.abs.toLowerCase()) {
+    await rename(source.abs, target.abs)
+    return target.rel
+  }
   try {
     await lstat(target.abs)
     fail('文件夹名称已存在')
@@ -282,7 +287,12 @@ export async function renameLibraryAsset(root: string, relPath: string, newName:
 
   const destination = resolve(dirname(source.abs), fileName)
   const target = libraryPath(root, relative(resolve(root), destination))
-  if (target.abs.toLowerCase() === source.abs.toLowerCase()) return source.rel
+  if (target.abs === source.abs) return source.rel
+  /* 只改大小写时存在性检查会命中源文件本身,必须直接 rename(NTFS 允许仅改大小写) */
+  if (target.abs.toLowerCase() === source.abs.toLowerCase()) {
+    await rename(source.abs, target.abs)
+    return target.rel
+  }
   try {
     await lstat(target.abs)
     fail('同目录下已有同名文件')

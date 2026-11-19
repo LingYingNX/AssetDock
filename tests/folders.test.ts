@@ -72,6 +72,14 @@ describe('library folders', () => {
     await expect(listLibraryFolders(root)).resolves.toEqual(['target', 'target/renamed', 'target/renamed/child'])
   })
 
+  it('renames folders and files that differ only in letter case', async () => {
+    await mkdir(join(root, 'Shots'))
+    await writeFile(join(root, 'Shots', 'Cover.PNG'), 'x')
+    await expect(renameLibraryFolder(root, 'Shots', 'shots')).resolves.toBe('shots')
+    await expect(renameLibraryAsset(root, 'shots/Cover.PNG', 'cover')).resolves.toBe('shots/cover.PNG')
+    await expect(readFile(join(root, 'shots', 'cover.PNG'), 'utf8')).resolves.toBe('x')
+  })
+
   it('moves a nested folder back to the library root', async () => {
     await mkdir(join(root, 'parent', 'child', 'grandchild'), { recursive: true })
     await expect(moveLibraryFolder(root, 'parent/child', '')).resolves.toBe('child')

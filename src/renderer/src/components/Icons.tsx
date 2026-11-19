@@ -3,11 +3,12 @@ import type React from 'react'
 interface IconProps {
   name: string
   className?: string
+  style?: React.CSSProperties
 }
 
 /** 通用线性图标(设计稿同源 symbol,1.7px 描边圆头) */
-export function Icon({ name, className }: IconProps): React.JSX.Element {
-  return <svg className={`ic${className ? ` ${className}` : ''}`} aria-hidden="true" focusable="false"><use href={`#i-${name}`} /></svg>
+export function Icon({ name, className, style }: IconProps): React.JSX.Element {
+  return <svg className={`ic${className ? ` ${className}` : ''}`} style={style} aria-hidden="true" focusable="false"><use href={`#i-${name}`} /></svg>
 }
 
 /**
@@ -30,6 +31,9 @@ export function SvgDefs(): React.JSX.Element {
         <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M20 12h-9M7 12H4M4 18h9M17 18h3" /><circle cx="15" cy="6" r="2" /><circle cx="5" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></symbol>
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
         <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+        <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l10-2v13" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></symbol>
+        <symbol id="i-book" viewBox="0 0 24 24"><path d="M6 3h14v18H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M4 17h16" /></symbol>
+        <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5" /><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M10 13h4" /></symbol>
         <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /><path d="M12 10v6M9 13h6" /></symbol>
         <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
         <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></symbol>

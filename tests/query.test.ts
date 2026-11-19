@@ -147,3 +147,15 @@ describe('date formatting', () => {
     expect(formatted).toContain('10:24')
   })
 })
+
+describe('3D model filters', () => {
+  it('keeps models out of pixel-size and shape filters', () => {
+    const model = asset({ id: 'model', type: 'model', format: 'GLB', width: undefined, height: undefined })
+    const photo = asset({ id: 'photo', width: 1280, height: 720 })
+    const assets = [model, photo]
+
+    expect(query(assets, 'all', { size: 'small' }).map((x) => x.id)).toEqual(['photo'])
+    expect(query(assets, 'all', { size: 'large' }).map((x) => x.id)).toEqual([])
+    expect(query(assets, 'all', { shape: 'landscape' }).map((x) => x.id)).toEqual(['photo'])
+  })
+})

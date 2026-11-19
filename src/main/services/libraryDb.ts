@@ -82,7 +82,13 @@ CREATE TABLE IF NOT EXISTS folder_orders (
   position INTEGER NOT NULL,
   PRIMARY KEY(library_id, path)
 );
-CREATE TABLE IF NOT EXISTS purged_paths (
+CREATE TABLE IF NOT EXISTS folder_styles (
+  library_id INTEGER NOT NULL,
+  path TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  color TEXT NOT NULL,
+  PRIMARY KEY(library_id, path)
+);CREATE TABLE IF NOT EXISTS purged_paths (
   library_id INTEGER NOT NULL,
   rel_path TEXT NOT NULL,
   purged_at TEXT NOT NULL DEFAULT (datetime('now')),

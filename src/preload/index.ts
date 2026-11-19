@@ -39,7 +39,13 @@ const api = {
   folders: {
     list: (libraryId: number): Promise<FolderListResponse | { error: string }> =>
       ipcRenderer.invoke('folders:list', libraryId),
-    create: (libraryId: number, parentPath?: string): Promise<{ path: string } | { error: string }> =>
+    styles: (libraryId: number): Promise<{ styles: { path: string; icon: string; color: string }[] } | { error: string }> =>
+      ipcRenderer.invoke('folders:styles', libraryId),
+    setStyles: (
+      libraryId: number,
+      paths: string[],
+      patch: { icon?: string | null; color?: string | null }
+    ): Promise<{ ok: true } | { error: string }> => ipcRenderer.invoke('folders:setStyles', libraryId, paths, patch),    create: (libraryId: number, parentPath?: string): Promise<{ path: string } | { error: string }> =>
       ipcRenderer.invoke('folders:create', libraryId, parentPath),
     open: (libraryId: number, path: string): Promise<{ ok: true } | { error: string }> =>
       ipcRenderer.invoke('folders:open', libraryId, path),
@@ -101,7 +107,6 @@ const api = {
     rename: (libraryId: number, id: number, newName: string): Promise<{ ok: true; relPath: string } | { error: string }> => ipcRenderer.invoke('assets:rename', libraryId, id, newName),
     importPaths: (libraryId: number, paths: string[], folder: string): Promise<AssetImportResponse | { error: string }> =>
       ipcRenderer.invoke('assets:importPaths', libraryId, paths, folder),
-    purgeMissing: (libraryId: number): Promise<{ purged: number }> => ipcRenderer.invoke('assets:purgeMissing', libraryId),
     copy: (libraryId: number, ids: number[]): Promise<{ copied: number; mode: 'files' | 'paths'; skipped: string[]; paths: string[] } | { error: string }> =>
       ipcRenderer.invoke('assets:copy', libraryId, ids),
     export: (libraryId: number, ids: number[]): Promise<{ exported: number } | { canceled: true } | { error: string; exported?: number }> =>

@@ -20,3 +20,11 @@ export function sliderToColw(value: number): number {
   const t = Math.min(1, Math.max(0, value / COLW_STEPS))
   return clampColw(COLW_MIN * (COLW_MAX / COLW_MIN) ** t)
 }
+/**
+ * 虚拟化布局的列宽分配:先按 colw 定列数,再把剩余宽度摊回每列。
+ * 直接用 colw 当列宽时,容器右侧会留下一条不足一列的空白,窗口越窄越明显。
+ */
+export function fitColumns(avail: number, colw: number, gap: number): { cols: number; width: number } {
+  const cols = Math.max(1, Math.floor((avail + gap) / (colw + gap)))
+  return { cols, width: Math.max(1, Math.floor((avail - (cols - 1) * gap) / cols)) }
+}

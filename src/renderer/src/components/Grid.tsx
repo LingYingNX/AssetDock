@@ -5,6 +5,7 @@ import { queryAssets } from '../data/query'
 import { DEFAULT_FILTERS } from '../data/query'
 import { emptyStateFor } from '../data/empty-state'
 import { FALLBACK_THUMB_AR, thumbRatio } from '../data/thumb-ratio'
+import { fitColumns } from '../data/colw'
 import { marqueeHits, marqueeRect, type MarqueeCandidate } from '../data/marquee'
 import type { Asset } from '../data/types'
 import { Card } from './Card'
@@ -15,29 +16,29 @@ const LHEAD_COLS = ['', '文件名', '类型', '分辨率', '大小', '时长', 
    实测已到 210~268ms;40 项起走虚拟化,把一次切换限制在当前视口附近。 */
 const VIRTUAL_THRESHOLD = 40
 /* 卡片横纵间距统一;虚拟化时由 gap 补上,非虚拟化由 CSS 承担。 */
-const GAP = 12
-const PAD_X = 22
+const GAP = 10
+const PAD_X = 11
 /* 信息栏在缩略图下方,固定两档高度;必须与 grid.css 的 figcaption 高度一致。 */
 const CAPTION_H = 24
-const CAPTION_H_META = 38
 const LIST_ROW_H = 68
 
-function captionHeight(a: Asset): number {
-  return a.type === 'video' || a.type === 'document' ? CAPTION_H_META : CAPTION_H
+/* 关掉名字时说明栏整条不渲染,虚拟化的估算高度必须跟着归零,否则每张卡下方留 24px 空洞 */
+function captionHeight(showName: boolean): number {
+  return showName ? CAPTION_H : 0
 }
 
 /** 列内定位高度:必须与 Card 写进 --ar 的比例同源,否则卡片会错位或留下空档 */
-function estHeight(a: Asset, colw: number): number {
+function estHeight(a: Asset, colw: number, showName: boolean): number {
   const ar = thumbRatio(a.width, a.height) ?? FALLBACK_THUMB_AR
   /* 卡片有左右各 1px 边框,缩略图实际宽度是 colw-2。 */
-  return Math.round((colw - 2) / ar + 2 + captionHeight(a))
+  return Math.round((colw - 2) / ar + 2 + captionHeight(showName))
 }
 
 /** 列分配:贪心放入当前最矮列(保持列内顺序) */
-function assignColumns(items: Asset[], colw: number, cols: number): { col: { a: Asset; h: number }[]; h: number }[] {
+function assignColumns(items: Asset[], colw: number, cols: number, showName: boolean): { col: { a: Asset; h: number }[]; h: number }[] {
   const columns = Array.from({ length: cols }, () => ({ col: [] as { a: Asset; h: number }[], h: 0 }))
   for (const a of items) {
-    const h = estHeight(a, colw)
+    const h = estHeight(a, colw, showName)
     let target = 0
     for (let i = 1; i < cols; i++) if (columns[i].h < columns[target].h) target = i
     columns[target].col.push({ a, h })
@@ -55,6 +56,7 @@ export function Grid(): React.JSX.Element {
   const filters = useUI((s) => s.filters)
   const stripColor = useUI((s) => s.stripColor)
   const colw = useUI((s) => s.colw)
+  const showName = useUI((s) => s.display.name)
   const clearSelection = useUI((s) => s.clearSelection)
   const setSelectedIds = useUI((s) => s.setSelectedIds)
   const setSearch = useUI((s) => s.setSearch)
@@ -235,7 +237,7 @@ export function Grid(): React.JSX.Element {
     return (
       <div className="gridwrap" ref={wrapRef} {...wrapProps}>
         {trashHeader}
-        <CardRows items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
+        <CardRows items={list} colw={colw} wrapW={wrapW} virtual={virtual} showName={showName} scrollEl={wrapRef} />
         {marqueeOverlay}
       </div>
     )
@@ -243,7 +245,7 @@ export function Grid(): React.JSX.Element {
   return (
     <div className="gridwrap" ref={wrapRef} {...wrapProps}>
       {trashHeader}
-      <Waterfall items={list} colw={colw} wrapW={wrapW} virtual={virtual} scrollEl={wrapRef} />
+      <Waterfall items={list} colw={colw} wrapW={wrapW} virtual={virtual} showName={showName} scrollEl={wrapRef} />
       {marqueeOverlay}
     </div>
   )
@@ -310,12 +312,14 @@ function CardRows({
   colw,
   wrapW,
   virtual,
+  showName,
   scrollEl
 }: {
   items: Asset[]
   colw: number
   wrapW: number
   virtual: boolean
+  showName: boolean
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
   const order = useMemo(() => items.map((item) => item.id), [items])
@@ -329,23 +333,23 @@ function CardRows({
     )
   }
   const avail = Math.max(wrapW - PAD_X * 2, colw)
-  const perRow = Math.max(1, Math.floor((avail + GAP) / (colw + GAP)))
+  const { cols: perRow, width: cellW } = fitColumns(avail, colw, GAP)
   const rows: Asset[][] = []
   for (let i = 0; i < items.length; i += perRow) rows.push(items.slice(i, i + perRow))
-  const rowHs = rows.map((row) => Math.round((colw - 2) * 3 / 4 + 2 + Math.max(...row.map(captionHeight))))
-  return <GridVirtualRows rows={rows} rowHs={rowHs} colw={colw} perRow={perRow} scrollEl={scrollEl} />
+  const rowHs = rows.map(() => Math.round((cellW - 2) * 3 / 4 + 2 + captionHeight(showName)))
+  return <GridVirtualRows rows={rows} rowHs={rowHs} cellW={cellW} perRow={perRow} scrollEl={scrollEl} />
 }
 
 function GridVirtualRows({
   rows,
   rowHs,
-  colw,
+  cellW,
   perRow,
   scrollEl
 }: {
   rows: Asset[][]
   rowHs: number[]
-  colw: number
+  cellW: number
   perRow: number
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
@@ -358,7 +362,7 @@ function GridVirtualRows({
     overscan: 6
   })
   return (
-    <div className="v-grid" style={{ position: 'relative', padding: `16px ${PAD_X}px 32px` }}>
+    <div className="v-grid" style={{ position: 'relative', padding: `8px ${PAD_X}px 32px` }}>
       <div style={{ position: 'relative', height: v.getTotalSize() }}>
         {v.getVirtualItems().map((vi) => (
           <div
@@ -369,7 +373,7 @@ function GridVirtualRows({
           >
             <div style={{ display: 'flex', gap: GAP }}>
               {rows[vi.index].map((a) => (
-                <div key={a.id} style={{ width: colw, flex: `0 0 ${colw}px` }}>
+                <div key={a.id} style={{ width: cellW, flex: `0 0 ${cellW}px` }}>
                   <Card a={a} view="grid" selectionOrder={order} />
                 </div>
               ))}
@@ -388,41 +392,44 @@ function Waterfall({
   colw,
   wrapW,
   virtual,
+  showName,
   scrollEl
 }: {
   items: Asset[]
   colw: number
   wrapW: number
   virtual: boolean
+  showName: boolean
   scrollEl: React.RefObject<HTMLDivElement | null>
 }): React.JSX.Element {
   const order = useMemo(() => items.map((item) => item.id), [items])
-  if (!virtual) {
-    return (
-      <div className="grid">
-        {items.map((a) => (
-          <Card key={a.id} a={a} view="waterfall" selectionOrder={order} />
-        ))}
-      </div>
-    )
-  }
+  /* 非虚拟也走同一套按高度分列:CSS 多列由浏览器分列,长卡会被挤成一列高、一列空,
+     右侧留出整条空隙;贪心分列让各列底边齐平 */
   const avail = Math.max(wrapW - PAD_X * 2, colw)
-  const cols = Math.max(1, Math.floor((avail + GAP) / (colw + GAP)))
-  const columns = assignColumns(items, colw, cols)
+  const { cols, width: cellW } = fitColumns(avail, colw, GAP)
+  const columns = assignColumns(items, cellW, cols, showName)
   const totalH = Math.max(...columns.map((c) => c.h), 0)
   return (
-    <div style={{ position: 'relative', height: totalH + 40, margin: `16px ${PAD_X}px 32px` }}>
-      {columns.map((c, i) => (
-        <WaterColumn
-          key={i}
-          items={c.col}
-          order={order}
-          left={i * (colw + GAP)}
-          width={colw}
-          height={c.h}
-          scrollEl={scrollEl}
-        />
-      ))}
+    <div style={{ position: 'relative', height: totalH + 40, margin: `8px ${PAD_X}px 32px` }}>
+      {columns.map((c, i) =>
+        virtual ? (
+          <WaterColumn
+            key={i}
+            items={c.col}
+            order={order}
+            left={i * (cellW + GAP)}
+            width={cellW}
+            height={c.h}
+            scrollEl={scrollEl}
+          />
+        ) : (
+          <div key={i} style={{ position: 'absolute', left: i * (cellW + GAP), top: 0, width: cellW }}>
+            {c.col.map(({ a }) => (
+              <Card key={a.id} a={a} view="waterfall" selectionOrder={order} />
+            ))}
+          </div>
+        )
+      )}
     </div>
   )
 }

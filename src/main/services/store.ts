@@ -236,6 +236,36 @@ export function renameFolderOrders(d: Database, libraryId: number, oldPath: stri
   })()
 }
 
+/**
+ * 文件夹改名/移动后,自定义图标与颜色跟着路径一起搬。
+ * 目标路径不可能存在真实目录(磁盘侧已有同名检查),因此目标上的旧记录直接让位,
+ * 与 renameFolderOrders 的冲突处理保持一致。
+ */
+export function renameFolderStyles(d: Database, libraryId: number, oldPath: string, newPath: string): void {
+  d.transaction(() => {
+    d.prepare(
+      'DELETE FROM folder_styles WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)'
+    ).run(libraryId, newPath, `${newPath}/`)
+    d.prepare(
+      `UPDATE folder_styles
+       SET path = CASE WHEN path = ? THEN ? ELSE ? || substr(path, length(?) + 1) END
+       WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)`
+    ).run(oldPath, newPath, newPath, oldPath, libraryId, oldPath, `${oldPath}/`)
+  })()
+}
+
+/** 删除目录清单里已经不存在(被搬走/删掉)的样式记录;返回清掉的条数。 */
+export function pruneFolderStyles(d: Database, libraryId: number, keepPaths: readonly string[]): number {
+  const keep = new Set(keepPaths)
+  const rows = d.prepare('SELECT path FROM folder_styles WHERE library_id = ?').all(libraryId) as { path: string }[]
+  const del = d.prepare('DELETE FROM folder_styles WHERE library_id = ? AND path = ?')
+  return d.transaction(() => {
+    let removed = 0
+    for (const row of rows) if (!keep.has(row.path) && del.run(libraryId, row.path).changes > 0) removed++
+    return removed
+  })()
+}
+
 export interface FolderTreeDeleteResult {
   assets: number
   fingerprints: string[]
@@ -254,6 +284,9 @@ export function deleteFolderTree(d: Database, libraryId: number, folderPath: str
       .run(libraryId, prefix).changes
     d.prepare(
       'DELETE FROM folder_orders WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)'
+    ).run(libraryId, folderPath, prefix)
+    d.prepare(
+      'DELETE FROM folder_styles WHERE library_id = ? AND (path = ? OR instr(path, ?) = 1)'
     ).run(libraryId, folderPath, prefix)
     return {
       assets: removed,
@@ -290,6 +323,45 @@ export function removeTag(d: Database, libraryId: number, assetId: number, name:
   return true
 }
 
+export interface FolderStyle {
+  path: string
+  icon: string
+  color: string
+}
+
+/** 文件夹自定义图标/颜色;未设置过的文件夹不在返回集里。 */
+export function listFolderStyles(d: Database, libraryId: number): FolderStyle[] {
+  return d.prepare('SELECT path, icon, color FROM folder_styles WHERE library_id = ? ORDER BY path')
+    .all(libraryId) as FolderStyle[]
+}
+
+/**
+ * 批量写入。icon/color 传 null 表示清除该字段;两字段都空时删除整行(恢复默认)。
+ * 调用方(ipc/assets.ts 的 folders:setStyles)必须只传文件夹清单内的路径,避免旧路径落库。
+ */
+export function setFolderStyles(
+  d: Database,
+  libraryId: number,
+  paths: string[],
+  patch: { icon?: string | null; color?: string | null }
+): boolean {
+  if (!Array.isArray(paths) || paths.length === 0) return false
+  const select = d.prepare('SELECT icon, color FROM folder_styles WHERE library_id = ? AND path = ?')
+  const del = d.prepare('DELETE FROM folder_styles WHERE library_id = ? AND path = ?')
+  const put = d.prepare(`INSERT INTO folder_styles(library_id, path, icon, color) VALUES (?, ?, ?, ?)
+    ON CONFLICT(library_id, path) DO UPDATE SET icon = excluded.icon, color = excluded.color`)
+  d.transaction(() => {
+    for (const path of paths) {
+      if (typeof path !== 'string' || !path) continue
+      const current = select.get(libraryId, path) as { icon: string; color: string } | undefined
+      const icon = patch.icon === undefined ? current?.icon ?? '' : patch.icon ?? ''
+      const color = patch.color === undefined ? current?.color ?? '' : patch.color ?? ''
+      if (!icon && !color) del.run(libraryId, path)
+      else put.run(libraryId, path, icon, color)
+    }
+  })()
+  return true
+}
 export interface ScanEntry {
   relPath: string
   name: string

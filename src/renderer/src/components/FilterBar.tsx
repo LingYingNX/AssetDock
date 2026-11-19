@@ -6,6 +6,7 @@ import { formatMenuGroups, tagMenuItemsForView } from '../data/filter-menu'
 import { Dropdown, type MenuItem } from './Dropdown'
 import { Icon } from './Icons'
 import { TagFilterMenu } from './TagFilterMenu'
+import { DisplayMenu } from './DisplayMenu'
 import { COLW_STEPS, colwToSlider, sliderToColw } from '../data/colw'
 import type { AssetFormat } from '../../../shared/formats'
 
@@ -319,9 +320,19 @@ export function FilterBar(): React.JSX.Element {
         value={view}
         onPick={(v) => setView(v as typeof view)}
       />
-      <span className="vr" />
+      <button
+        className={`btn${openMenu === 'm-display' ? ' open' : ''}`}
+        data-menu="m-display"
+        title="显示选项"
+        aria-label="显示选项"
+        aria-haspopup="menu"
+        aria-expanded={openMenu === 'm-display'}
+        onClick={() => setOpenMenu(openMenu === 'm-display' ? null : 'm-display')}
+      >
+        <Icon name="sliders" />
+      </button>
+      <DisplayMenu />
       <div className="zoomer" title={`缩略图大小:${colw}px`}>
-        <Icon name="image" />
         <input
           type="range"
           min={0}

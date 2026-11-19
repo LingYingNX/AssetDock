@@ -40,17 +40,20 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 /* 分区之间只留 10px:浏览最后一行与下一个标题之间原本有 18px 结构间距 + 标题自身 8px 内边距,
    视觉上断成两屏 */
 .side-sec{margin-bottom:10px}
+/* 浏览组与素材管理之间加分割:两组职责不同,标题再提一档也压不住没有边界 */
+.side-sec + .side-sec{margin-top:2px;padding-top:10px;border-top:1px solid var(--line)}
 /* 分区标题是导航的骨架:全大写式字距拉开、颜色提到 t2,让它比条目更「响」而不只是更小 */
 .side-title{display:flex;align-items:center;gap:8px;padding:0 6px 6px;font-size:var(--fs-body);font-weight:600;letter-spacing:.02em;color:var(--t2)}
 .side-title-label{display:flex;align-items:center;gap:9px}
 /* 四个分组标题同级:素材管理曾单独抬到 14px/700,把平行导航组切成了两个视觉等级,
    而文件夹树并不比其它三组更重要。它额外需要的只是右侧「新建文件夹」按钮的对齐。 */
-.folder-section-title{flex:1;min-width:0}
+.folder-section-title{flex:1;min-width:0;font-size:var(--fs-title);font-weight:700;letter-spacing:.02em;color:var(--t1)}
+.folder-section-title .ic{color:var(--acc2)}
 .side-title .ic{width:var(--ic-md);height:var(--ic-md)}
-.side-title-add{display:grid;place-items:center;width:20px;height:20px;margin-left:auto;margin-right:-1px;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.side-title-add{display:grid;place-items:center;width:24px;height:24px;margin-left:auto;margin-right:-7px;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-title-add:hover{color:var(--t1);background:var(--bg3)}
-.side-title-add .ic{width:var(--ic-sm);height:var(--ic-sm)}
-.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 9px;border-radius:var(--r-sm);color:var(--t2);font-size:var(--fs-body);font-weight:450;text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.side-title-add .ic{width:var(--ic-md);height:var(--ic-md)}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 9px;border-radius:4px;color:var(--t2);font-size:var(--fs-body);font-weight:450;text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .nav-item:hover{background:var(--bg3);color:var(--t1)}
 /* 点击导航不播放按压缩放/降透明:选中态直接落位 */
 .nav-item:active:not([disabled]),
@@ -64,6 +67,7 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
    但零值不该抢注意力——空目录的 0 保持最弱,有内容的才提到 --t2 */
 /* 计数只是信息,不加底色:32px 的行里再垫一块灰底,整列就成了按钮 */
 .nav-item .cnt.has-items{color:var(--t2);font-weight:400}
+.nav-item:not(.folder-row) .cnt{margin-right:-3px}
 .nav-item .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);flex:none;transition:transform var(--dur-press) var(--ease-out)}
 .nav-item.exp .chev{transform:rotate(90deg)}
 .nav-tree{margin-left:14px;padding-left:9px}
@@ -71,7 +75,7 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .side-add:hover{color:var(--t1);background:var(--bg3)}
 .side-add .ic{width:var(--ic-md);height:var(--ic-md)}
 .folder-edit{cursor:text;padding-right:6px}
-.folder-row{cursor:default;padding-right:6px;border-radius:var(--r-sm)}
+.folder-row{cursor:default;padding-right:6px;border-radius:4px}
 .folder-row:not(.on):hover,.folder-row:not(.on):focus-within{background:var(--bg3);color:var(--t1)}
 .folder-row:not(.on):hover .folder-main>.ic,.folder-row:not(.on):focus-within .folder-main>.ic{color:var(--t1)}
 .folder-row,.folder-edit{gap:0}

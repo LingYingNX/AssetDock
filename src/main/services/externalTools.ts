@@ -67,10 +67,11 @@ export async function findInstalledTool(key: ExternalToolKey): Promise<string | 
           ? join(root, dir, 'blender.exe')
           : join(root, dir, 'Cinema 4D.exe')
         if (existsSync(exe)) return exe
-        const nested = key === 'blender'
-          ? join(root, dir, 'Blender', 'blender.exe')
-          : join(root, dir, 'Cinema 4D.exe')
-        if (existsSync(nested)) return nested
+        /* Cinema 4D 的嵌套路径与上面的直接路径相同,只有 Blender 需要多看一层 */
+        if (key === 'blender') {
+          const nested = join(root, dir, 'Blender', 'blender.exe')
+          if (existsSync(nested)) return nested
+        }
       }
       const direct = key === 'blender' ? join(root, 'blender.exe') : join(root, 'Cinema 4D.exe')
       if (existsSync(direct)) return direct

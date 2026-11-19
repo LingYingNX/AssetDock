@@ -74,10 +74,6 @@ export function ContextMenu(): React.JSX.Element | null {
     return selectedIds.includes(ctxMenu.assetId) ? selectedIds : [ctxMenu.assetId]
   }, [ctxMenu, selectedIds])
 
-  const groupSelection = (): void => {
-    showToast(`已选中 ${targetIds.length} 个素材，移动到同一文件夹即成组`)
-  }
-
   /**
    * 菜单高度随内容浮动(有无子菜单、多少文件夹),硬编码估算值会让长菜单溢出屏幕底部。
    * 因此先在不可见状态下量出真实尺寸,再钳制到视口内;四项都钳,左上同样会溢出。
@@ -132,9 +128,6 @@ export function ContextMenu(): React.JSX.Element | null {
     const clampedViewportTop = Math.max(MARGIN, Math.min(desiredViewportTop, window.innerHeight - h - MARGIN))
     sub.style.top = `${clampedViewportTop - rowRect.top}px`
 
-    // 内容被 max-height 截断时给出「下面还有」的渐隐线索
-    sub.classList.toggle('has-more', sub.scrollHeight > sub.clientHeight + 1)
-
     // 向右展开会越界则翻到左侧;宽度按翻转后的可用空间判断
     const w = sub.getBoundingClientRect().width
     const flip = rowRect.right + 3 + w > window.innerWidth - MARGIN
@@ -183,26 +176,33 @@ export function ContextMenu(): React.JSX.Element | null {
 
   const items: MenuItem[] = [
     {
-      icon: 'folder',
-      label: '移动',
-      children: moveItems
-    },
-    { icon: 'layers', label: '打组', k: 'Ctrl+G', fn: targetIds.length > 1 ? groupSelection : undefined },
-    { icon: 'spark', label: '加入预设', fn: copyable ? () => { copySelected() } : undefined },
-    { icon: 'edit', label: '重命名', k: 'F2', fn: () => startRenaming(m.assetId) },
-    {
       icon: 'external',
-      label: '源文件',
+      label: '在资源管理器中显示',
       fn: a?.absPath ? () => window.windowApi.showInFolder(a.absPath as string) : undefined
     },
+    { icon: 'edit', label: '重命名', k: 'F2', fn: () => startRenaming(m.assetId) },
+    { icon: 'folder', label: '移动到…', sepBefore: true, children: moveItems },
+    ...(a?.deletedAt
+      ? [{
+          icon: 'sync',
+          label: '从回收站恢复',
+          fn: () => {
+            for (const id of targetIds) {
+              if (assetById.get(id)?.deletedAt) restoreAsset(id)
+            }
+          }
+        }]
+      : []),
+    { icon: 'copy', label: '复制', k: 'Ctrl C', sepBefore: true, fn: copyable ? () => { copySelected() } : undefined },
+    { icon: 'contract', label: '剪切', k: 'Ctrl X', fn: copyable ? () => { cutSelected() } : undefined },
     {
-      icon: 'trash',
-      label: a?.deletedAt ? '彻底删除' : '删除',
-      k: 'Del',
-      sepBefore: true,
-      danger: true,
-      fn: () => (a?.deletedAt ? purgeAssets(targetIds) : trashAssets(targetIds))
-    }
+      icon: 'inbox',
+      label: assetClipboard ? `粘贴 ${assetClipboard.ids.length} 个素材` : '粘贴',
+      k: 'Ctrl V',
+      fn: assetClipboard ? () => { pasteClipboard() } : undefined
+    },
+    { icon: 'download', label: '导出…', fn: copyable ? exportSelection : undefined },
+    { icon: 'trash', label: a?.deletedAt ? '彻底删除' : '删除', k: 'Del', sepBefore: true, danger: true, fn: () => (a?.deletedAt ? purgeAssets(targetIds) : trashAssets(targetIds)) }
   ]
 
   const row = (it: MenuItem, key: string): React.JSX.Element => {
