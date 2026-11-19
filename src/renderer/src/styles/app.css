@@ -37,7 +37,7 @@
 .lib-tab{display:flex;flex:none;align-items:center;justify-content:center;gap:8px;height:100%;padding:0 14px;border-radius:var(--r-xs);font-size:var(--fs-title);font-weight:500;color:var(--t2);letter-spacing:.3px;white-space:nowrap;background:transparent;border:1px solid transparent;
   transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .lib-tab:hover{background:var(--bg3);color:var(--t1)}
-.lib-tab.on{background:var(--bg3);border-color:var(--line);color:var(--t1);font-weight:600}
+.lib-tab.on{background:var(--field-bg);border-color:var(--line2);color:var(--t1);font-weight:600;box-shadow:inset 0 1px 0 var(--card-edge)}
 .tb-spacer{flex:1}
 .tb-btn{width:32px;height:var(--h-sm);border-radius:var(--r-s);display:grid;place-items:center;color:var(--t2)}
 .tb-btn:hover{background:var(--bg3);color:var(--t1)}

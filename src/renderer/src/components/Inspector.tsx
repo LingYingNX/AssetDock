@@ -44,11 +44,11 @@ export function Inspector(): React.JSX.Element {
     <aside className="inspector glass-inspector">
       <div className="insp-scroll">
         {a.type === 'image' && (
-          <div className="palette" style={{ marginBottom: 14 }}>
+          <div className="palette">
             {a.palette.map((p) => (
-              <div key={p.hex} className="pal" style={{ background: p.hex }}>
+              <div key={p.hex} className="pal" style={{ background: p.hex }} title={`${p.ratio}% ${p.hex}`}>
                 <em>{p.ratio}%</em>
-                <span>{p.hex}</span>
+                <span>{p.hex.replace("#", "")}</span>
               </div>
             ))}
           </div>
@@ -78,7 +78,7 @@ export function Inspector(): React.JSX.Element {
                 }}
               />
             ) : (
-              <b>{a.name}</b>
+              <b title={a.name}>{a.name}</b>
             )}
             {!(renaming && activeId === a.id) && (
               <button
@@ -92,11 +92,10 @@ export function Inspector(): React.JSX.Element {
               </button>
             )}
           </div>
-        </div>
-
-        <div className="insp-sec">
-          <div className="insp-h"><Icon name="star" />评分</div>
-          <span className="rate big" role="group" aria-label="评分">
+          {/* 评分并进标题卡:单独一张卡只放五颗星,占掉一整行高度却几乎不承载信息 */}
+          <div className="insp-rate">
+            <span className="insp-rate-k">评分</span>
+            <span className="rate big" role="group" aria-label="评分">
             {[1, 2, 3, 4, 5].map((v) => (
               <button
                 type="button"
@@ -109,9 +108,11 @@ export function Inspector(): React.JSX.Element {
                 <svg aria-hidden="true"><use href="#i-star" /></svg>
               </button>
             ))}
-          </span>
+            </span>
+          </div>
         </div>
 
+        <div className="insp-group">
         <div className="insp-sec">
           <div className="insp-h"><Icon name="info" />文件信息</div>
           <dl className="dl">
@@ -244,6 +245,7 @@ export function Inspector(): React.JSX.Element {
             defaultValue={a.note}
             onBlur={(e) => setNote(a.id, e.target.value)}
           />
+        </div>
         </div>
       </div>
     </aside>

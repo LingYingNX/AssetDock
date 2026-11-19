@@ -30,43 +30,49 @@
    局部再写一遍只会让人以为全局策略不存在。 */
 /* ---------- 侧栏 ---------- */
 .sidebar{position:relative;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;width:100%}
-.side-scroll{flex:1;overflow-y:auto;overflow-anchor:none;padding:10px 8px 14px}
+.side-scroll{flex:1;overflow-y:auto;overflow-anchor:none;padding:12px 8px 18px}
 .sidebar-resizer{position:absolute;top:0;right:0;bottom:0;z-index:6;width:7px;cursor:col-resize;touch-action:none;outline:none}
 .sidebar-resizer::after{content:"";position:absolute;inset:0 0 0 auto;width:1px;background:var(--line);transition:background-color var(--dur-fast) var(--ease-out)}
 .sidebar-resizer:hover::after,.sidebar-resizer:focus-visible::after{background:var(--acc)}
 .sidebar-resizer.dragging::after{width:2px;background:var(--acc)}
 html[data-sidebar-resizing="true"],html[data-sidebar-resizing="true"] *{cursor:col-resize!important;user-select:none}
 html[data-sidebar-resizing="true"] .layout{transition:none}
-.side-sec{margin-bottom:14px}
-.side-title{display:flex;align-items:center;gap:9px;padding:0 10px 6px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.06em;color:var(--t3)}
+/* 分区之间只留 10px:浏览最后一行与下一个标题之间原本有 18px 结构间距 + 标题自身 8px 内边距,
+   视觉上断成两屏 */
+.side-sec{margin-bottom:10px}
+/* 分区标题是导航的骨架:全大写式字距拉开、颜色提到 t2,让它比条目更「响」而不只是更小 */
+.side-title{display:flex;align-items:center;gap:8px;padding:0 6px 6px;font-size:var(--fs-body);font-weight:600;letter-spacing:.02em;color:var(--t2)}
 .side-title-label{display:flex;align-items:center;gap:9px}
 /* 四个分组标题同级:素材管理曾单独抬到 14px/700,把平行导航组切成了两个视觉等级,
    而文件夹树并不比其它三组更重要。它额外需要的只是右侧「新建文件夹」按钮的对齐。 */
 .folder-section-title{flex:1;min-width:0}
 .side-title .ic{width:var(--ic-md);height:var(--ic-md)}
-.side-title-add{display:grid;place-items:center;width:var(--h-xs);height:var(--h-xs);margin-left:auto;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.side-title-add{display:grid;place-items:center;width:20px;height:20px;margin-left:auto;margin-right:-1px;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-title-add:hover{color:var(--t1);background:var(--bg3)}
 .side-title-add .ic{width:var(--ic-sm);height:var(--ic-sm)}
-.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 10px;border-radius:var(--r-md);color:var(--t2);font-size:var(--fs-body);text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;height:var(--h-md);padding:0 9px;border-radius:var(--r-sm);color:var(--t2);font-size:var(--fs-body);font-weight:450;text-align:left;position:relative;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .nav-item:hover{background:var(--bg3);color:var(--t1)}
 /* 点击导航不播放按压缩放/降透明:选中态直接落位 */
 .nav-item:active:not([disabled]),
 .folder-main:active:not([disabled]){transform:none;opacity:1}
-.nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
+/* 选中 = 淡染底 + 左侧 2px 竖条:整行底色留给多选,竖条才是「当前所在」 */
+.nav-item.on{background:var(--acc-tint);color:var(--t1);font-weight:600}
+.nav-item.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:var(--rail);border-radius:var(--r-pill);background:var(--acc)}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
-.nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);color:var(--t3);font-variant-numeric:tabular-nums}
+.nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);font-weight:450;font-family:var(--font-mono);color:var(--t3);font-variant-numeric:tabular-nums}
 /* 计数是浏览文件夹时的决策信息(哪个目录有货),纯 --t3 太弱扫不到;
    但零值不该抢注意力——空目录的 0 保持最弱,有内容的才提到 --t2 */
-.nav-item .cnt.has-items{color:var(--t2);font-weight:500}
+/* 计数只是信息,不加底色:32px 的行里再垫一块灰底,整列就成了按钮 */
+.nav-item .cnt.has-items{color:var(--t2);font-weight:400}
 .nav-item .chev{width:var(--ic-xs);height:var(--ic-xs);color:var(--t3);flex:none;transition:transform var(--dur-press) var(--ease-out)}
 .nav-item.exp .chev{transform:rotate(90deg)}
-.nav-tree{margin-left:14px;padding-left:9px;border-left:1px solid var(--line)}
-.side-add{display:flex;align-items:center;gap:9px;height:var(--h-md);padding:0 10px;margin-top:2px;border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body);width:100%;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.nav-tree{margin-left:14px;padding-left:9px}
+.side-add{display:flex;align-items:center;gap:9px;height:var(--h-md);padding:0 9px;margin-top:2px;border-radius:var(--r-sm);color:var(--t3);font-size:var(--fs-body);width:100%;transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-add:hover{color:var(--t1);background:var(--bg3)}
 .side-add .ic{width:var(--ic-md);height:var(--ic-md)}
 .folder-edit{cursor:text;padding-right:6px}
-.folder-row{cursor:default;padding-right:6px;border-radius:var(--r-xs)}
+.folder-row{cursor:default;padding-right:6px;border-radius:var(--r-sm)}
 .folder-row:not(.on):hover,.folder-row:not(.on):focus-within{background:var(--bg3);color:var(--t1)}
 .folder-row:not(.on):hover .folder-main>.ic,.folder-row:not(.on):focus-within .folder-main>.ic{color:var(--t1)}
 .folder-row,.folder-edit{gap:0}
@@ -103,10 +109,10 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-toggle:focus-visible .ic{color:var(--t1)}
 /* 选中的行(含单击导航选中的那一个):整行底色是「选中」的唯一形态。
    选择器带上 .nav-item 与当前行的 .on 同权重、靠后生效,否则选中态会被 on 的 background:none 吃掉 */
-.nav-item.folder-row.sel,.nav-item.folder-row.sel:hover,.nav-item.folder-row.sel:focus-within{background:var(--acc-soft);color:var(--t1)}
+.nav-item.folder-row.sel,.nav-item.folder-row.sel:hover,.nav-item.folder-row.sel:focus-within{background:var(--acc-tint);color:var(--t1)}
 .folder-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folder-name-edit{min-width:0;flex:1;height:var(--h-xs);margin-left:-4px;padding:0 3px;border:1px solid var(--acc);border-radius:var(--r-xs);background:var(--bg4);color:var(--t1);font:inherit;outline:none}
-.folder-drag-preview{position:fixed;top:-100px;left:-100px;display:flex;align-items:center;gap:6px;max-width:180px;height:var(--h-sm);padding:0 9px;border:1px solid rgba(10,132,255,.45);border-radius:var(--r-sm);background:var(--bg2);box-shadow:0 7px 18px rgba(15,23,42,.18);color:var(--t1);font-size:var(--fs-body);pointer-events:none}
+.folder-drag-preview{position:fixed;top:-100px;left:-100px;display:flex;align-items:center;gap:6px;max-width:180px;height:var(--h-sm);padding:0 10px;border:1px solid var(--acc-line);border-radius:var(--r-pill);background:var(--bg2);box-shadow:0 7px 18px rgba(15,23,42,.18);color:var(--t1);font-size:var(--fs-body);pointer-events:none}
 .folder-drag-preview .ic{width:var(--ic-sm);height:var(--ic-sm);color:var(--acc2);flex:none}
 .folder-drag-preview span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 

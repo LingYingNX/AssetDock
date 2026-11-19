@@ -31,7 +31,7 @@
 /* 溢出裁切:overflow:hidden 在 flex 容器上常被 Chromium 忽略(实际渲染仍然可见,
    实测 1334 窗下面板按钮被画到检查器上),必须配合 flex-shrink:0 之外的显式
    裁切手段。contain:paint 把绘制限定在筛选条盒内,溢出部分真正不渲染。 */
-.filterbar{--fc-h:2.24em;--fc-pad-x:.64em;--fc-gap:.32em;--fc-border:max(1px,.1em);--fc-border-active:max(1px,.15em);--fc-radius:.4em;
+.filterbar{--fc-h:2.24em;--fc-pad-x:.64em;--fc-gap:.32em;--fc-border:max(1px,.1em);--fc-border-active:max(1px,.15em);--fc-radius:.62em;
   display:flex;align-items:center;gap:var(--fc-pad-x);height:max(var(--h-bar),calc(var(--fc-h) + 8px));padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body);overflow:hidden;flex-shrink:0;contain:paint inline-size}
 .filterbar>.btn,.filterbar>.filter-group,.filterbar .cbtn,.filterbar .tb-btn,.filterbar .vr{flex:none}
 .filter-group{display:flex;align-items:center;gap:var(--fc-gap)}
@@ -73,7 +73,7 @@
 .filterbar .btn{height:var(--fc-h);padding:0 var(--fc-pad-x);font-weight:500;line-height:1.25;background:var(--bg2);border:var(--fc-border) solid var(--ctl-line);border-radius:var(--fc-radius);display:inline-flex;align-items:center;gap:var(--fc-gap);color:var(--t2);white-space:nowrap;
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .btn:hover{border-color:var(--ctl-line-hover);color:var(--t1)}
-.filterbar .btn.on{background:var(--bg4);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
+.filterbar .btn.on{background:var(--acc-tint);border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc);color:var(--acc2)}
 /* 菜单展开时按钮必须自己给出反馈。原来 .on 只跟随筛选值(不等于 all),菜单开着按钮却毫无变化,
    用户看不出「这个按钮的菜单正开着」。用独立的 .open,不与筛选值语义混用。 */
 .filterbar .btn.open{background:var(--bg3);border-color:var(--ctl-line-hover);box-shadow:none;color:var(--t1)}
@@ -100,7 +100,7 @@
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cbtn:hover{border-color:var(--line2)}
 .cbtn.on{border-color:var(--acc);box-shadow:inset 0 0 calc(var(--fc-border-active) - var(--fc-border)) var(--acc)}
-.cball{width:1.28em;height:1.28em;border-radius:50%;background:var(--grad-rainbow);border:var(--fc-border) solid rgba(255,255,255,.6);box-shadow:inset 0 1px 1px rgba(255,255,255,.5)}
+.cball{width:1.28em;height:1.28em;display:block}
 .filterbar .tb-btn{width:var(--fc-h);height:var(--fc-h);border-radius:var(--fc-radius);background:var(--bg2);border:var(--fc-border) solid var(--ctl-line);
   transition:background-color var(--dur-hover) var(--ease-out),border-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .filterbar .tb-btn:hover{border-color:var(--ctl-line-hover);color:var(--t1)}
@@ -123,10 +123,10 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 .fresult-label,.fresult-count{flex:none}
 .fresult-label{display:inline-block;min-width:4em}
 /* 5.5ch 容纳当前 15,169;跨到 7 位数量时自然扩槽,不裁数字。 */
-.fresult-count{display:inline-block;min-width:5.5ch;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums;text-align:right}
+.fresult-count{display:inline-block;min-width:5.5ch;font-family:var(--font-mono);font-size:calc(var(--fs-body) - .5px);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums;text-align:right}
 .fresult-unit{flex:none}
 /* 4.9em 实测只有 61.25px,容不下最长的 "1023.9 MB"(62.67px);5.2em 才是真正固定槽。 */
-.fresult-size{flex:none;width:5.2em;font-size:var(--fs-body);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
+.fresult-size{flex:none;width:5.2em;font-family:var(--font-mono);font-size:calc(var(--fs-body) - .5px);font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
 /* 旧响应式 clamp(1600px 起线性收窄)已删:收缩改由 flex-shrink 按实际可用空间进行,
    不再依赖窗口宽(基准 100vw 在检查器打开时是错的)。 */
 @container (max-width:760px){

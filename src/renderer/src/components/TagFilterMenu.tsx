@@ -133,7 +133,7 @@ export function TagFilterMenu({
     if (!el || !trigger) return
     const r = trigger.getBoundingClientRect()
     el.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 438))}px`
-    el.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 258))}px`
+    el.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 300))}px`
   }, [open, mounted, id])
 
   useEffect(() => {

@@ -3,9 +3,9 @@
 .gridwrap.is-empty{display:flex;flex-direction:column}
 
 /* 瀑布流(默认) */
-.grid{column-width:var(--colw);column-gap:12px;padding:20px 22px 32px}
+.grid{column-width:var(--colw);column-gap:14px;padding:20px 24px 36px}
 /* 网格 */
-.grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:12px}
+.grid.v-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colw),1fr));gap:14px}
 .v-grid .thumb{aspect-ratio:4/3}
 /* 列表 */
 .grid.v-list{columns:auto;display:flex;flex-direction:column;gap:1px;padding:0 12px 24px}
@@ -47,9 +47,11 @@
 /* ---------- 卡片 ---------- */
 /* 卡片可聚焦、可点选、可双击打开、可拖拽,却给了默认箭头;而同一张卡上的浮层按钮
    反而是 pointer。光标是最廉价的可点击性线索,这里必须与真实行为一致。 */
-.card{break-inside:avoid;margin-bottom:12px;border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;cursor:pointer;transition:border-color var(--dur-fast) var(--ease-out),outline-color var(--dur-fast) var(--ease-out);position:relative}
+/* 卡片是第三层容器:悬停抬 2px + 投影,不再只换一圈描边色。网格里十几张卡并排,
+   只变边框的话整屏都在闪,却看不出「鼠标停在哪张」 */
+.card{break-inside:avoid;margin-bottom:14px;border:1px solid var(--card-line);border-radius:var(--r-card);overflow:hidden;cursor:pointer;position:relative;box-shadow:0 1px 2px rgba(10,20,40,.05);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
 .v-grid .card{margin-bottom:0}
-.card:hover{border-color:var(--line2)}
+.card:hover{border-color:var(--ctl-line-hover);transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(10,20,40,.35)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
 .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 78%,rgba(0,0,0,.34));pointer-events:none}
 .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
@@ -74,16 +76,16 @@
 .g-slate{background:radial-gradient(circle at 26% 22%,rgba(255,255,255,.28),transparent 40%),linear-gradient(165deg,#B7C0CE 0%,#6E7B90 50%,#2C3444 100%)}
 .g-gold{background:radial-gradient(circle at 66% 30%,#FFF7D6 0%,transparent 40%),linear-gradient(170deg,#F7D774 0%,#D9930D 55%,#6E3B0A 100%)}
 
-.type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:18px;padding:0 7px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:700;letter-spacing:.06em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.type-chip{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:700;letter-spacing:.06em;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 .type-chip .dot{width:6px;height:6px}
-.res-chip{position:absolute;left:8px;top:8px;z-index:2;height:18px;padding:0 7px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
-.dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:1px 6px;border-radius:var(--r-sm);font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.res-chip{position:absolute;left:8px;top:8px;z-index:2;height:20px;padding:0 8px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
+.dur{position:absolute;right:8px;bottom:8px;z-index:2;padding:2px 7px;border-radius:var(--r-pill);font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
 /* 选中环:未选中 1px --line,选中再叠一层 box-shadow 外环就变成视觉 2px 蓝框,
    比 1px 灰框「厚」一档——卡片在选中瞬间像被撑了一下。改成只切 border-color,
    线宽不随状态变化。原来用 box-shadow 是当时的妥协:描边曾走 outline(不参与过渡),
    颜色走 border(180ms 才到),同一状态的两半在两个时间点到齐,才把描边挪到 box-shadow。
    现在两者同属 border-color 过渡,那条理由不再成立。 */
-.card.is-selected{border-color:var(--acc);outline:none}
+.card.is-selected{border-color:var(--acc);outline:none;box-shadow:0 0 0 1px var(--acc),0 10px 24px -12px var(--acc)}
 .card.is-selected:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .marquee{position:fixed;z-index:60;border:1px solid var(--acc);background:rgba(10,132,255,.16);pointer-events:none;transition:opacity 90ms var(--ease-out);@starting-style{opacity:0}}
 .asset-drag-preview{position:fixed;left:-10000px;top:-10000px;z-index:-1;width:44px;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid rgba(255,255,255,.9);border-radius:var(--r-sm);background:rgba(20,40,70,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:var(--fs-cap)}
@@ -115,11 +117,16 @@
 @keyframes turnY{from{transform:rotateX(-24deg) rotateY(0deg)}to{transform:rotateX(-24deg) rotateY(360deg)}}
 
 /* 信息栏放在缩略图下方,不能用绝对定位覆盖画面;高度与 Grid.tsx 的 captionHeight 一致。 */
-figcaption{position:relative;height:24px;padding:0 7px;display:flex;flex-direction:column;justify-content:center;background:rgba(8,12,18,.52);backdrop-filter:blur(9px) saturate(1.1);border-top:1px solid rgba(255,255,255,.1)}
+figcaption{position:relative;height:24px;padding:0 8px;display:flex;flex-direction:column;justify-content:center;background:rgba(8,12,18,.58);backdrop-filter:blur(10px) saturate(1.15);border-top:1px solid rgba(255,255,255,.09)}
 .card.has-meta figcaption{height:38px}
+/* 浅色主题下卡片底色是白的,底部再压一条黑条会切出一道黑带;
+   改成白底 + 深色字,与 Photos 的说明条同一逻辑 */
+:root:not([data-theme="dark"]) figcaption{background:rgba(255,255,255,.94);border-top:1px solid rgba(0,0,0,.06)}
+:root:not([data-theme="dark"]) .name{color:var(--t1);text-shadow:none}
+:root:not([data-theme="dark"]) .meta-row{color:var(--t3);text-shadow:none}
 .lc{display:none}
 .name-row{display:flex;align-items:baseline;gap:4px;min-width:0}
-.name{flex:1;min-width:0;font-size:clamp(10px, calc(var(--colw, 232px) * .052), 12px);line-height:1.18;font-weight:500;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.name{flex:1;min-width:0;font-size:clamp(11px, calc(var(--colw, 232px) * .054), 12.5px);line-height:1.18;font-weight:500;letter-spacing:.01em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
 .meta-row{display:flex;align-items:center;gap:6px;margin-top:1px;font-size:var(--fs-cap);line-height:12px;color:rgba(255,255,255,.72);text-shadow:0 1px 2px rgba(0,0,0,.3);
   /* 列宽下限 170px 时分辨率放不下,锁死单行、溢出裁掉。 */
   white-space:nowrap;overflow:hidden}

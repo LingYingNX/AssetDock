@@ -6,7 +6,7 @@
 .pref-backdrop{position:fixed;left:0;right:0;top:var(--h-title);bottom:0;z-index:100;display:grid;place-items:center;background:rgba(222,239,255,.38);backdrop-filter:blur(12px) saturate(1.2);-webkit-app-region:no-drag;opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
 .pref-backdrop.show{opacity:1}
 /* 尺寸固定,切换分类不再跳变;内容超出时在内容区内滚动 */
-.pref-dialog{width:min(632px,calc(100vw - 48px));height:min(514px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:var(--r-s);box-shadow:0 16px 36px rgba(20,60,120,.28);opacity:0;transform:translateY(6px) scale(.985);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.pref-dialog{width:min(632px,calc(100vw - 48px));height:min(514px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:var(--r-l);box-shadow:0 28px 64px rgba(20,60,120,.32),inset 0 1px 0 var(--card-edge);opacity:0;transform:translateY(6px) scale(.985);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .pref-dialog.show{opacity:1;transform:none}
 .glass-preferences{background:linear-gradient(135deg,var(--sheen-1),var(--sheen-2)),var(--surface);backdrop-filter:blur(28px) saturate(1.55)}
 .pref-header{height:48px;padding:0 16px 0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
@@ -26,12 +26,12 @@
    同一窗口里两处导航的「选中」看起来是两种状态。
    与主栏一致,伪元素常驻、只切换 scaleX,否则切换时是凭空出现而非展开。 */
 .pref-nav-item::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--acc);transform:scaleX(0);transform-origin:left center;transition:transform var(--dur-press) var(--ease-out)}
-.pref-nav-item.on{background:var(--acc-soft);color:var(--acc2);font-weight:600}
+.pref-nav-item.on{background:var(--acc-tint);color:var(--t1);font-weight:600}
 .pref-nav-item.on::before{transform:scaleX(1)}
 /* min-height:0 是滚动容器在 flex 布局里生效的前提;默认 auto 会按内容撑高,滚动条不出现 */
 .pref-content{min-width:0;min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:20px 24px 16px;display:flex;flex-direction:column;background:var(--bg3)}
 .pref-section{margin-bottom:22px}
-.pref-section h2{margin:0 0 12px;font-size:var(--fs-sub);font-weight:600;color:var(--t1);text-wrap:balance}
+.pref-section h2{margin:0 0 12px;font-size:var(--fs-title);font-weight:600;letter-spacing:-.005em;color:var(--t1);text-wrap:balance}
 .pref-options{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .pref-row{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
 .pref-choice{display:inline-flex;align-items:center;gap:8px;color:var(--t2);font-size:var(--fs-sub);cursor:pointer}
@@ -74,15 +74,15 @@
 .pref-save:hover{background:var(--acc)}
 .pref-save:disabled{opacity:.55;cursor:default}
 .pref-create-backdrop{position:absolute;inset:0;z-index:1;display:grid;place-items:center;background:rgba(215,234,252,.34);backdrop-filter:blur(4px)}
-.pref-create-dialog{width:min(440px,calc(100vw - 48px));padding:22px 24px;border:1px solid var(--line2);border-radius:var(--r-s);box-shadow:0 16px 36px rgba(20,60,120,.28)}
+.pref-create-dialog{width:min(440px,calc(100vw - 48px));padding:22px 24px;border:1px solid var(--line2);border-radius:var(--r-l);box-shadow:0 28px 64px rgba(20,60,120,.32)}
 .pref-create-header{margin-bottom:18px;color:var(--t1);font-size:var(--fs-title);font-weight:600}
 .pref-field{display:flex;flex-direction:column;gap:7px;margin-top:14px;color:var(--t2);font-size:var(--fs-sub)}
-.pref-field input{width:100%;height:34px;padding:0 10px;border:1px solid var(--line2);border-radius:var(--r-xs);outline:none;background:var(--bg4);color:var(--t1);font:inherit}
+.pref-field input{width:100%;height:34px;padding:0 10px;border:1px solid var(--field-line);border-radius:var(--r-sm);outline:none;background:var(--field-bg);color:var(--t1);font:inherit}
 .pref-field input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(60,151,232,.15)}
 .pref-field input[readonly]{color:var(--t2);cursor:pointer}
 .pref-field-error{color:var(--danger);font-size:var(--fs-cap)}
 .pref-path-picker{display:flex;gap:8px}
-.pref-path-picker input{min-width:0;flex:1;height:34px;padding:0 10px;border:1px solid var(--line2);border-radius:var(--r-xs);outline:none;background:var(--bg4);color:var(--t1);font:inherit}
+.pref-path-picker input{min-width:0;flex:1;height:34px;padding:0 10px;border:1px solid var(--field-line);border-radius:var(--r-sm);outline:none;background:var(--field-bg);color:var(--t1);font:inherit}
 .pref-path-picker input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(60,151,232,.15)}
 .pref-path-picker button{height:34px;padding:0 13px;border:1px solid var(--line2);border-radius:var(--r-xs);background:var(--bg4);color:var(--t2);font-size:var(--fs-sub);white-space:nowrap}
 .pref-path-picker button:hover{background:var(--bg4);color:var(--t1)}

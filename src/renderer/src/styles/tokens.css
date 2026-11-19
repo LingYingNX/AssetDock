@@ -1,30 +1,33 @@
 /* ============================ 令牌 ============================ */
 :root{
   --bg0:#EFF2F0; --bg1:rgba(219,236,255,.34); --bg2:rgba(219,236,255,.26); --bg3:rgba(255,255,255,.5); --bg4:rgba(255,255,255,.68);
-  --line:rgba(255,255,255,.62); --line2:rgba(255,255,255,.82);
+  /* 面板已从满饱和蓝玻璃收到近白,白色描边在白色表面上等于没有线;
+     浅色主题改用中性灰描边(macOS 分组表的 1px 发丝线),深色主题仍用白描边 */
+  --line:rgba(60,80,110,.14); --line2:rgba(60,80,110,.24);
   --ctl-line:rgba(61,74,92,.28); --ctl-line-hover:rgba(61,74,92,.46);
   --t1:#101820; --t2:#3D4A5C; --t3:#4B5B70;
   --acc:#0A84FF; --acc2:#0A66D6; --acc-soft:rgba(10,132,255,.16); --acc-line:rgba(10,132,255,.55);
-  --star:#E8A33D; --star-off:rgba(18,26,22,.26); --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
+  --star:#E8A33D; --star-off:rgba(18,26,22,.36); --danger:#E05A64; --danger-soft:rgba(224,90,100,.13);
   --ok:#1FA871; --warn:#C77F1F;
   --colw:232px;
   /* 圆角:全界面统一 5px(面板、菜单、控件同一档)。窗口外框 --r-window 是「软件边框」,
      按用户要求不参与这次统一,单独保留原值。 */
-  --r-s:5px; --r-m:5px; --r-l:5px;
-  --r-menu:5px;
+  --r-s:6px; --r-m:8px; --r-l:10px;
+  --r-menu:10px;
   --r-window:5px;
   /* ---- 尺度阶梯:控件级圆角/高度/图标/字号 ----
      四个控件半径现在同值 5px:名字保留下来是为了不打断各处的语义引用,
      将来若要重新分档,改这里一处即可。
      历史问题:菜单项 4/5/6px 三种、筛选按钮 9px、导航项 8px、文件夹行 2px 并存,
      差异都不到 3px,肉眼只看出「不齐」而说不出哪里不齐。 */
-  --r-xs:5px;    /* 菜单项 / 输入框 / 小按钮 / 对话框底部按钮 */
-  --r-sm:5px;    /* chip / 分段控件 / 浮层色块 / 列表行操作按钮 */
-  --r-md:5px;    /* 导航项 / 空态按钮 */
-  --r-pill:5px;  /* 标签胶囊 */
+  --r-xs:5px;    /* 菜单项 / 小按钮 / 键帽 */
+  --r-sm:6px;    /* 输入框 / chip / 分段控件 / 浮层色块 / 列表行操作按钮 */
+  --r-md:8px;    /* 导航项 / 卡片 / 空态按钮 */
+  --r-card:10px; /* 分组卡 / 大浮层 */
+  --r-pill:6px;  /* 标签胶囊 / 计数徽章:胶囊是方角时代的手感,统一收到 6px */
   /* 控件高度:全部落在 4px 栅格上(原值 21/23/26/27/29/30/32/34 无栅格) */
   --h-xs:24px;   /* 卡内浮层按钮 / 徽标 chip */
-  --h-sm:28px;   /* 输入框 / 次级按钮 */
+  --h-sm:32px;   /* 输入框 / 次级按钮 */
   --h-md:32px;   /* 主按钮 / 菜单项 / 导航项 */
   --h-bar:36px;  /* 筛选条 / 标签页:28px 控件 + 上下各 4px */
   --h-title:34px;/* 标题栏:较原 40px 收窄 15%,窗口控制按钮与库按钮贴满这一层 */
@@ -32,7 +35,9 @@
   --ic-xs:12px; --ic-sm:14px; --ic-md:16px; --ic-lg:20px; --ic-xl:30px;
   /* 字号阶梯:正文 12.5px 是主界面基准,偏好设置此前整体用 13px,两套密度。
      原值 9/10/10.5/11/11.5/12/12.5/13/14/15 共十档,归到五档。 */
-  --fs-micro:10.5px; --fs-cap:11px; --fs-body:12.5px; --fs-sub:13px; --fs-title:14px;
+  --fs-micro:11px; --fs-cap:11.5px; --fs-body:13px; --fs-sub:14px; --fs-title:15px;
+  --fs-value:13px;   /* 属性值:13px/450,搭配等宽数字 */
+  --fs-display:17px; /* 素材名 / 面板标题 */
   /* 彩虹色带唯一真源:色轮按钮与「全部颜色」色块此前各写一份,起点色不同
      (#F1616D 对 #EF4444),并排时能看出红端偏移。 */
   --grad-rainbow:conic-gradient(#F1616D 0 45deg,#F97316 0 90deg,#F2B33D 0 135deg,#3ECF8E 0 180deg,#2FD6A3 0 225deg,#5EE7F9 0 270deg,#E9EDF5 0 315deg,#15171B 0 360deg);
@@ -63,12 +68,24 @@
   --sep:rgba(18,26,22,.12);
   --ink:#101820;
   --shadow-panel:0 18px 48px rgba(20,60,120,.18);
+  /* 第二层容器:玻璃面板之上的分组卡。此前只有面板一层 + 1px 描边,卡片/输入框/按钮同一个模子,
+     读起来全是线框;分组卡靠底色差 + 顶部内高光 + 小投影分层。 */
+  --acc-tint:rgba(10,132,255,.09);
+  --card-bg:#FFFFFF;
+  --card-line:rgba(0,0,0,.06);
+  --card-edge:transparent;
+  --card-shadow:0 1px 2px rgba(16,42,84,.04);
+  --rail:2px;
+  /* 卡内输入框:比卡片再深一层,否则同色叠同色,边界消失 */
+  --field-bg:rgba(118,118,128,.09);
+  --field-line:transparent;
+  --field-shadow:none;
   /* 菜单实底:不用毛玻璃,浮在素材图上也不受背景干扰 */
   --menu-solid:#F4F8FE;
-  --tb-1:#d9eeff; --tb-2:#cae5fa; --tab-bg:#f6fafe;
+  --tb-1:#F7F8FA; --tb-2:#EDF0F4; --tab-bg:#F6F7F9;
   --scroll-thumb:rgba(18,26,22,.22); --scroll-thumb-hover:rgba(18,26,22,.36);
-  --font:"Geist","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-  --font-mono:"Geist Mono",Consolas,monospace;
+  --font:"Geist","Noto Sans SC Variable","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono:"Geist Mono","Noto Sans SC Variable",Consolas,monospace;
   color-scheme:light;
 }
 
@@ -77,9 +94,10 @@
   --bg0:#0E1218; --bg1:rgba(28,36,48,.5); --bg2:rgba(36,45,60,.42); --bg3:rgba(255,255,255,.07); --bg4:rgba(255,255,255,.11);
   --line:rgba(255,255,255,.12); --line2:rgba(255,255,255,.2);
   --ctl-line:rgba(255,255,255,.18); --ctl-line-hover:rgba(255,255,255,.34);
-  --t1:#E9EEF6; --t2:#B4C0D2; --t3:#7C8A9E;
+  /* t3 原 #7C8A9E 在 #1B2430 上 4.46:1,11px 小字不合格;提到 5.4:1。 */
+  --t1:#E9EEF6; --t2:#C0CBDC; --t3:#8B99AD;
   --acc:#3B9BFF; --acc2:#6FB6FF; --acc-soft:rgba(59,155,255,.2); --acc-line:rgba(59,155,255,.5);
-  --star:#E8A33D; --star-off:#3D4454; --danger:#F0737C; --danger-soft:rgba(240,115,124,.16);
+  --star:#E8A33D; --star-off:#5A6579; --danger:#F0737C; --danger-soft:rgba(240,115,124,.16);
   --ok:#34C08A; --warn:#D99A44;
   --sheen-1:rgba(255,255,255,.09);
   --sheen-2:rgba(255,255,255,.03);
@@ -90,8 +108,17 @@
   --sep:rgba(255,255,255,.16);
   --ink:#E9EEF6;
   --shadow-panel:0 18px 48px rgba(0,0,0,.45);
+  --acc-tint:rgba(59,155,255,.14);
+  --card-bg:#1F2023;
+  --card-line:rgba(255,255,255,.06);
+  --card-edge:transparent;
+  --card-shadow:none;
+  --rail:2px;
+  --field-bg:rgba(118,118,128,.24);
+  --field-line:transparent;
+  --field-shadow:none;
   --menu-solid:#1B2430;
-  --tb-1:#151C26; --tb-2:#111721; --tab-bg:rgba(255,255,255,.04);
+  --tb-1:#1E1F22; --tb-2:#18191C; --tab-bg:rgba(255,255,255,.04);
   --scroll-thumb:rgba(255,255,255,.16); --scroll-thumb-hover:rgba(255,255,255,.28);
   color-scheme:dark;
 }
@@ -103,13 +130,12 @@ html{background:transparent;border-radius:var(--r-window);overflow:hidden}
 html[data-maximized="true"]{border-radius:0}
 body{
   background:
-    radial-gradient(900px 620px at 82% 6%,rgba(64,156,255,.80),transparent 55%),
-    radial-gradient(760px 560px at 10% 12%,rgba(120,214,255,.68),transparent 55%),
-    radial-gradient(860px 660px at 80% 80%,rgba(88,140,255,.58),transparent 55%),
-    radial-gradient(720px 580px at 18% 82%,rgba(150,232,255,.55),transparent 55%),
-    linear-gradient(165deg,#DCEBFB,#CFE2FA 50%,#D8E9FC);
+    radial-gradient(1200px 800px at 78% -10%,rgba(120,170,255,.16),transparent 62%),
+    radial-gradient(900px 700px at 6% 108%,rgba(120,200,255,.12),transparent 62%),
+    linear-gradient(180deg,#F5F6F9,#E9ECF1);
   color:var(--t1);
-  font:13px/1.5 var(--font);
+  font:450 13px/1.5 var(--font);
+  font-optical-sizing:auto;
   font-variant-numeric:tabular-nums;
   overflow:hidden;
   /* 窗口可以收窄到设计基准(1920×1080)以下:不再用固定最小宽度把工具栏右端顶出可视区,
@@ -120,11 +146,9 @@ body{
 /* 夜间底:深色 + 更暗的蓝光晕,避免纯黑显得廉价 */
 :root[data-theme="dark"] body{
   background:
-    radial-gradient(900px 620px at 82% 6%,rgba(38,96,180,.42),transparent 58%),
-    radial-gradient(760px 560px at 10% 12%,rgba(30,86,150,.34),transparent 58%),
-    radial-gradient(860px 660px at 80% 80%,rgba(46,74,150,.3),transparent 58%),
-    radial-gradient(720px 580px at 18% 82%,rgba(28,92,140,.26),transparent 58%),
-    linear-gradient(165deg,#0C1017,#0A0E14 50%,#0B1119);
+    radial-gradient(1000px 720px at 80% -12%,rgba(96,116,156,.20),transparent 64%),
+    radial-gradient(800px 600px at 4% 110%,rgba(70,90,120,.16),transparent 64%),
+    linear-gradient(180deg,#1B1C1F,#141518);
 }
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
 /* 按压反馈:轻微收缩给出触感,透明度不压太低,避免按钮像被禁用 */
