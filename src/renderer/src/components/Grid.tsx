@@ -285,7 +285,7 @@ function ListRows({
     )
   }
   return (
-    <div className="v-list" style={{ position: 'relative', padding: '0 12px 24px' }}>
+    <div className="v-list" style={{ position: 'relative', padding: '0 0 24px' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 5 }}>{head}</div>
       <div style={{ position: 'relative', height: rowV.getTotalSize() }}>
         {rowV.getVirtualItems().map((vi) => (

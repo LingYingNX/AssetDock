@@ -55,9 +55,8 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 /* 点击导航不播放按压缩放/降透明:选中态直接落位 */
 .nav-item:active:not([disabled]),
 .folder-main:active:not([disabled]){transform:none;opacity:1}
-/* 选中 = 淡染底 + 左侧 2px 竖条:整行底色留给多选,竖条才是「当前所在」 */
+/* 选中 = 淡染底:导航项与文件夹行共用同一套高亮,不画左侧竖条 */
 .nav-item.on{background:var(--acc-tint);color:var(--t1);font-weight:600}
-.nav-item.on::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:var(--rail);border-radius:var(--r-pill);background:var(--acc)}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
 .nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);font-weight:450;font-family:var(--font-mono);color:var(--t3);font-variant-numeric:tabular-nums}
@@ -78,9 +77,9 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-row,.folder-edit{gap:0}
 .folder-row[draggable="true"]{cursor:grab}
 .folder-row[draggable="true"]:active{cursor:grabbing}
-/* 当前文件夹不再靠「同样的整行底色」表示,改用和系统视图一致的左侧竖条:
-   底色留给多选,否则 Ctrl 取消/加选当前文件夹时整行毫无变化,看着像点了没反应。 */
-.nav-item.folder-row.on{background:none;color:var(--acc2)}
+/* 当前文件夹用整行浅蓝底表示,和点选后的选中态一致:启动时 folderSelection 还是空的,
+   只有 .on 能把高亮撑起来;左侧竖条不再画,避免行首多一条粗线。 */
+.nav-item.folder-row.on{background:var(--acc-tint);color:var(--t1)}
 .nav-item.folder-row.on,.nav-item.folder-edit{font-weight:400}
 .folder-edit{border-radius:var(--r-xs)}
 .folder-row.drop-target{background:var(--acc-soft);outline:1.5px solid var(--acc);outline-offset:-1.5px;color:var(--acc2);transition:none}

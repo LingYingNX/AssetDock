@@ -41,6 +41,12 @@ function dragPreview(count: number): HTMLDivElement {
 
 export function Card({ a, view, selectionOrder }: { a: Asset; view: string; selectionOrder?: string[] }): React.JSX.Element {
   const selected = useUI((s) => s.selectedSet.has(a.id))
+  /* 选中块里共享边只由下面那行画,避免上下两圈描边在接缝叠粗 */
+  const selEnd = useUI((s) => {
+    const order = selectionOrder
+    const i = order ? order.indexOf(a.id) : -1
+    return !order || i < 0 || i === order.length - 1 || !s.selectedSet.has(order[i + 1])
+  })
   const clickCard = useUI((s) => s.clickCard)
   const selectOnly = useUI((s) => s.selectOnly)
   const openLightbox = useUI((s) => s.openLightbox)
@@ -73,6 +79,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
     a.type === 'video' ? 'video' : '',
     a.type === 'model' ? 'c3d' : '',
     selected ? 'is-selected' : '',
+    selected && selEnd ? 'sel-end' : '',
     `glass-card`
   ]
     .filter(Boolean)
