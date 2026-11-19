@@ -68,7 +68,7 @@
     "directories": { "output": "artifacts/dist" },
     "files": ["out/**/*", "package.json"],
     "asarUnpack": ["**/*.node", "**/node_modules/sharp/**", "**/node_modules/@napi-rs/**", "**/node_modules/ffmpeg-static/**"],
-    "win": { "target": ["nsis"], "artifactName": "MediaHub-${version}-Setup.${ext}" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false, "shortcutName": "MediaHub" }
+    "win": { "target": ["nsis"], "artifactName": "MediaHub-${version}-Setup.${ext}", "icon": "build/icon.png" },
+    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "MediaHub", "uninstallDisplayName": "MediaHub 素材管理器", "installerIcon": "build/icon.ico", "uninstallerIcon": "build/icon.ico", "installerHeaderIcon": "build/icon.ico", "installerHeader": "build/installerHeader.bmp", "installerSidebar": "build/installerSidebar.bmp", "uninstallerSidebar": "build/installerSidebar.bmp" }
   }
 }
