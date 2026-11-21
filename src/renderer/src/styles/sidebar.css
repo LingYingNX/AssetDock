@@ -39,7 +39,24 @@ html[data-sidebar-resizing="true"],html[data-sidebar-resizing="true"] *{cursor:c
 html[data-sidebar-resizing="true"] .layout{transition:none}
 /* 分区之间只留 10px:浏览最后一行与下一个标题之间原本有 18px 结构间距 + 标题自身 8px 内边距,
    视觉上断成两屏 */
-.side-sec{margin-bottom:10px}
+.side-sec{margin-bottom:10px;
+  /* 文件夹树的几何单一来源:缩进/步进/箭头槽/图标间距/行高/导引线参数。
+     JSX 的行内 paddingLeft 与这里的导引线算式引用同一组变量,改一处即整体跟随。 */
+  --folder-indent:10px;
+  --folder-step:16px;
+  --folder-row-h:var(--h-md);
+  --folder-arrow-slot:16px;
+  --folder-icon-gap:9px;
+  /* 箭头字形中心相对行内容起点的偏移:24px 命中盒居中(8px)再减去 translateX(-2px) */
+  --folder-guide-offset:6px;
+  /* 2px 整数宽/高,横竖同粗,配实色 --guide-line 才不会被抗锯齿拆成半透明两档 */
+  --folder-guide-w:2px;
+  /* 竖线起点在父级行中线下 12px:箭头字形半径约 9.6px,留 2.4px 不贴字 */
+  --folder-guide-gap:12px;
+  /* 横向折角在文件夹图标前留的空隙,与竖线起点间距互不影响 */
+  --folder-guide-inset:3px;
+  /* 有子级的节点:折角只画到子级箭头前沿 */
+  --folder-guide-stub:5px}
 /* 浏览组与素材管理之间加分割:两组职责不同,标题再提一档也压不住没有边界 */
 .side-sec + .side-sec{margin-top:2px;padding-top:10px;border-top:1px solid var(--line)}
 /* 分区标题是导航的骨架:全大写式字距拉开、颜色提到 t2,让它比条目更「响」而不只是更小 */
@@ -81,6 +98,21 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-row,.folder-edit{gap:0}
 .folder-row[draggable="true"]{cursor:grab}
 .folder-row[draggable="true"]:active{cursor:grabbing}
+/* 文件夹树导引线:竖线锚在父级展开箭头的字形中心(缩进 + (深度-1) * 步进 + 6px),
+   自父级中线下方起,中间项一直画到子树底部交给下一个同级,末项只收在自己行中线。
+   横向折角只出现在自己的行上,孙级行拿不到祖级的折角。
+   行本身是 position:relative,再抬 z-index 让行底色压住线,悬停/选中时线不浮在色块上。 */
+.folder-children > .folder-node{position:relative}
+.folder-children > .folder-node::before{content:"";position:absolute;pointer-events:none;left:calc(var(--folder-indent) + (var(--node-depth,1) - 1) * var(--folder-step) + var(--folder-guide-offset) - var(--folder-guide-w) / 2);top:0;bottom:0;width:var(--folder-guide-w);background:var(--guide-line)}
+/* 首项向上接到父级行中线下方,向下穿过自己的子树交给后续同级;末项只画到自己行中线,不拖进子树;独子两者兼顾 */
+.folder-children > .folder-node:first-child::before{top:calc(-0.5 * var(--folder-row-h) + var(--folder-guide-gap))}
+.folder-children > .folder-node:last-child::before{bottom:auto;height:calc(var(--folder-row-h) / 2)}
+.folder-children > .folder-node:only-child::before{top:calc(-0.5 * var(--folder-row-h) + var(--folder-guide-gap));bottom:auto;height:calc(var(--folder-row-h) - var(--folder-guide-gap))}
+/* 横向折角:叶子画到文件夹图标前 3px(图标紧接箭头槽,不含 .folder-main 的图标-文字间距);
+   有子级的节点只画到自己的箭头上沿,不压住箭头字形 */
+.folder-children > .folder-node::after{content:"";position:absolute;pointer-events:none;left:calc(var(--folder-indent) + (var(--node-depth,1) - 1) * var(--folder-step) + var(--folder-guide-offset) - var(--folder-guide-w) / 2);top:calc(0.5 * var(--folder-row-h) - var(--folder-guide-w) / 2);width:calc(var(--folder-guide-stub) + var(--folder-guide-w) / 2);height:var(--folder-guide-w);background:var(--guide-line)}
+.folder-children > .folder-node.leaf::after{width:calc(var(--folder-step) + var(--folder-arrow-slot) - var(--folder-guide-inset) - var(--folder-guide-offset) + var(--folder-guide-w) / 2)}
+.nav-item.folder-row,.nav-item.folder-edit{z-index:1;height:var(--folder-row-h)}
 /* 当前文件夹用整行浅蓝底表示,和点选后的选中态一致:启动时 folderSelection 还是空的,
    只有 .on 能把高亮撑起来;左侧竖条不再画,避免行首多一条粗线。 */
 .nav-item.folder-row.on{background:var(--acc-tint);color:var(--t1)}
@@ -96,15 +128,15 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .folder-root-drop.folder-drop-after::after{content:"";position:absolute;left:7px;right:5px;top:-1px;height:2px;border-radius:1px;background:var(--acc);pointer-events:none}
 /* 每行固定为 16px 箭头槽 + 文件夹图标 + 文字。叶子与编辑态用同宽占位,
    层级步进同为 16px,让子级箭头与父级文件夹图标同轴,整棵树不再逐层右漂。 */
-.folder-toggle,.folder-arrow-spacer{flex:none;height:var(--h-md)}
-.folder-toggle,.folder-arrow-spacer{width:16px}
+.folder-toggle,.folder-arrow-spacer{flex:none;height:var(--folder-row-h)}
+.folder-toggle,.folder-arrow-spacer{width:var(--folder-arrow-slot)}
 /* 命中区左右各外扩 4px,但净占位仍是 16px;负外边距避免箭头推走文件夹图标。 */
-.folder-toggle{width:24px;margin:0 -4px;display:grid;place-items:center;border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
+.folder-toggle{width:calc(var(--folder-arrow-slot) + 8px);margin:0 -4px;display:grid;place-items:center;border:0;border-radius:var(--r-xs);background:none;color:var(--t3);cursor:pointer;transition:color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .folder-toggle:hover{background:none;color:var(--t1)}
 /* 展开箭头比同排图标大 20%、描边粗 15%;只改这只箭头,不放大整行图标。 */
 .folder-toggle .ic{width:19.2px;height:19.2px;stroke-width:1.955;transform:translateX(-2px);transition:transform var(--dur-press) var(--ease-out)}
 .folder-toggle.open .ic{transform:translateX(-2px) rotate(90deg)}
-.folder-main{display:flex;align-items:center;gap:9px;min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
+.folder-main{display:flex;align-items:center;gap:var(--folder-icon-gap);min-width:0;flex:1;height:100%;background:none;border:0;color:inherit;font:inherit;text-align:left}
 .folder-main:hover{background:none}
 .folder-row:focus-visible{outline:none}
 /* 高亮只有一整行这一种形态:焦点不另画一层内嵌底色,键盘 Tab 由整行的 :focus-within 兜住 */

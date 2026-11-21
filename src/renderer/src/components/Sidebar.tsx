@@ -189,7 +189,12 @@ function DirTree({
         const folderIcon = style?.icon || 'folder'
         const folderIconStyle = style?.color ? { color: style.color } : undefined
         return (
-          <div key={n.path}>
+          <div
+            key={n.path}
+            className={`folder-node${n.children.length > 0 ? ' has-children' : ' leaf'}`}
+            data-depth={depth}
+            style={{ '--node-depth': depth } as React.CSSProperties}
+          >
             {editingPath === n.path ? (
               <div className="nav-item on folder-edit" style={{ paddingLeft: `calc(var(--folder-indent, 10px) + ${depth} * var(--folder-step, 16px))` }}>
                 <span className="folder-arrow-spacer" aria-hidden="true" />
@@ -287,7 +292,8 @@ function DirTree({
               </div>
             )}
             {n.children.length > 0 && !collapsed && (
-              <DirTree
+              <div className="folder-children">
+                <DirTree
                 nodes={n.children}
                 depth={depth + 1}
                 nav={nav}
@@ -311,7 +317,8 @@ function DirTree({
                 onFolderDragLeave={onFolderDragLeave}
                 onFolderDrop={onFolderDrop}
                 onFolderContextMenu={onFolderContextMenu}
-              />
+                />
+              </div>
             )}
           </div>
         )
