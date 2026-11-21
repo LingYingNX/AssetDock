@@ -9,10 +9,7 @@ export function Inspector(): React.JSX.Element {
   const assets = useUI((s) => s.assets)
   const activeId = useUI((s) => s.activeId)
   const firstSelectedId = useUI((s) => s.selectedIds[0] ?? null)
-  const renaming = useUI((s) => s.renaming)
-  const setRenaming = useUI((s) => s.setRenaming)
   const startRenaming = useUI((s) => s.startRenaming)
-  const renameAsset = useUI((s) => s.renameAsset)
   const setRating = useUI((s) => s.setRating)
   const addTag = useUI((s) => s.addTag)
   const removeTag = useUI((s) => s.removeTag)
@@ -59,38 +56,16 @@ export function Inspector(): React.JSX.Element {
             三块连读像一段没有层次的清单。 */}
         <div className="insp-sec insp-id">
           <div className="fname">
-            {renaming && activeId === a.id ? (
-              <input
-                defaultValue={a.name}
-                name="asset-name"
-                autoComplete="off"
-                spellCheck={false}
-                ref={(el) => {
-                  // 像 Windows 那样进入即全选,直接输入就能替换整个名字
-                  if (!el) return
-                  el.focus()
-                  el.select()
-                }}
-                onBlur={(e) => renameAsset(a.id, e.target.value.trim() || a.name)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') renameAsset(a.id, (e.target as HTMLInputElement).value.trim() || a.name)
-                  if (e.key === 'Escape') setRenaming(false)
-                }}
-              />
-            ) : (
-              <b title={a.name}>{a.name}</b>
-            )}
-            {!(renaming && activeId === a.id) && (
-              <button
-                className="rename-btn"
-                type="button"
-                title="重命名"
-                aria-label="重命名"
-                onClick={() => startRenaming(a.id)}
-              >
-                <Icon name="edit" />
-              </button>
-            )}
+            <b title={a.name}>{a.name}</b>
+            <button
+              className="rename-btn"
+              type="button"
+              title="重命名"
+              aria-label="重命名"
+              onClick={() => startRenaming(a.id)}
+            >
+              <Icon name="edit" />
+            </button>
           </div>
           {/* 评分并进标题卡:单独一张卡只放五颗星,占掉一整行高度却几乎不承载信息 */}
           <div className="insp-rate">

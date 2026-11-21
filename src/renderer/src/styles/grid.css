@@ -15,7 +15,7 @@
 .v-list .lhead{display:grid;margin:0;padding:0 14px}
 /* 列表行只用一圈 1px 内描边:border 加外圈光和悬浮抬升会在半像素行上叠成上厚下薄 */
 .v-list .card{margin:0;padding:6px 14px;border:0;border-radius:0;box-shadow:none}
-.v-list .card:hover{transform:none;background:var(--bg2);box-shadow:none}
+.v-list .card:hover{background:var(--bg2);box-shadow:none}
 /* 焦点只用 1px 内描边:全局 :focus-visible 的 2px 外框会跟蓝框叠成两圈 */
 .v-list .card:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--acc-line)}
 .v-list .card.is-selected:focus-visible{outline:none}
@@ -23,7 +23,7 @@
 .v-list .card.is-selected{box-shadow:inset 1.5px 0 0 var(--acc),inset -1.5px 0 0 var(--acc),inset 0 1.5px 0 var(--acc)}
 .v-list .card.is-selected.sel-end{box-shadow:inset 1.5px 0 0 var(--acc),inset -1.5px 0 0 var(--acc),inset 0 1.5px 0 var(--acc),inset 0 -1.5px 0 var(--acc)}
 .v-list .thumb{width:96px;height:58px;aspect-ratio:auto;border-radius:var(--r-sm);flex:none}
-.v-list .thumb .res-chip,.v-list .thumb .fmt-chip,.v-list .thumb .size-chip,.v-list .thumb .gif-live,.v-list .thumb .dur,.v-list .play-big,.v-list .orb{display:none}
+.v-list .thumb .res-chip,.v-list .thumb .fmt-chip,.v-list .thumb .size-chip,.v-list .thumb .gif-live,.v-list .thumb .dur,.v-list .zoom-dot,.v-list .play-big,.v-list .orb{display:none}
 /* 同一批立方体不该有两种转速:基准 24s,列表视图只改尺寸 */
 .v-list .thumb .cube3d{--cs:30px}
 .v-list figcaption{display:contents;position:static;padding:0;border:0;background:none;backdrop-filter:none}
@@ -55,13 +55,12 @@
 /* ---------- 卡片 ---------- */
 /* 卡片可聚焦、可点选、可双击打开、可拖拽,却给了默认箭头;而同一张卡上的浮层按钮
    反而是 pointer。光标是最廉价的可点击性线索,这里必须与真实行为一致。 */
-/* 卡片是第三层容器:悬停抬 2px + 投影,不再只换一圈描边色。网格里十几张卡并排,
+/* 卡片是第三层容器:悬停只换描边 + 投影,不再只换一圈描边色。网格里十几张卡并排,
    只变边框的话整屏都在闪,却看不出「鼠标停在哪张」 */
-.card{break-inside:avoid;margin-bottom:10px;border:1px solid var(--card-line);border-radius:4px;overflow:hidden;cursor:pointer;position:relative;box-shadow:0 1px 2px rgba(10,20,40,.05);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
+.card{break-inside:avoid;margin-bottom:10px;border:1px solid var(--card-line);border-radius:4px;overflow:hidden;cursor:pointer;position:relative;box-shadow:0 1px 2px rgba(10,20,40,.05);transition:border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-base) var(--ease-out)}
 .v-grid .card{margin-bottom:0}
-.card:hover{border-color:var(--ctl-line-hover);transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(10,20,40,.35)}
+.card:hover{border-color:var(--ctl-line-hover);box-shadow:0 6px 16px -8px rgba(10,20,40,.35)}
 .thumb{position:relative;width:100%;aspect-ratio:var(--ar,4/3);background:var(--bg3);overflow:hidden}
-.thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 78%,rgba(0,0,0,.34));pointer-events:none}
 .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
 .thumb img.loaded{opacity:1}
 /* 超宽/超高素材超出 [1/2, 21/9] 容器比例时,cover 会裁掉长边内容。
@@ -84,19 +83,19 @@
 .g-slate{background:radial-gradient(circle at 26% 22%,rgba(255,255,255,.28),transparent 40%),linear-gradient(165deg,#B7C0CE 0%,#6E7B90 50%,#2C3444 100%)}
 .g-gold{background:radial-gradient(circle at 66% 30%,#FFF7D6 0%,transparent 40%),linear-gradient(170deg,#F7D774 0%,#D9930D 55%,#6E3B0A 100%)}
 
-.res-chip{position:absolute;left:5px;top:5px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
-/* 图片此前只有左上分辨率,分不出 GIF / PNG / JPG;格式挂右上,分辨率留左上 */
-.fmt-chip{position:absolute;right:5px;top:5px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;letter-spacing:.04em;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
+.res-chip{position:absolute;left:3px;bottom:3px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:700;letter-spacing:.04em;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+/* 图片此前只有左上分辨率,分不出 GIF / PNG / JPG;格式挂右上,分辨率挂左下 */
+.fmt-chip{position:absolute;right:3px;top:3px;z-index:2;height:20px;padding:0 8px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;letter-spacing:.04em;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 /* 悬停时盖上的原图:GIF 只有原图会动,缩略图是静态单帧 */
 .gif-live{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;pointer-events:none}
 .thumb.uw .gif-live,.thumb.uh .gif-live{object-fit:contain}
-.dur{position:absolute;right:5px;bottom:5px;z-index:2;padding:2px 7px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;color:#fff;background:rgba(10,12,16,.62);backdrop-filter:blur(4px)}
+.dur{position:absolute;right:3px;bottom:3px;z-index:2;padding:2px 7px;border-radius:4px;font-size:var(--fs-micro);font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 /* 选中环:未选中 1px --line,选中再叠一层 box-shadow 外环就变成视觉 2px 蓝框,
    比 1px 灰框「厚」一档——卡片在选中瞬间像被撑了一下。改成只切 border-color,
    线宽不随状态变化。原来用 box-shadow 是当时的妥协:描边曾走 outline(不参与过渡),
    颜色走 border(180ms 才到),同一状态的两半在两个时间点到齐,才把描边挪到 box-shadow。
    现在两者同属 border-color 过渡,那条理由不再成立。 */
-.card.is-selected{border-color:var(--acc);outline:none;box-shadow:0 0 0 1px var(--acc),0 10px 24px -12px var(--acc)}
+.card.is-selected{border-color:var(--acc);outline:none;box-shadow:0 0 0 1px var(--acc)}
 .card.is-selected:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .marquee{position:fixed;z-index:60;border:1px solid var(--acc);background:rgba(10,132,255,.16);pointer-events:none;transition:opacity 90ms var(--ease-out);@starting-style{opacity:0}}
 .asset-drag-preview{position:fixed;left:-10000px;top:-10000px;z-index:-1;width:44px;height:36px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid rgba(255,255,255,.9);border-radius:var(--r-sm);background:rgba(20,40,70,.86);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:var(--fs-cap)}
@@ -138,6 +137,8 @@ figcaption{position:relative;height:24px;padding:0 8px;display:flex;flex-directi
 .lc{display:none}
 .name-row{display:flex;align-items:baseline;gap:4px;min-width:0}
 .name{flex:1;min-width:0;font-size:clamp(11px, calc(var(--colw, 232px) * .054), 12.5px);line-height:1.18;font-weight:500;letter-spacing:.01em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+/* 卡片内联重命名:名字位置直接换成输入框,不再借检查器的输入框 */
+.name-row input{flex:1;width:100%;min-width:0;height:1.5em;padding:0 4px;border:0;border-radius:4px;background:var(--field-bg);box-shadow:0 0 0 1px var(--acc-line),var(--field-shadow);outline:0;font:inherit;font-weight:500;color:var(--t1);text-shadow:none}
 .meta-row{display:flex;align-items:center;gap:6px;margin-top:1px;font-size:var(--fs-cap);line-height:12px;color:rgba(255,255,255,.72);text-shadow:0 1px 2px rgba(0,0,0,.3);
   /* 列宽下限 170px 时分辨率放不下,锁死单行、溢出裁掉。 */
   white-space:nowrap;overflow:hidden}
@@ -151,5 +152,12 @@ figcaption{position:relative;height:24px;padding:0 8px;display:flex;flex-directi
 .thumb{container-type:inline-size}
 .thumb .res-chip,.thumb .fmt-chip,.thumb .dur{height:auto;min-height:17px;padding:2px 6px;font-size:clamp(9px,4.4cqw,11px)}
 /* 文件大小:右下角;视频有时长时上移一行,不和时长叠在一起 */
-.thumb .size-chip{position:absolute;right:5px;bottom:5px;z-index:2;height:auto;min-height:17px;padding:2px 6px;border-radius:4px;font-size:clamp(9px,4.4cqw,11px);font-weight:600;color:#fff;background:rgba(10,12,16,.56);backdrop-filter:blur(4px)}
-.thumb .size-chip.above{bottom:27px}
+.thumb .size-chip{position:absolute;right:3px;bottom:3px;z-index:2;height:auto;min-height:17px;padding:2px 6px;border-radius:4px;font-size:clamp(9px,4.4cqw,11px);font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.thumb .size-chip.above{bottom:23px}
+
+/* 左上角小圆点:悬停浮出 3 倍宽放大图(按卡片所在象限选缩放原点);放大图 portal 到 body,避免被卡片 overflow 裁掉 */
+.zoom-dot{position:absolute;left:-2px;top:-2px;z-index:3;width:20px;height:20px;display:block;opacity:0;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out)}
+.zoom-dot::before{content:"";position:absolute;left:5px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--acc)}
+.card:hover .zoom-dot,.card:focus-within .zoom-dot{opacity:1;pointer-events:auto}
+.zoom-preview{position:fixed;z-index:120;max-width:calc(100vw - 16px);border:1px solid var(--acc-line);border-radius:4px;background:var(--field-bg);box-shadow:0 16px 40px -14px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:scale(.5);transform-origin:0 100%;transition:opacity 110ms var(--ease-out),transform 110ms var(--ease-out);@starting-style{opacity:0;transform:scale(.5)}}
+.zoom-preview[data-open="true"]{opacity:1;transform:scale(1);transition-duration:260ms}

@@ -57,8 +57,8 @@ export function Titlebar(): React.JSX.Element {
         <span className="tb-sep" />
         <button
           className={`tb-btn${inspHidden ? '' : ' on'}`}
-          title={inspHidden ? '展开右侧信息面板' : '收起右侧信息面板'}
-          aria-label={inspHidden ? '展开右侧信息面板' : '收起右侧信息面板'}
+          title={inspHidden ? '展开右侧信息面板 (N)' : '收起右侧信息面板 (N)'}
+          aria-label={inspHidden ? '展开右侧信息面板 (N)' : '收起右侧信息面板 (N)'}
           aria-pressed={!inspHidden}
           onClick={toggleInspector}
         >

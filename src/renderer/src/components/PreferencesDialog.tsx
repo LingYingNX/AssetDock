@@ -54,6 +54,7 @@ const SHORTCUT_GROUPS: { group: string; items: { keys: string; label: string }[]
       { keys: 'Enter', label: '打开焦点素材' },
       { keys: 'Space', label: '选中焦点素材' },
       { keys: 'F2', label: '重命名选中素材' },
+      { keys: 'N', label: '展开 / 收起右侧信息面板' },
       { keys: 'Del', label: '删除选中素材' },
       { keys: 'Ctrl I', label: '打开焦点素材预览' }
     ]

@@ -31,7 +31,7 @@
 /* 溢出裁切:overflow:hidden 在 flex 容器上常被 Chromium 忽略(实际渲染仍然可见,
    实测 1334 窗下面板按钮被画到检查器上),必须配合 flex-shrink:0 之外的显式
    裁切手段。contain:paint 把绘制限定在筛选条盒内,溢出部分真正不渲染。 */
-.filterbar{--fc-h:2.24em;--fc-pad-x:.64em;--fc-gap:.32em;--fc-border:max(1px,.1em);--fc-border-active:max(1px,.15em);--fc-radius:.62em;
+.filterbar{--fc-h:2.24em;--fc-pad-x:.64em;--fc-gap:.32em;--fc-border:max(1px,.1em);--fc-border-active:max(1px,.15em);--fc-radius:6px;
   display:flex;align-items:center;gap:var(--fc-pad-x);height:max(var(--h-bar),round(calc(var(--fc-h) + 8px),1px));padding:0 16px;border-bottom:1px solid var(--line);font-size:var(--fs-body);overflow:hidden;flex-shrink:0;contain:paint inline-size}
 .filterbar>.btn,.filterbar>.filter-group,.filterbar .cbtn,.filterbar .tb-btn,.filterbar .vr{flex:none}
 .filter-group{display:flex;align-items:center;gap:var(--fc-gap)}

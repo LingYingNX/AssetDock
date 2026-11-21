@@ -236,6 +236,11 @@ export default function App(): React.JSX.Element {
           if (st.focusedCardId) st.selectOnly(st.focusedCardId)
           break
         }
+        case 'n':
+        case 'N': {
+          st.toggleInspector()
+          break
+        }
         case 'F2': {
           const inSidebar = (document.activeElement as HTMLElement | null)?.closest('.sidebar') != null
           if (st.nav.startsWith('folder:') && (inSidebar || !st.activeId)) {

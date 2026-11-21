@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { isPreviewDecoded, markPreviewDecoded } from '../data/preview-cache'
 import { useUI } from '../store/ui'
 import { formatBytes, formatRelativeDate, formatResolution } from '../data/query'
@@ -44,6 +45,10 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const setFocusedCard = useUI((s) => s.setFocusedCard)
   const setCtxMenu = useUI((s) => s.setCtxMenu)
   const disp = useUI((s) => s.display)
+  const renaming = useUI((s) => s.renaming)
+  const activeId = useUI((s) => s.activeId)
+  const renameAsset = useUI((s) => s.renameAsset)
+  const setRenaming = useUI((s) => s.setRenaming)
   // 已解码过的预览直接以可见态挂载:切换文件夹时卡片会重挂载,
   // 若从 opacity:0 重新淡入,用户看到的就是缩略图重新刷新。
   const previewKey = a.previewUrl ?? ''
@@ -57,6 +62,8 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const [imgLoaded, setImgLoaded] = useState(() => isPreviewDecoded(previewKey))
   /* GIF 缩略图是静态帧,悬停时换成原图让浏览器播动画;离开即卸载,停掉解码与合成 */
   const [gifLive, setGifLive] = useState(false)
+  const [zoom, setZoom] = useState<{ left: number; top: number; width: number; origin: string; open: boolean } | null>(null)
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   /* 原图没解码完就换上会先闪一下空框,解码完再显形 */
   const [gifReady, setGifReady] = useState(false)
   const [inView, setInView] = useState(false)
@@ -115,6 +122,7 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
   const canMove = a.dbId != null && a.libraryId != null && !a.missing && !a.deletedAt
 
   return (
+    <>
     <figure
       ref={cardRef}
       className={cardCls}
@@ -230,11 +238,73 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         {disp.fmt && !disp.hiddenFormats.includes(a.format) ? <span className="fmt-chip">{a.format}</span> : null}
         {isVideo && a.duration ? <span className="dur">{a.duration}</span> : null}
         {disp.size ? <span className={'size-chip' + (isVideo && a.duration ? ' above' : '')}>{formatBytes(a.sizeBytes)}</span> : null}
+        {previewSrc ? (
+          <span
+            className="zoom-dot"
+            aria-hidden="true"
+            onPointerEnter={(e) => {
+              e.stopPropagation()
+              const card = cardRef.current
+              if (!card) return
+              const r = card.getBoundingClientRect()
+              const th = card.querySelector('.thumb')?.getBoundingClientRect()
+              if (!th) return
+              if (zoomTimer.current) clearTimeout(zoomTimer.current)
+              const img = card.querySelector('.thumb img') as HTMLImageElement | null
+              const aspect = img && img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : th.width / th.height
+              let width = Math.min(th.width * 3, window.innerWidth - 16)
+              let height = width / aspect
+              if (height > window.innerHeight - 16) {
+                height = window.innerHeight - 16
+                width = height * aspect
+              }
+              const originX = r.left + r.width / 2 < window.innerWidth / 2 ? 'left' : 'right'
+              const originY = r.top + r.height / 2 < window.innerHeight / 2 ? 'top' : 'bottom'
+              const next = {
+                left: Math.min(Math.max(8, r.left), window.innerWidth - width - 8),
+                top: Math.min(Math.max(8, r.top), Math.max(8, window.innerHeight - height - 8)),
+                width,
+                origin: `${originX} ${originY}`,
+                open: false
+              }
+              setZoom(next)
+              // 先以起始态挂载,下一帧再打开,确保缩放过渡真的播放而不是直接落位
+              requestAnimationFrame(() => setZoom((z) => (z === next ? { ...z, open: true } : z)))
+            }}
+            onPointerLeave={() => {
+              setZoom((z) => (z ? { ...z, open: false } : z))
+              zoomTimer.current = setTimeout(() => setZoom(null), 130)
+            }}
+          />
+        ) : null}
       </div>
       <figcaption>
         {disp.name ? (
           <div className="name-row">
-            <span className="name">{a.name}</span>
+            {renaming && activeId === a.id ? (
+              <input
+                className="name-input"
+                defaultValue={a.name}
+                autoComplete="off"
+                spellCheck={false}
+                // 卡片本体点一下就选中/开灯箱,编辑名字时不能让点击漏上去
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                ref={(el) => {
+                  // 进入即全选,直接输入就能替换整个名字
+                  if (!el) return
+                  el.focus()
+                  el.select()
+                }}
+                onBlur={(e) => renameAsset(a.id, e.target.value.trim() || a.name)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') renameAsset(a.id, (e.target as HTMLInputElement).value.trim() || a.name)
+                  if (e.key === 'Escape') setRenaming(false)
+                }}
+              />
+            ) : (
+              <span className="name">{a.name}</span>
+            )}
           </div>
         ) : null}
         {/* 说明栏只留名字一行 */}
@@ -261,5 +331,19 @@ export function Card({ a, view, selectionOrder }: { a: Asset; view: string; sele
         </span>
       </figcaption>
     </figure>
+      {zoom
+        ? createPortal(
+            <img
+              className="zoom-preview"
+              src={previewSrc}
+              alt=""
+              draggable={false}
+              data-open={zoom.open}
+              style={{ left: zoom.left, top: zoom.top, width: zoom.width, transformOrigin: zoom.origin }}
+            />,
+            document.body
+          )
+        : null}
+    </>
   )
 }
