@@ -11,6 +11,7 @@ export function Inspector(): React.JSX.Element {
   const firstSelectedId = useUI((s) => s.selectedIds[0] ?? null)
   const startRenaming = useUI((s) => s.startRenaming)
   const setRating = useUI((s) => s.setRating)
+  const toggleFavorite = useUI((s) => s.toggleFavorite)
   const addTag = useUI((s) => s.addTag)
   const removeTag = useUI((s) => s.removeTag)
   const setNote = useUI((s) => s.setNote)
@@ -84,6 +85,17 @@ export function Inspector(): React.JSX.Element {
               </button>
             ))}
             </span>
+            <span className="insp-rate-sep" aria-hidden="true" />
+            <button
+              type="button"
+              className={`insp-fav${a.favorite ? ' on' : ''}`}
+              title={a.favorite ? '取消收藏' : '收藏'}
+              aria-label={a.favorite ? '取消收藏' : '收藏'}
+              aria-pressed={a.favorite}
+              onClick={() => toggleFavorite(a.id)}
+            >
+              <Icon name="heart" />
+            </button>
           </div>
         </div>
 

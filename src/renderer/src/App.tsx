@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useUI, restoreUiPrefs } from './store/ui'
 import { isEditableTarget } from './data/focus-scope'
 import { COLW_MAX, COLW_MIN } from './data/colw'
@@ -20,6 +20,7 @@ import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
 import { FolderContextMenu } from './components/FolderContextMenu'
 import { PreferencesDialog } from './components/PreferencesDialog'
+import { LibraryRecovery } from './components/LibraryRecovery'
 import { DedupDialog } from './components/DedupDialog'
 import { ThumbProgress } from './components/ThumbProgress'
 import { Toast } from './components/Toast'
@@ -36,6 +37,9 @@ export default function App(): React.JSX.Element {
   const inspHidden = useUI((s) => s.inspHidden)
   const mode = useUI((s) => s.mode)
   const lightboxId = useUI((s) => s.lightboxId)
+  const [recovery, setRecovery] = useState<{ id: number; name: string; path: string }[] | null>(null)
+  const bootRef = useRef<() => void>(() => {})
+  const [ready, setReady] = useState(false)
 
   /* 启动引导:恢复库标签/激活态,加载数据;订阅主进程事件 */
   useEffect(() => {
@@ -49,7 +53,16 @@ export default function App(): React.JSX.Element {
       try {
         const libs = await window.windowApi.library.list()
         useUI.getState().setLibraries(libs)
-        if (libs.length === 0) return
+        const missing = libs.filter((l) => l.exists === false)
+        if (missing.length > 0) {
+          setRecovery(missing.map(({ id, name, path }) => ({ id, name, path })))
+          return
+        }
+        setRecovery(null)
+        if (libs.length === 0) {
+          setReady(true)
+          return
+        }
         const migration = await window.windowApi.library.takeMigrationFailures()
         if (migration.names.length > 0) {
           useUI.getState().showToast(`以下素材库无法创建本地数据库，当前会话将使用全局回退数据:\n${migration.names.join('\n')}`, 'warn')
@@ -62,16 +75,17 @@ export default function App(): React.JSX.Element {
           })
           .filter((t): t is NonNullable<typeof t> => t != null)
         const restoredTabCount = tabs.length
-        if (tabs.length === 0) {
-          const first = libs[0]
-          tabs.push({ id: `dblib-${first.id}`, name: first.name, libraryId: first.id })
-        }
         const activeLib = Number(await window.windowApi.state.get('activeTabLibrary'))
-        const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0]
-        useUI.setState({ tabs, activeTabId: active.id })
-        if (openIds.length === 0 || restoredTabCount !== openIds.length) useUI.getState().persistTabs()
-        if (active.libraryId != null) void window.windowApi.library.open(active.libraryId)
-        useUI.getState().reloadActiveLibrary()
+        const active = tabs.find((t) => t.libraryId === activeLib) ?? tabs[0] ?? null
+        useUI.setState({ tabs, activeTabId: active?.id ?? '' })
+        if (restoredTabCount !== openIds.length) useUI.getState().persistTabs()
+        if (active?.libraryId != null) {
+          void window.windowApi.library.open(active.libraryId)
+          useUI.getState().reloadActiveLibrary()
+        } else {
+          useUI.setState({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
+        }
+        setReady(true)
       } catch {
         /* 引导失败进明确的空状态并说明原因,不停在半加载的界面上 */
         useUI.setState({
@@ -84,8 +98,10 @@ export default function App(): React.JSX.Element {
           mode: 'empty'
         })
         useUI.getState().showToast('启动引导失败，未能读取素材库列表', 'warn')
+        setReady(true)
       }
     }
+    bootRef.current = () => { void boot() }
     void boot()
     // S1-7:assets:changed 优先走增量合并(带 assetIds);不带则退全量 reload。
     // 扫描期间事件是成批来的,所以按帧边界合并:同一帧内的多条并成一次重载。
@@ -303,6 +319,18 @@ export default function App(): React.JSX.Element {
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
+
+  if (recovery) {
+    return <LibraryRecovery items={recovery} onResolved={() => bootRef.current()} />
+  }
+
+  if (!ready) {
+    return (
+      <div className="recovery">
+        <section className="recovery-card recovery-splash" role="status">正在检查资源库…</section>
+      </div>
+    )
+  }
 
   return (
     <div className="app">

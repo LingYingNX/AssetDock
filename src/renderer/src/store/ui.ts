@@ -311,7 +311,7 @@ function withSelection(ids: string[]): { selectedIds: string[]; selectedSet: Rea
 
 interface UIState {
   /* 已绑定库列表(「+」菜单与引导卡共用) */
-  libraries: { id: number; name: string; path: string }[]
+  libraries: { id: number; name: string; path: string; exists?: boolean }[]
   setLibraries: (list: { id: number; name: string; path: string }[]) => void
   createLibraryFlow: (name?: string, folderPath?: string) => Promise<boolean>
   /** 外部文件拖入:复制进目标文件夹、提示结果并刷新当前库 */
@@ -585,6 +585,8 @@ export const useUI = create<UIState>((set, get) => {
   }
 
   /** 切库:上一个库的选中、检查器与灯箱都不得带进新库。 */
+  /* 偏好设置/去重是独立模态,切库只该收掉下拉菜单;在偏好里关库时一起清 openMenu 会让面板瞬间消失 */
+  const MODAL_MENUS = new Set(['preferences', 'dedup'])
   const clearedAssetView = (): Partial<UIState> => ({
     ...withSelection([]),
     selectionAnchorId: null,
@@ -596,7 +598,7 @@ export const useUI = create<UIState>((set, get) => {
     lightboxFullscreen: false,
     ctxMenu: null,
     folderCtxMenu: null,
-    openMenu: null,
+    ...(MODAL_MENUS.has(get().openMenu ?? '') ? {} : { openMenu: null }),
     thumbProgress: null
   })
 
@@ -725,8 +727,7 @@ export const useUI = create<UIState>((set, get) => {
       const { tabs, activeTabId } = get()
       const idx = tabs.findIndex((t) => t.id === id)
       const rest = tabs.filter((t) => t.id !== id)
-      if (rest.length === 0) return
-      const nextActive = id === activeTabId ? (rest[Math.max(0, idx - 1)] ?? rest[0]).id : activeTabId
+      const nextActive = id === activeTabId ? (rest[Math.max(0, idx - 1)]?.id ?? '') : activeTabId
       const switching = id === activeTabId
       if (switching && !canLeaveLightbox()) return
       if (switching) rememberLoadedAssets()
@@ -738,12 +739,17 @@ export const useUI = create<UIState>((set, get) => {
       }
       set({ tabs: rest, activeTabId: nextActive, ...(switching ? clearedAssetView() : {}) })
       get().persistTabs()
-      const t = get().tabs.find((x) => x.id === nextActive)
+      if (!nextActive) {
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
+        return
+      }
+      const t = rest.find((x) => x.id === nextActive)
       if (t?.libraryId != null) {
         void window.windowApi.library.open(t.libraryId)
         get().reloadActiveLibrary(true)
+      } else {
+        set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
       }
-      else set({ assets: [], folderPaths: [], physicalFolderPaths: [], folderEditPath: null, mode: 'empty' })
     },
     createLibraryTab: (libraryId, name) => {
       if (!canLeaveLightbox()) return

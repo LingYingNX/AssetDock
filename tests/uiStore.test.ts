@@ -1357,6 +1357,31 @@ describe('selection and library switch hygiene', () => {
     expect(reload).toHaveBeenCalled()
   })
 
+  it('keeps the preferences dialog open when closing the active library tab from it', async () => {
+    vi.stubGlobal('window', {
+      windowApi: {
+        tabs: { save: vi.fn().mockResolvedValue(undefined) },
+        state: { set: vi.fn().mockResolvedValue({ ok: true }) },
+        library: { open: vi.fn().mockResolvedValue(undefined) }
+      }
+    })
+    const { useUI } = await import('../src/renderer/src/store/ui')
+    useUI.setState({
+      tabs: [
+        { id: 't1', name: 'one', libraryId: 1 },
+        { id: 't2', name: 'two', libraryId: 2 }
+      ],
+      activeTabId: 't1',
+      openMenu: 'preferences',
+      reloadActiveLibrary: vi.fn()
+    })
+
+    useUI.getState().closeTab('t1')
+
+    expect(useUI.getState().openMenu).toBe('preferences')
+    expect(useUI.getState().tabs.map((tab) => tab.id)).toEqual(['t2'])
+  })
+
   it('imports dropped paths into the requested folder and reports the result', async () => {
     const importPaths = vi.fn().mockResolvedValue({ imported: 1, skipped: 0 })
     const reload = vi.fn()

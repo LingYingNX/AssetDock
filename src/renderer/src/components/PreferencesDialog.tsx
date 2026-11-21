@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtCount, formatBytes } from '../data/query'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
-import { applyTheme, currentTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
+import { applyTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
 import type { UpdateCheckResult, UpdateDownloadProgress } from '../../../shared/appUpdate'
 
 type CloseAction = 'minimize' | 'quit'
@@ -136,14 +136,17 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const activeTabId = useUI((s) => s.activeTabId)
   const assets = useUI((s) => s.assets)
   const createLibraryFlow = useUI((s) => s.createLibraryFlow)
-  const openLibrary = useUI((s) => s.openLibrary)
+  const openTab = useUI((s) => s.openTab)
+  const closeTab = useUI((s) => s.closeTab)
+  const createLibraryTab = useUI((s) => s.createLibraryTab)
+  const setLibraries = useUI((s) => s.setLibraries)
+  const showToast = useUI((s) => s.showToast)
   const [section, setSection] = useState<SectionKey>('general')
   const [draft, setDraft] = useState<PreferenceState>(DEFAULT_PREFERENCES)
-  const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [libraryName, setLibraryName] = useState('')
   const [libraryPath, setLibraryPath] = useState('')
+  const [confirmRemove, setConfirmRemove] = useState<number | null>(null)
   const [autoLaunchSupported, setAutoLaunchSupported] = useState(true)
   const [toolStatus, setToolStatus] = useState<{ blender: string; cinema4d: string }>({ blender: '未检测', cinema4d: '未检测' })
   const [appVersion, setAppVersion] = useState('')
@@ -154,21 +157,16 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [progress, setProgress] = useState<UpdateDownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState('')
   const [downloaded, setDownloaded] = useState(false)
-  /** 偏好是否已从磁盘加载完成:draft 初值是默认浅色,加载前拿它预览会把夜间切成白天 */
+  /** 偏好是否已从磁盘加载完成:加载前不把默认值回写到磁盘 */
   const [draftLoaded, setDraftLoaded] = useState(false)
-  /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
-  const savedTheme = useRef<ThemeMode>('light')
   const dialogRef = useRef<HTMLElement>(null)
   const openFocus = useRef<HTMLElement | null>(null)
-  const createNameRef = useRef<HTMLInputElement>(null)
   const createPathRef = useRef<HTMLInputElement>(null)
   const createTriggerRef = useRef<HTMLButtonElement>(null)
   const createWasOpen = useRef(false)
-  const [nameError, setNameError] = useState('')
   const [pathError, setPathError] = useState('')
 
-  /* Esc 必须走与「取消/关闭」相同的回滚路径。App 的全局 Esc 只清 openMenu,
-     绕过了 close(),主题预览会留在屏幕上。捕获阶段先处理并截断冒泡。 */
+  /* 偏好即时生效:Esc 只负责关闭面板/子弹窗。 */
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
@@ -178,13 +176,10 @@ export function PreferencesDialog(): React.JSX.Element | null {
       if (createOpen) {
         if (creating) return
         setCreateOpen(false)
-        setLibraryName('')
         setLibraryPath('')
-        setNameError('')
         setPathError('')
         return
       }
-      applyTheme(savedTheme.current)
       setOpenMenu(null)
     }
     window.addEventListener('keydown', onKey, true)
@@ -205,11 +200,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
     if (!open) return
     // 关于页是面板每次打开都该看到最新数据的只读页:版本号与更新状态都在这里拉
     void window.windowApi.app.version().then((v) => setAppVersion(v)).catch(() => setAppVersion(''))
-    // 打开面板不立即预览:draft 此刻还是默认值(浅色)。先标记未加载,
-    // 等读到真正保存的偏好再允许预览,否则点开设置就会把夜间外观切成白天。
+    // 先标记未加载,避免默认草稿被当成用户修改回写到磁盘。
     setDraftLoaded(false)
-    // 兜底基线:偏好读取失败时,关闭要回滚到打开前的真实外观,而不是默认浅色。
-    savedTheme.current = currentTheme()
     let cancelled = false
     void window.windowApi.state.get(PREFERENCES_KEY).then((raw) => {
       if (cancelled) return
@@ -240,12 +232,20 @@ export function PreferencesDialog(): React.JSX.Element | null {
     return off
   }, [downloading])
 
-  // 主题即时预览:切换单选项立刻生效;取消关闭时回滚为已保存值。
-  // 必须等偏好加载完成:加载前 draft 是默认浅色,预览会误切主题。
+  // 偏好自动生效:改动立即应用并落盘,不需要保存/取消。
   useEffect(() => {
     if (!open || !draftLoaded) return
     applyTheme(draft.theme)
-  }, [open, draftLoaded, draft.theme])
+    writeMirroredTheme(draft.theme)
+    void window.windowApi.state.set(PREFERENCES_KEY, JSON.stringify(draft)).catch(() => {
+      useUI.getState().showToast('保存偏好设置失败,请重试', 'warn')
+    })
+  }, [open, draftLoaded, draft])
+
+  useEffect(() => {
+    if (!open || !draftLoaded || !autoLaunchSupported) return
+    void window.windowApi.app.setAutoLaunch(draft.autoLaunch)
+  }, [open, draftLoaded, autoLaunchSupported, draft.autoLaunch])
 
   /* 遮罩与对话框都是整窗尺寸的层,原来直接 return null 卸载 —— 0ms 硬消失。
      改成:mounted 决定是否在 DOM 里,shown 决定外观两态,关闭后再等退场走完才卸载。
@@ -323,9 +323,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
   useEffect(() => {
     if (createOpen) {
       createWasOpen.current = true
-      setNameError('')
       setPathError('')
-      const id = requestAnimationFrame(() => createNameRef.current?.focus())
+      const id = requestAnimationFrame(() => createPathRef.current?.focus())
       return () => cancelAnimationFrame(id)
     }
     if (createWasOpen.current) {
@@ -334,36 +333,21 @@ export function PreferencesDialog(): React.JSX.Element | null {
     }
   }, [createOpen])
 
+  /* 关闭面板即解除二次确认,避免下次打开时「移除」还是待确认态 */
+  useEffect(() => {
+    if (!open) setConfirmRemove(null)
+  }, [open])
+
   if (!mounted) return null
 
   const close = (): void => {
-    // 同步回滚到已保存主题。原来是 state.get() 异步取回后才 applyTheme—面板已经关掉,
-    // 迟到的值会覆盖用户随后的任何切换,于是"勾选夜间、外观白天"。
-    applyTheme(savedTheme.current)
     setOpenMenu(null)
   }
   const closeCreate = (force = false): void => {
     if (creating && !force) return
     setCreateOpen(false)
-    setLibraryName('')
     setLibraryPath('')
-    setNameError('')
     setPathError('')
-  }
-  const save = (): void => {
-    if (saving) return
-    setSaving(true)
-    void window.windowApi.state
-      .set(PREFERENCES_KEY, JSON.stringify(draft))
-      .then(() => {
-        // 保存成功才算"已保存主题":回滚基线与首帧镜像一起更新
-        savedTheme.current = draft.theme
-        writeMirroredTheme(draft.theme)
-        if (autoLaunchSupported) void window.windowApi.app.setAutoLaunch(draft.autoLaunch)
-        close()
-      })
-      .catch(() => useUI.getState().showToast('保存偏好设置失败,请重试', 'warn'))
-      .finally(() => setSaving(false))
   }
   const browseLibraryPath = (): void => {
     void window.windowApi.pickFolder().then((path) => {
@@ -419,19 +403,14 @@ export function PreferencesDialog(): React.JSX.Element | null {
   /* 徽章右对齐显示当前版本；有新版时换成目标版本，与状态行不重复 */
   const updateBadge = update?.hasUpdate ? `新版本 ${update.manifest?.version ?? ''}` : ''
   const createLibrary = (): void => {
-    const name = libraryName.trim()
-    if (!name) {
-      setNameError('请输入资源库名称')
-      createNameRef.current?.focus()
-      return
-    }
     if (!libraryPath) {
       setPathError('请选择存储文件夹路径')
       createPathRef.current?.focus()
       return
     }
     setCreating(true)
-    void createLibraryFlow(name, libraryPath).then((created) => {
+    // 库名由主进程取所选文件夹名，这里不再让用户另起名字
+    void createLibraryFlow(undefined, libraryPath).then((created) => {
       if (created) closeCreate(true)
     }).finally(() => setCreating(false))
   }
@@ -465,6 +444,28 @@ export function PreferencesDialog(): React.JSX.Element | null {
     </>
   )
 
+  const removeLibrary = async (id: number, name: string): Promise<void> => {
+    const result = await window.windowApi.library.remove(id)
+    if ('error' in result) {
+      showToast(result.error, 'warn')
+      return
+    }
+    setLibraries(await window.windowApi.library.list())
+    setConfirmRemove(null)
+    showToast(`已移除资源库「${name}」，磁盘文件未删除`)
+  }
+
+  const toggleLibraryOpen = (library: { id: number; name: string }, opened: boolean): void => {
+    if (opened) {
+      const tab = tabs.find((t) => t.libraryId === library.id)
+      if (tab) closeTab(tab.id)
+      return
+    }
+    const existing = tabs.find((t) => t.libraryId === library.id)
+    if (existing) openTab(existing.id)
+    else createLibraryTab(library.id, library.name)
+  }
+
   const libraryPane = (
     <>
       <section className="pref-section">
@@ -482,6 +483,7 @@ export function PreferencesDialog(): React.JSX.Element | null {
           <ul className="pref-library-list">
             {libraries.map((library) => {
               const current = library.id === activeLibrary?.id
+              const opened = tabs.some((t) => t.libraryId === library.id)
               return (
                 <li key={library.id} className={`pref-library${current ? ' current' : ''}`}>
                   <div className="pref-library-badge">
@@ -498,13 +500,31 @@ export function PreferencesDialog(): React.JSX.Element | null {
                     ) : null}
                     <span className="pref-library-path">{library.path}</span>
                     <span className="pref-library-actions">
-                      {current ? (
-                        <button className="pref-link" onClick={() => window.windowApi.showInFolder(library.path)}>在资源管理器中打开</button>
-                      ) : (
-                        <button className="pref-link" onClick={() => { openLibrary(library.id, library.name); close() }}>切换到此资源库</button>
+                      <button className="pref-link" onClick={() => window.windowApi.showInFolder(library.path)}>在资源管理器中打开</button>
+                      {opened ? null : (
+                        <button
+                          className={`pref-link${confirmRemove === library.id ? ' danger' : ''}`}
+                          onClick={() => {
+                            if (confirmRemove === library.id) void removeLibrary(library.id, library.name)
+                            else setConfirmRemove(library.id)
+                          }}
+                        >
+                          {confirmRemove === library.id ? '确认移除' : '移除'}
+                        </button>
                       )}
                     </span>
                   </div>
+                  <label className="pref-lib-switch" title={opened ? '关闭资源库' : '打开资源库'}>
+                    <span className="pref-lib-switch-text">{opened ? '已打开' : '已关闭'}</span>
+                    <input
+                      type="checkbox"
+                      className="pref-switch-input"
+                      checked={opened}
+                      aria-label={`${opened ? '关闭' : '打开'}资源库 ${library.name}`}
+                      onChange={() => toggleLibraryOpen(library, opened)}
+                    />
+                    <span className="pref-switch-track" aria-hidden="true"><span className="pref-switch-thumb" /></span>
+                  </label>
                 </li>
               )
             })}
@@ -667,13 +687,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
           </nav>
           <div className="pref-content" role="region" aria-label="偏好设置内容">
             {panes[section]}
-            {/* 快捷键与关于都是只读页,没有草稿可提交,给出「保存」只会让人以为需要点 */}
-            {(section === 'shortcuts' || section === 'about') ? null : (
-              <footer className="pref-footer">
-                <button className="pref-cancel" onClick={close}>取消</button>
-                <button className="pref-save" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>
-              </footer>
-            )}
           </div>
         </div>
       </section>
@@ -681,23 +694,6 @@ export function PreferencesDialog(): React.JSX.Element | null {
         <div className="pref-create-backdrop" role="presentation">
           <section className="pref-create-dialog glass-preferences" role="dialog" aria-modal="true" aria-label="创建资源库">
             <header className="pref-create-header">创建资源库</header>
-            <label className="pref-field">
-              <span>资源库名称</span>
-              <input
-                ref={createNameRef}
-                value={libraryName}
-                placeholder="例如：设计素材库"
-                name="library-name"
-                autoComplete="off"
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? 'library-name-error' : undefined}
-                onChange={(event) => {
-                  setLibraryName(event.target.value)
-                  if (nameError) setNameError('')
-                }}
-              />
-              {nameError ? <span id="library-name-error" className="pref-field-error" role="alert">{nameError}</span> : null}
-            </label>
             <label className="pref-field">
               <span>存储路径</span>
               <span className="pref-path-picker">

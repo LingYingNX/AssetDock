@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  adoptLibraryRows,
   openLibDb,
   openMemoryLibDb,
   hasLibDb,
@@ -85,6 +86,34 @@ describe('迁移幂等', () => {
     expect(upsertScanned(db, 1, [entry])).toEqual([])
     expect((db.prepare('SELECT COUNT(*) AS c FROM assets').get() as { c: number }).c).toBe(1)
     db.close()
+  })
+
+  it('移除后重新加库:旧 library_id 行重挂到新 id,重复行先合并用户数据', () => {
+    const db = getLibHandle(root)
+    const entry = {
+      relPath: 'sub/a.jpg',
+      name: 'a',
+      type: 'image' as const,
+      format: 'JPG',
+      sizeBytes: 1,
+      mtimeMs: 1,
+      fingerprint: 'fp'
+    }
+    const [old] = upsertScanned(db, 7, [entry])
+    db.prepare("INSERT INTO tags(name, color) VALUES ('nature', '#789')").run()
+    db.prepare('INSERT INTO asset_tags(asset_id, tag_id) VALUES (?, 1)').run(old.assetId)
+    db.prepare('UPDATE assets SET rating = 5, note = ? WHERE id = ?').run('我的备注', old.assetId)
+    // 旧版本在移除重加后会用新 id 重扫出同路径行
+    upsertScanned(db, 9, [entry])
+    db.prepare('INSERT INTO folder_orders(library_id, path, position) VALUES (7, ?, 3)').run('sub')
+    db.prepare('INSERT INTO folder_orders(library_id, path, position) VALUES (9, ?, 1)').run('sub')
+
+    adoptLibraryRows({ id: 9, name: 'lib', path: root })
+
+    const rows = db.prepare('SELECT library_id, rating, note FROM assets').all()
+    expect(rows).toEqual([{ library_id: 9, rating: 5, note: '我的备注' }])
+    expect(db.prepare('SELECT COUNT(*) AS c FROM asset_tags').get()).toEqual({ c: 1 })
+    expect(db.prepare('SELECT library_id, position FROM folder_orders').all()).toEqual([{ library_id: 9, position: 1 }])
   })
 })
 

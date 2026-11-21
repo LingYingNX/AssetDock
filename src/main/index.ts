@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, screen, Tray, nativeImage } from 'electron'
 import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
@@ -7,6 +7,7 @@ import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { openSqlite } from './services/sqlite'
 import { registerIpc, initServices, attachWatchersFor } from './ipc'
+import { destroyTrayMenu, hideTrayMenu, isTrayMenuVisible, showTrayMenu } from './trayMenu'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries, getAppState, setAppState } from './services/store'
 import { resolveWithinAnyLibrary } from './services/libResolve'
@@ -118,6 +119,37 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: false } }
 ])
 
+let tray: Tray | null = null
+let mainWin: BrowserWindow | null = null
+
+/** 唤回主窗口:可能已隐藏到托盘,也可能已被关闭 */
+function showMainWindow(): void {
+  const win = mainWin && !mainWin.isDestroyed() ? mainWin : null
+  if (!win) {
+    createWindow()
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+/** 最小化到托盘时第一次创建;右键提供「打开面板 / 退出」 */
+function ensureTray(): void {
+  if (tray) return
+  const image = nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png'))
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16, quality: 'best' }))
+  tray.setToolTip('MediaHub 素材管理器')
+  tray.on('click', () => hideTrayMenu())
+  tray.on('right-click', () => {
+    if (!tray) return
+    if (isTrayMenuVisible()) {
+      hideTrayMenu()
+    } else {
+      showTrayMenu(tray, showMainWindow)
+    }
+  })
+}
 function createWindow(): void {
   const stored = readWindowState()
   const win = new BrowserWindow({
@@ -166,14 +198,15 @@ function createWindow(): void {
     if (win.isDestroyed()) return
     win.webContents.send('window:maximized', win.isMaximized())
   }
+  mainWin = win
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
   win.webContents.on('did-finish-load', sendMaximized)
   // 关闭行为:偏好为「最小化」时拦截关闭改为 hide()。注意 hide() 不是最小化:
-  // 没有托盘图标、任务栏按钮也会消失,唯一唤回路径是再次启动本程序(见 second-instance)。
+  // 窗口已隐藏到托盘:托盘菜单、托盘单击或再次启动都能唤回(见 second-instance)。
   // 真正退出走 app.quit 标记。
   let quitting = false
-  app.on('before-quit', () => { quitting = true })
+  app.on('before-quit', () => { quitting = true; destroyTrayMenu(); tray?.destroy(); tray = null })
   win.on('close', (event) => {
     if (persistTimer) clearTimeout(persistTimer)
     persistWindowState(win)
@@ -181,6 +214,7 @@ function createWindow(): void {
       event.preventDefault()
       // S2-8:托盘化前 checkpoint,长期挂后台时 WAL 不持续增长,断电恢复更快
       checkpointAllLibraries()
+      ensureTray()
       win.hide()
     }
   })
@@ -202,16 +236,7 @@ function createWindow(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    const w = BrowserWindow.getAllWindows()[0]
-    if (!w) return
-    if (w.isMinimized()) w.restore()
-    // 关闭行为为「最小化」时窗口走的是 hide():没有托盘图标,任务栏也没有按钮,
-    // 只 restore+focus 不会让隐藏窗口重新出现;而第二实例又被单实例锁挡在门外,
-    // 现象就是「双击启动.bat 毫无反应、任务管理器里挂着一堆 electron」。
-    w.show()
-    w.focus()
-  })
+  app.on('second-instance', () => { showMainWindow() })
 
   app.whenReady().then(async () => {
     const userData = app.getPath('userData')

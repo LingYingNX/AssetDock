@@ -221,9 +221,66 @@ export function ensureLibraryStorage(
 ): boolean {
   try {
     migrateLibrary(globalDb, lib)
-    return hasLibDb(lib.path)
+    if (!hasLibDb(lib.path)) return false
+    adoptLibraryRows(lib)
+    return true
   } catch {
     return false
+  }
+}
+
+/**
+ * 移除库只删注册表行，库内 db 保留旧 library_id；重新加库会拿到新 id，
+ * 不重挂这些行就会被当成空库重新扫描，素材数从 0 涨回去。
+ * 同 rel_path 已有新 id 行（旧版本重扫产生的重复）时先合并用户数据再删旧行。
+ */
+export function adoptLibraryRows(lib: { id: number; path: string; name: string }): void {
+  const db = getLibHandle(lib.path)
+  try {
+    db.transaction(() => {
+      const stale = db.prepare('SELECT * FROM assets WHERE library_id <> ?').all(lib.id) as Record<string, unknown>[]
+      if (stale.length > 0) {
+        const findCurrent = db.prepare('SELECT id FROM assets WHERE library_id = ? AND rel_path = ?')
+        const move = db.prepare('UPDATE assets SET library_id = ? WHERE id = ?')
+        const mergeUser = db.prepare(`UPDATE assets SET
+            rating = MAX(rating, @rating),
+            favorite = MAX(favorite, @favorite),
+            review_flag = MAX(review_flag, @review_flag),
+            note = CASE WHEN note = '' THEN @note ELSE note END,
+            source_url = COALESCE(source_url, @source_url),
+            deleted_at = COALESCE(@deleted_at, deleted_at),
+            palette = CASE WHEN palette = '[]' THEN @palette ELSE palette END,
+            imported_at = MIN(imported_at, @imported_at),
+            manual_order = COALESCE(manual_order, @manual_order)
+          WHERE id = @currentId`)
+        const copyTags = db.prepare(
+          'INSERT OR IGNORE INTO asset_tags(asset_id, tag_id) SELECT ?, tag_id FROM asset_tags WHERE asset_id = ?'
+        )
+        const deleteStale = db.prepare('DELETE FROM assets WHERE id = ?')
+        for (const row of stale) {
+          const current = findCurrent.get(lib.id, row.rel_path) as { id: number } | undefined
+          if (!current) {
+            move.run(lib.id, row.id)
+            continue
+          }
+          mergeUser.run({ ...row, currentId: current.id })
+          copyTags.run(current.id, row.id)
+          deleteStale.run(row.id)
+        }
+      }
+      for (const table of ['folder_orders', 'folder_styles']) {
+        db.prepare(`DELETE FROM ${table} WHERE library_id <> ? AND path IN (SELECT path FROM ${table} WHERE library_id = ?)`).run(lib.id, lib.id)
+        db.prepare(`UPDATE ${table} SET library_id = ? WHERE library_id <> ?`).run(lib.id, lib.id)
+      }
+      db.prepare('DELETE FROM purged_paths WHERE library_id <> ? AND rel_path IN (SELECT rel_path FROM purged_paths WHERE library_id = ?)').run(lib.id, lib.id)
+      db.prepare('UPDATE purged_paths SET library_id = ? WHERE library_id <> ?').run(lib.id, lib.id)
+      db.prepare('DELETE FROM open_tabs WHERE library_id <> ?').run(lib.id)
+      const setMeta = db.prepare('INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      setMeta.run('library_id', String(lib.id))
+      setMeta.run('name', lib.name)
+    })()
+  } finally {
+    releaseLibHandle(lib.path)
   }
 }
 

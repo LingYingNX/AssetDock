@@ -1,7 +1,9 @@
 import { ipcMain, dialog } from 'electron'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { getDb } from '../services/db'
 import {
-  createLibrary, getOpenTabs, saveOpenTabs, getAppState, setAppState,
+  createLibrary, getLibrary, getOpenTabs, saveOpenTabs, getAppState, setAppState,
   listLibraries, APP_STATE_KEYS
 } from '../services/store'
 import { ensureLibraryStorage } from '../services/libraryDb'
@@ -9,7 +11,7 @@ import { rememberPickedPath, validateLibraryCreatePath, type PickedPathMap } fro
 import { configuredToolPath, probeTool } from '../services/externalTools'
 import { EXT_WHITELIST } from '../services/ignore'
 import { win, libRootOf } from './context'
-import { reconcileWhenOpened, scanLibraryContents, migrationFailures, attachRootWatcher } from './watch'
+import { reconcileWhenOpened, scanLibraryContents, migrationFailures, attachRootWatcher, watchManager } from './watch'
 
 const pickedLibraryPaths: PickedPathMap = new Map()
 
@@ -78,7 +80,54 @@ export function registerLibraryIpc(): void {
     return storageReady ? lib : { ...lib, warning: '素材库无法创建本地数据库，当前会话将使用全局回退数据' }
   })
 
-  ipcMain.handle('library:list', () => listLibraries(getDb()))
+  ipcMain.handle('library:list', () => listLibraries(getDb()).map((l) => ({ ...l, exists: existsSync(l.path) })))
+
+  /* 路径丢失后的重新绑定:只改注册表路径,文件夹里的 .mediahub/library.db 跟着目录走 */
+  ipcMain.handle('library:relocate', async (_e, libraryId: number, nextPath: string) => {
+    const db = getDb()
+    const lib = getLibrary(db, libraryId)
+    if (!lib) return { error: '资源库不存在' }
+    if (typeof nextPath !== 'string' || !nextPath.trim()) return { error: '路径无效' }
+    const real = resolve(nextPath)
+    let isDir = false
+    try { isDir = statSync(real).isDirectory() } catch { isDir = false }
+    if (!isDir) return { error: '所选文件夹不存在或不是文件夹' }
+    const taken = listLibraries(db).some((l) => l.id !== libraryId && l.path.toLowerCase() === real.toLowerCase())
+    if (taken) return { error: '该文件夹已绑定为其他资源库' }
+    db.prepare('UPDATE libraries SET path = ? WHERE id = ?').run(real, libraryId)
+    const updated = { ...lib, path: real }
+    await watchManager.close(`${libraryId}:root`)
+    ensureLibraryStorage(db, updated)
+    attachRootWatcher(libraryId, real)
+    void scanLibraryContents(libraryId)
+    return { library: updated }
+  })
+
+  /* 原路径已被删除:重建空文件夹并重新挂载,等同于换了一个新目录 */
+  ipcMain.handle('library:ensureFolder', async (_e, libraryId: number) => {
+    const db = getDb()
+    const lib = getLibrary(db, libraryId)
+    if (!lib) return { error: '资源库不存在' }
+    try { mkdirSync(lib.path, { recursive: true }) } catch { return { error: '无法创建文件夹，请改用「选择文件夹」' } }
+    await watchManager.close(`${libraryId}:root`)
+    ensureLibraryStorage(db, lib)
+    attachRootWatcher(libraryId, lib.path)
+    void scanLibraryContents(libraryId)
+    return { library: lib }
+  })
+
+  /* 只取消登记:不删磁盘文件,也不动目录下的 .mediahub */
+  ipcMain.handle('library:remove', async (_e, libraryId: number) => {
+    const db = getDb()
+    const lib = getLibrary(db, libraryId)
+    if (!lib) return { error: '资源库不存在' }
+    db.prepare('DELETE FROM libraries WHERE id = ?').run(libraryId)
+    const tabs = getOpenTabs(db).filter((t) => t.libraryId !== libraryId)
+    saveOpenTabs(db, tabs.map((t) => t.libraryId))
+    await watchManager.close(`${libraryId}:root`)
+    return { ok: true }
+  })
+
   ipcMain.handle('library:takeMigrationFailures', () => ({ names: migrationFailures.splice(0) }))
 
   ipcMain.handle('tabs:get', () => getOpenTabs(getDb()))

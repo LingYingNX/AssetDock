@@ -31,8 +31,13 @@ const api = {
     create: (folderPath: string, name?: string): Promise<{ id: number; name: string; path: string; warning?: string } | { error: string }> =>
       ipcRenderer.invoke('library:create', folderPath, name),
     open: (libraryId: number): Promise<{ ok: boolean }> => ipcRenderer.invoke('library:open', libraryId),
-    list: (): Promise<{ id: number; name: string; path: string }[]> => ipcRenderer.invoke('library:list'),
+    list: (): Promise<{ id: number; name: string; path: string; exists: boolean }[]> => ipcRenderer.invoke('library:list'),
     takeMigrationFailures: (): Promise<{ names: string[] }> => ipcRenderer.invoke('library:takeMigrationFailures'),
+    relocate: (libraryId: number, path: string): Promise<{ library: { id: number; name: string; path: string } } | { error: string }> =>
+      ipcRenderer.invoke('library:relocate', libraryId, path),
+    ensureFolder: (libraryId: number): Promise<{ library: { id: number; name: string; path: string } } | { error: string }> =>
+      ipcRenderer.invoke('library:ensureFolder', libraryId),
+    remove: (libraryId: number): Promise<{ ok: true } | { error: string }> => ipcRenderer.invoke('library:remove', libraryId),
     importEagle: (libraryId: number, folderPath: string): Promise<{ imported: number; multiFolderAssets: number } | { error: string }> =>
       ipcRenderer.invoke('eagle:import', libraryId, folderPath)
   },

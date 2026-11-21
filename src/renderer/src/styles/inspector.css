@@ -39,6 +39,14 @@
 .rate.big{gap:3px}
 .rate.big .star{width:15px;height:15px}
 .rate.big .star svg{width:15px;height:15px}
+/* 收藏与星级同排:细分隔 + 圆形悬停底,让它像一对控件而不是孤立图标 */
+.insp-rate-sep{width:1px;height:14px;margin:0 1px;flex:none;background:var(--line2)}
+.insp-fav{width:23px;height:23px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--t3);cursor:pointer;transition:color var(--dur-hover) var(--ease-out),background-color var(--dur-hover) var(--ease-out),transform var(--dur-press) var(--ease-out)}
+.insp-fav .ic{width:15px;height:15px}
+.insp-fav:hover{background:var(--bg3);color:var(--danger);transform:scale(1.06)}
+.insp-fav.on{color:var(--danger)}
+.insp-fav.on .ic{fill:var(--danger);stroke:var(--danger)}
+.insp-fav:active{transform:scale(.94)}
 
 /* 标签胶囊:圆角走 999px,与卡片的 14px 形成形状对比;底色用 accent 淡染,
    比 1px 细边更醒目,也不占描边像素 */

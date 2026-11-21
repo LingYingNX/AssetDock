@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { scanLibrary } from '../services/scan'
 import type { ScanEntry, ScanUpsertResult } from '../services/store'
 import { probeVideo } from '../services/videoMeta'
@@ -7,7 +8,7 @@ import {
 } from '../services/store'
 import { listFolderOrders } from '../services/store'
 import { listLibraryFolders, orderLibraryFolders } from '../services/folders'
-import { hasLibDb, migrateLibrary } from '../services/libraryDb'
+import { adoptLibraryRows, hasLibDb, migrateLibrary } from '../services/libraryDb'
 import { collectOrphanThumbs, pruneMissingThumbs } from '../services/thumbs'
 import { collectOrphanDocumentPreviews } from '../services/documentPreview'
 import { collectOrphanAiPreviews } from '../services/aiPreview'
@@ -295,6 +296,9 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
   const global = getDb()
   const failed: string[] = []
   for (const l of libraries) {
+    // 根目录已被用户删除:不要在这里迁移(迁移会 mkdir 重建目录,等于把丢失的库"救活"成空库)。
+    // 交给渲染层启动闸门去重新定位/重建/移除。
+    if (!existsSync(l.path)) continue
     try {
       migrateLibrary(global, l)
     } catch {
@@ -324,10 +328,8 @@ export async function attachWatchersFor(libraries: { id: number; path: string; n
     try {
       s = scopeFor(l.id)
       if (s) {
-        // 启动时执行一次:携带副本打开时把复制带来的旧 library_id 重打为当前注册 id(幂等)。
-        // 原先嵌在 scopeFor 里每次 handler 调用都跑,剥离到启动路径(S1-2)。
-        const stray = s.db.prepare('SELECT 1 FROM assets WHERE library_id <> ? LIMIT 1').get(l.id)
-        if (stray) s.db.prepare('UPDATE assets SET library_id = ?').run(l.id)
+        // 携带副本或被移除后重新登记时,把库内 db 的旧 library_id 重挂到当前 id(幂等)。
+        adoptLibraryRows(l)
         await migrateLegacySources(s.db, l.id, s.libPath)
       }
     } catch {
