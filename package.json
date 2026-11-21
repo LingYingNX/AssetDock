@@ -1,6 +1,6 @@
 {
   "name": "mediahub",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MediaHub 素材管理器",
   "main": "./out/main/index.js",
   "private": true,
@@ -65,10 +65,40 @@
   "build": {
     "appId": "com.lingying.mediahub",
     "productName": "MediaHub",
-    "directories": { "output": "artifacts/dist" },
-    "files": ["out/**/*", "package.json"],
-    "asarUnpack": ["**/*.node", "**/node_modules/sharp/**", "**/node_modules/@napi-rs/**", "**/node_modules/ffmpeg-static/**"],
-    "win": { "target": ["nsis"], "artifactName": "MediaHub-${version}-Setup.${ext}", "icon": "build/icon.png" },
-    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "MediaHub", "uninstallDisplayName": "MediaHub 素材管理器", "installerIcon": "build/icon.ico", "uninstallerIcon": "build/icon.ico", "installerHeaderIcon": "build/icon.ico", "installerHeader": "build/installerHeader.bmp", "installerSidebar": "build/installerSidebar.bmp", "uninstallerSidebar": "build/installerSidebar.bmp" }
+    "directories": {
+      "output": "artifacts/dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@napi-rs/**",
+      "**/node_modules/ffmpeg-static/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "MediaHub-${version}-Setup.${ext}",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MediaHub",
+      "uninstallDisplayName": "MediaHub 素材管理器",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp"
+    }
   }
 }

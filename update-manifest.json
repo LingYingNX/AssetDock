@@ -1,7 +1,13 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publishedAt": "2026-11-21",
-  "downloadUrl": "",
-  "sizeBytes": null,
-  "notes": []
+  "downloadUrl": "https://github.com/LingYingNX/AssetDock/releases/download/v1.1.0/MediaHub-1.1.0-Setup.exe",
+  "sizeBytes": 212477017,
+  "notes": [
+    "偏好设置新增「关于」页，展示版本号与作者",
+    "软件更新支持版本检测、更新日志与实时下载进度",
+    "新增重复素材清理面板，支持按严格/均衡/宽松规则扫描",
+    "颜色筛选支持自定义颜色菜单",
+    "文件夹导航线改为 2px 实色，只在末项收线，不再贴住箭头"
+  ]
 }
