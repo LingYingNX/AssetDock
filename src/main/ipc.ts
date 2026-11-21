@@ -12,10 +12,12 @@
  */
 import { registerLibraryIpc } from './ipc/libraries'
 import { registerAssetsIpc } from './ipc/assets'
+import { registerDedupIpc } from './ipc/dedup'
 
 export function registerIpc(): void {
   registerLibraryIpc()
   registerAssetsIpc()
+  registerDedupIpc()
 }
 
 export { attachWatchersFor } from './ipc/watch'

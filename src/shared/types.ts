@@ -231,6 +231,38 @@ export interface TranscodeProgressPayload {
   error?: string
 }
 
+/** 去重规则:汉明距离上限(64 位 dHash 内的距离阈值) */
+export type DedupRule = 'strict' | 'balanced' | 'loose'
+
+/** 相似图片候选(一条素材记录,phash 列名与库内一致) */
+export interface DedupCandidate {
+  id: number
+  relPath: string
+  name: string
+  width: number | null
+  height: number | null
+  sizeBytes: number
+  fingerprint: string
+}
+
+/** 一组相似素材:candidates[0] 是按分辨率/体积自动选出的推荐保留项 */
+export interface DedupGroup {
+  candidates: DedupCandidate[]
+}
+
+/** dedup:scan 响应 */
+export interface DedupScanResponse {
+  scanned: number
+  groups: DedupGroup[]
+}
+
+export type DedupScanResult = DedupScanResponse | { error: string }
+
+export interface DedupProgressPayload {
+  done: number
+  total: number
+}
+
 /** preload on() 白名单事件通道 → payload 映射(与主进程实际发送一致) */
 export interface EventChannelMap {
   'library:scan': LibraryScanPayload
@@ -239,4 +271,5 @@ export interface EventChannelMap {
   'thumbs:progress': ThumbsProgressPayload
   'transcode:progress': TranscodeProgressPayload
   'transfer:progress': TransferProgressPayload
+  'dedup:progress': DedupProgressPayload
 }

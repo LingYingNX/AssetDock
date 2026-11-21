@@ -8,6 +8,7 @@ import { Icon } from './Icons'
 import { TagFilterMenu } from './TagFilterMenu'
 import { DisplayMenu } from './DisplayMenu'
 import { COLW_STEPS, colwToSlider, sliderToColw } from '../data/colw'
+import { cancelColorMenuClose, scheduleColorMenuClose } from '../data/color-menu'
 import type { AssetFormat } from '../../../shared/formats'
 
 /* 星云粒子落点:对齐原设计的 --x / --y 两个变量(见 content.css 的 nebula-float 关键帧)。
@@ -210,7 +211,9 @@ export function FilterBar(): React.JSX.Element {
         aria-label="颜色构造"
         aria-haspopup="menu"
         aria-expanded={cbarOpen}
-        onClick={toggleCbar}
+        onPointerEnter={() => { cancelColorMenuClose(); if (!useUI.getState().cbarOpen) toggleCbar() }}
+        onPointerLeave={() => scheduleColorMenuClose(() => { if (useUI.getState().cbarOpen) useUI.getState().toggleCbar() })}
+        onClick={() => { if (!useUI.getState().cbarOpen) toggleCbar() }}
       >
         <svg className="cball" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
           <path d="M273.612499 729.948748L164.413357 839.516529A490.454059 490.454059 0 0 1 20.439245 491.725865h154.623691c0 92.979014 37.765044 177.069726 98.508603 238.222883" fill="#006AFF" />

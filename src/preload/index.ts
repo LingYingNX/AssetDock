@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AssetImportResponse, AssetListResponse, AssetListPage, AssetRowsResponse, EventChannelMap, FolderListResponse } from '../shared/types'
+import type { AssetImportResponse, AssetListResponse, AssetListPage, AssetRowsResponse, DedupRule, DedupScanResult, EventChannelMap, FolderListResponse } from '../shared/types'
 import type { DocumentPreview } from '../shared/types'
 
 const api = {
@@ -111,6 +111,10 @@ const api = {
       ipcRenderer.invoke('assets:copy', libraryId, ids),
     export: (libraryId: number, ids: number[]): Promise<{ exported: number } | { canceled: true } | { error: string; exported?: number }> =>
       ipcRenderer.invoke('assets:export', libraryId, ids)
+  },
+
+  dedup: {
+    scan: (libraryId: number, rule: DedupRule, folder?: string | null): Promise<DedupScanResult> => ipcRenderer.invoke('dedup:scan', libraryId, rule, folder)
   },
 
   tabs: {

@@ -20,6 +20,7 @@ import { Lightbox } from './components/Lightbox'
 import { ContextMenu } from './components/ContextMenu'
 import { FolderContextMenu } from './components/FolderContextMenu'
 import { PreferencesDialog } from './components/PreferencesDialog'
+import { DedupDialog } from './components/DedupDialog'
 import { ThumbProgress } from './components/ThumbProgress'
 import { Toast } from './components/Toast'
 
@@ -333,6 +334,7 @@ export default function App(): React.JSX.Element {
       <ContextMenu />
       <FolderContextMenu />
       <PreferencesDialog />
+      <DedupDialog />
       {/* 一次性提示固定在右下角;加载进度已经移入工作区,两者不会再互相遮挡。 */}
       <div className="overlay-stack">
         <Toast />

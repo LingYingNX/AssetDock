@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUI } from '../store/ui'
-import { aggregatePalette, queryAssets } from '../data/query'
+import { DEFAULT_FILTERS, aggregatePalette, queryAssets } from '../data/query'
 import { useMenuFocus } from './useMenuFocus'
+import { cancelColorMenuClose, scheduleColorMenuClose } from '../data/color-menu'
 
 /**
  * 颜色构造:当前视图素材 palette 加权聚合前 8 色。
@@ -15,13 +16,15 @@ export function ColorStrip(): React.JSX.Element | null {
   const setStripColor = useUI((s) => s.setStripColor)
   const assets = useUI((s) => s.assets)
   const nav = useUI((s) => s.nav)
-  const search = useUI((s) => s.search)
-  const filters = useUI((s) => s.filters)
   const ref = useRef<HTMLDivElement>(null)
 
   const strip = useMemo(
-    () => (cbarOpen ? aggregatePalette(queryAssets(assets, { nav, search, filters, stripColor: null })) : []),
-    [cbarOpen, assets, nav, search, filters]
+    () => (cbarOpen
+      ? aggregatePalette(
+          queryAssets(assets, { nav, search: '', filters: DEFAULT_FILTERS, stripColor: null }).filter((a) => a.type === 'image')
+        )
+      : []),
+    [cbarOpen, assets, nav]
   )
 
   /* 三态:open 决定外观,shown 决定是否带 .open,mounted 决定是否留在 DOM。
@@ -105,8 +108,9 @@ export function ColorStrip(): React.JSX.Element | null {
       id="cbar"
       role="menu"
       aria-label="颜色构造"
+      onPointerEnter={cancelColorMenuClose}
+      onPointerLeave={(event) => { if ((event.relatedTarget as Node | null) === document.getElementById('colorBtn')) return; scheduleColorMenuClose(() => { if (useUI.getState().cbarOpen) useUI.getState().toggleCbar() }) }}
     >
-      <div className="color-menu-head">颜色构造</div>
       {cell.length === 0 ? (
         <div className="menu-empty">当前视图无颜色数据</div>
       ) : (

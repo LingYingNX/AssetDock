@@ -10,14 +10,14 @@ interface MenuPosition {
 }
 
 function SettingsItem({
-  icon,
   label,
   arrow,
   shortcut,
   expanded,
+  icon,
   onClick
 }: {
-  icon: string
+  icon?: string
   label: string
   arrow?: boolean
   shortcut?: string
@@ -26,7 +26,7 @@ function SettingsItem({
 }): React.JSX.Element {
   const content = (
     <>
-      <span className="settings-menu-icon"><Icon name={icon} /></span>
+      {icon ? <span className="settings-menu-icon"><Icon name={icon} /></span> : null}
       <span className="settings-menu-label">{label}</span>
       {shortcut ? <span className="settings-menu-shortcut">{shortcut}</span> : null}
       {arrow ? <Icon name="chev-r" className="settings-menu-arrow" /> : null}
@@ -112,7 +112,8 @@ export function SettingsMenu(): React.JSX.Element | null {
       role="menu"
       style={{ top: position.top, left: position.left }}
       onContextMenu={(event) => event.preventDefault()}
-      onPointerLeave={() => setOpenMenu(null)}
+      /* 点开对话框后遮罩盖住菜单,这一下 pointerleave 会清掉刚设的 openMenu,对话框等于没开 */
+      onPointerLeave={() => { if (useUI.getState().openMenu === 'settings') setOpenMenu(null) }}
     >
       {/* 标题栏那颗「+」已移除(它和标签页的「×」一起构成浏览器标签栏的样子),
           新建素材库的入口收在这里。createLibraryFlow 会开文件夹选择器,
@@ -129,11 +130,11 @@ export function SettingsMenu(): React.JSX.Element | null {
         <SettingsItem icon="drive" label="资源库管理" arrow expanded={libraryMenuOpen} onClick={() => setLibraryMenuOpen((value) => !value)} />
         {libraryMenuOpen && (
           <div className="settings-menu settings-menu-submenu glass-menu" role="menu">
-            <SettingsItem icon="plus" label="导入素材" onClick={importAssetFilesFlow} />
-            <SettingsItem icon="layers" label="导入 Eagle 素材" onClick={importEagleFlow} />
+            <SettingsItem label="导入素材" onClick={importAssetFilesFlow} />
+            <SettingsItem label="重复素材清理" onClick={() => { setLibraryMenuOpen(false); setOpenMenu('dedup') }} />
+            <SettingsItem label="导入 Eagle 素材" onClick={importEagleFlow} />
             {canCloseTab && (
               <SettingsItem
-                icon="x"
                 label="关闭当前素材库"
                 onClick={() => {
                   setOpenMenu(null)

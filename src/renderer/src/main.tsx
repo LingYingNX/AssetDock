@@ -19,6 +19,7 @@ import './styles/inspector.css'
 import './styles/lightbox.css'
 import './styles/menu.css'
 import './styles/preferences.css'
+import './styles/dedup.css'
 
 const modelThumb = new URLSearchParams(window.location.search).has('modelThumb')
 

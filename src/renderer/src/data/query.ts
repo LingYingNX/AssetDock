@@ -363,8 +363,8 @@ export function aggregatePalette(list: Asset[]): { hex: string; ratio: number }[
       const r = parseInt(m.slice(0, 2), 16)
       const g = parseInt(m.slice(2, 4), 16)
       const b = parseInt(m.slice(4, 6), 16)
-      // 4bit/通道 量化分桶(色相近似合并)
-      const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4)
+      // 5bit/通道 量化分桶:16 级会把相近色全并成一格,色带老是那几块
+      const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
       const bk = buckets.get(key) ?? { r: 0, g: 0, b: 0, w: 0 }
       bk.r += r * p.ratio
       bk.g += g * p.ratio

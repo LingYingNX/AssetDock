@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS assets (
   folder_path TEXT,
   eagle_mtime_ms INTEGER,
   manual_order INTEGER,
+  phash TEXT,
   UNIQUE(library_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_assets_lib ON assets(library_id);
@@ -121,6 +122,7 @@ export function openLibDb(libPath: string): Database.Database {
   if (!columns.some((column) => column.name === 'sheet_count')) db.exec('ALTER TABLE assets ADD COLUMN sheet_count INTEGER')
   if (!columns.some((column) => column.name === 'slide_count')) db.exec('ALTER TABLE assets ADD COLUMN slide_count INTEGER')
   if (!columns.some((column) => column.name === 'text_encoding')) db.exec('ALTER TABLE assets ADD COLUMN text_encoding TEXT')
+  if (!columns.some((column) => column.name === 'phash')) db.exec('ALTER TABLE assets ADD COLUMN phash TEXT')
   const indexColumns = db.pragma('table_info(index_sources)') as { name: string }[]
   if (!indexColumns.some((column) => column.name === 'kind')) db.exec("ALTER TABLE index_sources ADD COLUMN kind TEXT NOT NULL DEFAULT 'folder'")
   return db

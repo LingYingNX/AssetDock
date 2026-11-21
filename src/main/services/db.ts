@@ -151,6 +151,11 @@ export function migrateSchema(d: Database.Database): void {
       d.exec('CREATE INDEX IF NOT EXISTS idx_assets_lib_imported ON assets(library_id, imported_at DESC, id DESC)')
     }
   })
+  step(9, () => {
+    // 相似图片去重的感知哈希缓存:`${fingerprint}:${hex}`,前缀即计算时的指纹,
+    // 文件变更后前缀对不上,扫描时自动重算。
+    if (!columns('assets').includes('phash')) d.exec('ALTER TABLE assets ADD COLUMN phash TEXT')
+  })
 }
 
 export function getDb(): Database.Database {
@@ -178,5 +183,6 @@ export function openMemoryDb(): Database.Database {
   if (!cols.includes('source_index_id')) {
     d.exec('ALTER TABLE assets ADD COLUMN source_index_id INTEGER REFERENCES index_sources(id) ON DELETE CASCADE')
   }
+  if (!cols.includes('phash')) d.exec('ALTER TABLE assets ADD COLUMN phash TEXT')
   return d
 }

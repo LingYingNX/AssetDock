@@ -141,12 +141,12 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--acc2)}
 
 /* ---------- 颜色构造(浮层下拉,不再占据内容区高度) ---------- */
 .color-menu{width:max-content;padding:6px}
-.color-menu-head{padding:2px 6px 7px;font-size:var(--fs-cap);font-weight:600;letter-spacing:.04em;color:var(--t3)}
 .color-grid{display:grid;grid-template-columns:repeat(4,46px);gap:6px}
 .cs{position:relative;width:46px;height:var(--h-md);border-radius:var(--r-sm);border:1px solid var(--line2);display:flex;align-items:flex-end;padding:3px 5px;cursor:pointer;transition:box-shadow var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .cs:hover{box-shadow:inset 0 0 0 1px var(--acc-line)}
 .cs em{font:600 var(--fs-cap)/1 var(--font-mono);font-style:normal;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65)}
 .cs.on{box-shadow:0 0 0 2px var(--menu-solid),0 0 0 3.5px var(--acc)}
+.color-menu button.on::before{content:none}
 .color-menu-clear{margin-top:7px;width:100%;height:var(--h-sm);border-radius:var(--r-sm);font-size:var(--fs-body);color:var(--acc2);background:var(--acc-soft)}
 .color-menu-clear:hover{color:var(--t1)}
 
