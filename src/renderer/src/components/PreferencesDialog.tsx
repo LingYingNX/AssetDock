@@ -3,6 +3,7 @@ import { fmtCount, formatBytes } from '../data/query'
 import { useUI } from '../store/ui'
 import { Icon } from './Icons'
 import { applyTheme, currentTheme, parseTheme, writeMirroredTheme, type ThemeMode } from '../data/theme'
+import type { UpdateCheckResult, UpdateDownloadProgress } from '../../../shared/appUpdate'
 
 type CloseAction = 'minimize' | 'quit'
 type PreferenceState = {
@@ -24,13 +25,14 @@ const DEFAULT_PREFERENCES: PreferenceState = {
   cinema4dPath: ''
 }
 
-type SectionKey = 'general' | 'library' | 'media' | 'shortcuts'
+type SectionKey = 'general' | 'library' | 'media' | 'shortcuts' | 'about'
 
 const SECTIONS: { key: SectionKey; icon: string; label: string }[] = [
   { key: 'general', icon: 'sliders', label: '常用' },
   { key: 'library', icon: 'drive', label: '资源库' },
   { key: 'media', icon: 'film', label: '音视频' },
-  { key: 'shortcuts', icon: 'more-h', label: '快捷键' }
+  { key: 'shortcuts', icon: 'more-h', label: '快捷键' },
+  { key: 'about', icon: 'info', label: '关于' }
 ]
 
 /**
@@ -144,6 +146,14 @@ export function PreferencesDialog(): React.JSX.Element | null {
   const [libraryPath, setLibraryPath] = useState('')
   const [autoLaunchSupported, setAutoLaunchSupported] = useState(true)
   const [toolStatus, setToolStatus] = useState<{ blender: string; cinema4d: string }>({ blender: '未检测', cinema4d: '未检测' })
+  const [appVersion, setAppVersion] = useState('')
+  /** 更新检测的四个阶段:未检测 / 检测中 / 有更新 / 无更新;下载是第五个独立阶段 */
+  const [update, setUpdate] = useState<UpdateCheckResult | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [progress, setProgress] = useState<UpdateDownloadProgress | null>(null)
+  const [downloadError, setDownloadError] = useState('')
+  const [downloaded, setDownloaded] = useState(false)
   /** 偏好是否已从磁盘加载完成:draft 初值是默认浅色,加载前拿它预览会把夜间切成白天 */
   const [draftLoaded, setDraftLoaded] = useState(false)
   /** 已保存的主题:面板打开时从权威记录读到的值,关闭时据此同步回滚 */
@@ -193,6 +203,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
 
   useEffect(() => {
     if (!open) return
+    // 关于页是面板每次打开都该看到最新数据的只读页:版本号与更新状态都在这里拉
+    void window.windowApi.app.version().then((v) => setAppVersion(v)).catch(() => setAppVersion(''))
     // 打开面板不立即预览:draft 此刻还是默认值(浅色)。先标记未加载,
     // 等读到真正保存的偏好再允许预览,否则点开设置就会把夜间外观切成白天。
     setDraftLoaded(false)
@@ -219,6 +231,14 @@ export function PreferencesDialog(): React.JSX.Element | null {
     })
     return () => { cancelled = true }
   }, [open])
+
+  /* 下载进度走主进程事件:流式下载耗时不可控,invoke 只能在结束时给一次结果。
+     只在下载中订阅,结束即摘,面板卸载时也不会留下悬空监听。 */
+  useEffect(() => {
+    if (!downloading) return
+    const off = window.windowApi.on('update:progress', (p) => setProgress(p))
+    return off
+  }, [downloading])
 
   // 主题即时预览:切换单选项立刻生效;取消关闭时回滚为已保存值。
   // 必须等偏好加载完成:加载前 draft 是默认浅色,预览会误切主题。
@@ -356,6 +376,48 @@ export function PreferencesDialog(): React.JSX.Element | null {
       if (path) setDraft((current) => ({ ...current, [key]: path }))
     })
   }
+  /* 检测与下载都走主进程：渲染层不直接发网络请求，失败原因由主进程归一成 error 文案 */
+  const checkUpdate = async (): Promise<void> => {
+    if (checking || downloading) return
+    setChecking(true)
+    setUpdate(null)
+    setDownloadError('')
+    setDownloaded(false)
+    try {
+      setUpdate(await window.windowApi.app.checkUpdate())
+    } catch (e) {
+      setUpdate({ hasUpdate: false, currentVersion: appVersion, manifest: null, error: e instanceof Error ? e.message : '更新检测失败' })
+    } finally {
+      setChecking(false)
+    }
+  }
+  const downloadUpdate = async (): Promise<void> => {
+    const manifest = update?.manifest
+    if (!manifest?.downloadUrl || downloading) return
+    setDownloading(true)
+    setProgress(null)
+    setDownloadError('')
+    setDownloaded(false)
+    try {
+      const res = await window.windowApi.app.downloadUpdate(manifest.downloadUrl)
+      if (res.ok) setDownloaded(true)
+      else setDownloadError(res.error ?? '下载失败')
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : '下载失败')
+    } finally {
+      setDownloading(false)
+    }
+  }
+  /* 状态行只在有话说时出现：空闲/已是最新不占一行，徽章已说明当前版本 */
+  const updateStatus = (): string => {
+    if (downloaded) return '下载完成'
+    if (downloading) return `正在下载 ${progress?.percent ?? 0}%`
+    if (checking) return '正在检查更新'
+    if (update?.error) return update.error
+    return ''
+  }
+  /* 徽章右对齐显示当前版本；有新版时换成目标版本，与状态行不重复 */
+  const updateBadge = update?.hasUpdate ? `新版本 ${update.manifest?.version ?? ''}` : ''
   const createLibrary = (): void => {
     const name = libraryName.trim()
     if (!name) {
@@ -516,11 +578,69 @@ export function PreferencesDialog(): React.JSX.Element | null {
     </>
   )
 
+  /* 关于页同为只读:版本号、作者、更新检测与日志都不落偏好草稿 */
+  const aboutNotes = update?.manifest?.notes ?? []
+  const statusLine = downloadError || updateStatus()
+  const statusIsError = Boolean(downloadError || update?.error)
+  const aboutPane = (
+    <>
+      <section className="pref-section">
+        <div className="pref-about-card">
+          <span className="pref-about-mark"><Icon name="spark" /></span>
+          <div className="pref-about-text">
+            <span className="pref-about-name">MediaHub · 素材管理器</span>
+            <span className="pref-about-author">作者：铃音奈绪</span>
+          </div>
+          <span className="pref-version-badge" title="当前安装版本">{appVersion || '—'}</span>
+        </div>
+      </section>
+
+      <section className="pref-section">
+        <div className="pref-update-card">
+          <div className="pref-update-head">
+            <span className="pref-update-label">更新日志</span>
+            {updateBadge ? <span className="pref-version-badge">{updateBadge}</span> : null}
+          </div>
+          <div className="pref-changelog">
+            {aboutNotes.length > 0 ? (
+              <ul>
+                {aboutNotes.map((note, index) => (
+                  <li key={`${index}-${note}`}>{note}</li>
+                ))}
+              </ul>
+            ) : (
+              <span className="pref-changelog-empty">暂无更新日志</span>
+            )}
+          </div>
+          <div className="pref-update-footer">
+            {statusLine ? (
+              <div className={`pref-update-status${statusIsError ? ' is-error' : ''}`} role="status" aria-live="polite">{statusLine}</div>
+            ) : null}
+            {downloading ? (
+              /* 服务器没给 content-length 时去掉 value:不定长下载显示滚动条,而不是永远 0% */
+              <progress className="pref-update-progress" aria-label="更新进度" max={100} value={progress?.total ? progress.percent : undefined} />
+            ) : null}
+            <div className="pref-update-actions">
+              <button className="pref-update-secondary" disabled={checking || downloading} onClick={() => void checkUpdate()}>
+                <Icon name="sync" />
+                {checking ? '检查中…' : '检查更新'}
+              </button>
+              <button className="pref-update-primary" disabled={!update?.manifest?.downloadUrl || downloading || downloaded} onClick={() => void downloadUpdate()}>
+                <Icon name="download" />
+                {downloading ? '下载中…' : downloaded ? '已下载' : '立即更新'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  )
   const panes: Record<SectionKey, React.JSX.Element> = {
     general: generalPane,
     library: libraryPane,
     media: mediaPane,
-    shortcuts: shortcutsPane
+    shortcuts: shortcutsPane,
+    about: aboutPane
   }
 
   return (
@@ -547,8 +667,8 @@ export function PreferencesDialog(): React.JSX.Element | null {
           </nav>
           <div className="pref-content" role="region" aria-label="偏好设置内容">
             {panes[section]}
-            {/* 快捷键是只读速查表,没有草稿可提交,给出「保存」只会让人以为需要点 */}
-            {section === 'shortcuts' ? null : (
+            {/* 快捷键与关于都是只读页,没有草稿可提交,给出「保存」只会让人以为需要点 */}
+            {(section === 'shortcuts' || section === 'about') ? null : (
               <footer className="pref-footer">
                 <button className="pref-cancel" onClick={close}>取消</button>
                 <button className="pref-save" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>

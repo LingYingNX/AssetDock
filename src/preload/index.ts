@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AssetImportResponse, AssetListResponse, AssetListPage, AssetRowsResponse, DedupRule, DedupScanResult, EventChannelMap, FolderListResponse } from '../shared/types'
 import type { DocumentPreview } from '../shared/types'
+import type { UpdateCheckResult } from '../shared/appUpdate'
 
 const api = {
   minimize: (): void => {
@@ -130,7 +131,14 @@ const api = {
   app: {
     getAutoLaunch: (): Promise<{ enabled: boolean; supported: boolean }> => ipcRenderer.invoke('app:getAutoLaunch'),
     setAutoLaunch: (enabled: boolean): Promise<{ ok: boolean; supported: boolean; enabled?: boolean }> =>
-      ipcRenderer.invoke('app:setAutoLaunch', enabled)
+      ipcRenderer.invoke('app:setAutoLaunch', enabled),
+    /** 当前安装版本(来自打包后的 package.json) */
+    version: (): Promise<string> => ipcRenderer.invoke('app:version'),
+    /** 拉取更新清单并与当前版本比较;失败时 error 非空、manifest 为 null */
+    checkUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('app:checkUpdate'),
+    /** 流式下载更新包,进度通过 update:progress 事件推送 */
+    downloadUpdate: (url: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
+      ipcRenderer.invoke('app:downloadUpdate', url)
   },
 
   /** 白名单事件订阅(payload 类型来自 shared EventChannelMap,S2-10) */

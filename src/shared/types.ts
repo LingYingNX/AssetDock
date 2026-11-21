@@ -1,4 +1,5 @@
 /** 主进程与渲染进程共享的轻量类型(S2-10:跨进程 schema 单一来源) */
+import type { UpdateDownloadProgress } from './appUpdate'
 
 export interface PaletteColor {
   hex: string
@@ -263,6 +264,9 @@ export interface DedupProgressPayload {
   total: number
 }
 
+/** app:downloadUpdate 的流式下载进度(主进程按字节推送) */
+export type UpdateProgressPayload = UpdateDownloadProgress
+
 /** preload on() 白名单事件通道 → payload 映射(与主进程实际发送一致) */
 export interface EventChannelMap {
   'library:scan': LibraryScanPayload
@@ -272,4 +276,5 @@ export interface EventChannelMap {
   'transcode:progress': TranscodeProgressPayload
   'transfer:progress': TransferProgressPayload
   'dedup:progress': DedupProgressPayload
+  'update:progress': UpdateProgressPayload
 }

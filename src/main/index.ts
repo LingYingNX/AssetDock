@@ -10,6 +10,8 @@ import { registerIpc, initServices, attachWatchersFor } from './ipc'
 import { registerMediaProtocol } from './services/media'
 import { listLibraries, getAppState, setAppState } from './services/store'
 import { resolveWithinAnyLibrary } from './services/libResolve'
+import { checkForUpdate, downloadUpdate, updateCacheDir } from './services/appUpdate'
+import { send } from './events'
 
 const DEFAULT_WINDOW = { width: 1600, height: 950 }
 /* 设计基准是 1920×1080。最小尺寸必须明显小于基准,否则窄屏/分屏下窗口本身就被
@@ -247,6 +249,31 @@ if (!app.requestSingleInstanceLock()) {
     if (!app.isPackaged) return { ok: false, supported: false }
     app.setLoginItemSettings({ openAtLogin: enabled === true })
     return { ok: true, supported: true, enabled: app.getLoginItemSettings().openAtLogin }
+  })
+
+  /** 关于面板：版本号来自打包后的 package.json，dev 下回落到 package.json 的 version 字段 */
+  ipcMain.handle('app:version', () => app.getVersion())
+
+  ipcMain.handle('app:checkUpdate', () => checkForUpdate(app.getVersion()))
+
+  /* 下载进度走事件通道而不是 invoke 返回值：流式下载耗时不可控，
+     invoke 只能在结束时给一次结果，进度条要靠主进程持续推送。 */
+  ipcMain.handle('app:downloadUpdate', async (_e, url: string) => {
+    // 渲染层只能触发 http(s) 下载：主进程的 fetch 不该被用来探测/读取本地文件
+    let protocol = ''
+    try {
+      protocol = new URL(String(url ?? '')).protocol
+    } catch {
+      return { ok: false, error: '无效的下载地址' }
+    }
+    if (protocol !== 'https:' && protocol !== 'http:') return { ok: false, error: '不支持的下载地址' }
+    const dest = join(updateCacheDir(app.getPath('userData')), `update-${Date.now()}.bin`)
+    try {
+      await downloadUpdate(url, dest, (p) => send('update:progress', p))
+      return { ok: true, path: dest }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : '下载失败' }
+    }
   })
 
   // dev 下开放本地 HTTP 桥:GET /<token>/<js 表达式> 在渲染进程执行并返回 JSON,供无头验证脚本使用。
