@@ -595,11 +595,16 @@ export function Sidebar(): React.JSX.Element {
     <aside className="sidebar glass-sidebar">
       <div className="side-scroll">
         <section className="side-sec">
-          {/* 这一组装的是系统视图筛选(含回收站),不是"快捷入口";clock 图标同时被下面的
-              「最近导入」使用,重复会让人误以为两者相关 */}
-          <div className="side-title"><Icon name="sliders" />浏览</div>
+          {/* 系统视图组不设分组标题:五个入口顶格排在侧栏最上方,
+              标题行原本占的那一整行留白由它们自己填满 */}
           <button className={`nav-item${nav === 'all' ? ' on' : ''}`} aria-current={nav === 'all' ? 'page' : undefined} onClick={() => setNav('all')}>
-            <Icon name="layers" />全部素材<span className="cnt has-items">{fmtCount(c.all)}</span>
+            {/* 实心三层图标:源 SVG 是填充路径,.ic 的描边规则会再描一圈,这里单独走填充 */}
+            <svg className="ic nav-all-mark" viewBox="0 0 1168 1024" aria-hidden="true" focusable="false">
+              <path d="M573.38368 87.771429L982.98368 321.828571 588.012251 533.942857 178.412251 307.2l394.971429-219.428571m0-87.771429L32.126537 307.2l555.885714 307.2L1129.269394 329.142857 573.38368 0z" />
+              <path d="M580.697966 819.2L17.497966 533.942857c-14.628571-7.314286-21.942857-29.257143-14.628572-51.2s29.257143-21.942857 43.885715-14.628571l533.942857 270.628571 533.942857-270.628571c14.628571-7.314286 36.571429 0 51.2 14.628571 7.314286 14.628571 0 36.571429-14.628572 51.2l-570.514285 285.257143z" />
+              <path d="M580.697966 1024l-563.2-285.257143c-14.628571-7.314286-21.942857-29.257143-14.628572-51.2 7.314286-14.628571 29.257143-21.942857 43.885715-14.628571l533.942857 270.628571 533.942857-270.628571c14.628571-7.314286 36.571429 0 51.2 14.628571 7.314286 14.628571 0 36.571429-14.628572 51.2L580.697966 1024z" />
+            </svg>
+            全部素材<span className="cnt has-items">{fmtCount(c.all)}</span>
           </button>
           <button className={`nav-item${nav === 'recent' ? ' on' : ''}`} aria-current={nav === 'recent' ? 'page' : undefined} onClick={() => setNav('recent')}>
             <Icon name="clock" />最近导入<span className={`cnt${c.recent > 0 ? ' has-items' : ''}`}>{fmtCount(c.recent)}</span>
@@ -641,7 +646,13 @@ export function Sidebar(): React.JSX.Element {
 
         <section className={`side-sec${folderDragging ? ' folder-dragging' : ''}`}>
           <div className="side-title">
-            <span className="side-title-label folder-section-title"><Icon name="folder" />素材管理</span>
+            <span className="side-title-label folder-section-title">
+              {/* 实心四宫格图标:源 SVG 是填充路径,.ic 的描边规则会把轮廓再描一圈,这里单独走填充 */}
+              <svg className="ic folder-section-mark" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+                <path d="M365.022 114.078H123.808c-33.306 0-60.303 26.998-60.303 60.303v241.214c0 33.306 26.998 60.303 60.303 60.303h241.214c33.306 0 60.304-26.998 60.304-60.303V174.381c-0.001-33.305-26.999-60.303-60.304-60.303z m0 301.517H123.808V174.381h241.214v241.214z m0 180.911H123.808c-33.306 0-60.303 26.998-60.303 60.303v241.214c0 33.306 26.998 60.303 60.303 60.303h241.214c33.306 0 60.304-26.998 60.304-60.303V656.809c-0.001-33.305-26.999-60.303-60.304-60.303z m0 301.517H123.808V656.809h241.214v241.214z m482.427-301.517H606.235c-33.306 0-60.303 26.998-60.303 60.303v241.214c0 33.306 26.998 60.303 60.303 60.303h241.214c33.306 0 60.303-26.998 60.303-60.303V656.809c0.001-33.305-26.997-60.303-60.303-60.303z m0 301.517H606.235V656.809h241.214v241.214z m92.596-645.675L769.483 81.785c-23.549-23.555-61.733-23.555-85.281 0L513.639 252.348c-23.555 23.549-23.555 61.733 0 85.281l170.562 170.562c23.549 23.555 61.733 23.555 85.281 0l170.562-170.562c23.556-23.549 23.556-61.733 0.001-85.281zM726.842 465.551L556.28 294.988l170.562-170.562 170.562 170.562-170.562 170.563z" />
+              </svg>
+              素材管理
+            </span>
             {mode === 'library' && (
               <button className="side-title-add" title="新建文件夹" aria-label="新建文件夹" onClick={() => createFolder()}>
                 <Icon name="plus" />
