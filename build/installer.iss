@@ -68,10 +68,28 @@ begin
   end;
 end;
 
-procedure DeleteTreeIfExists(const Dir: String);
+{ 卸载阶段可能还有子进程没退干净,给两次重试再放弃 }
+procedure DeleteTreeWithRetry(const Dir: String);
+var
+  Attempt: Integer;
 begin
-  if DirExists(Dir) then
+  for Attempt := 1 to 3 do
+  begin
+    if not DirExists(Dir) then Exit;
     DelTree(Dir, True, True, True);
+    if not DirExists(Dir) then Exit;
+    Sleep(400);
+  end;
+end;
+
+{ 应用还开着时数据库/缓存文件会被占用:先尝试关掉,删不掉就挂到下次登录由 cmd 再删 }
+procedure DeleteUserDataTree(const Dir: String; const RunOnceName: String);
+begin
+  DeleteTreeWithRetry(Dir);
+  if DirExists(Dir) then
+    RegWriteStringValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\RunOnce', RunOnceName,
+      'cmd.exe /c rd /s /q "' + RemoveBackslashUnlessRoot(Dir) + '"');
 end;
 
 { 测试与资源补丁会按 mediahub-assetpatch-* 建临时目录,卸载时一并清掉 }
@@ -100,6 +118,9 @@ end;
 
 { 卸载时先问是否清数据;注册表杂项不依赖回答,直接删 }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ExePath: String;
+  ResultCode: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
@@ -108,15 +129,28 @@ begin
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\AssetDock');
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\mediahub');
 
+    { Windows 自己写的两条缓存:搜索跳转列表与应用名缓存,不删就会在卸载工具里露出来 }
+    ExePath := ExpandConstant('{app}\{#AppExe}');
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Search\JumplistData', ExePath);
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache',
+      ExePath + '.FriendlyAppName');
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache',
+      ExePath + '.ApplicationCompany');
+
     { SuppressibleMsgBox 才能让静默卸载自动跳过询问;普通 MsgBox 会把 /VERYSILENT 卡住 }
     if SuppressibleMsgBox('是否同时删除 MediaHub 的配置、素材索引、缩略图与更新缓存？' + #13#10 + #13#10 +
       '只删除本机数据，素材库里的原始文件不会删除。', mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDYES then
     begin
-      DeleteTreeIfExists(ExpandConstant('{userappdata}\MediaHub'));
-      DeleteTreeIfExists(ExpandConstant('{userappdata}\mediahub'));
-      DeleteTreeIfExists(ExpandConstant('{localappdata}\MediaHub'));
-      DeleteTreeIfExists(ExpandConstant('{localappdata}\mediahub'));
-      DeleteTreeIfExists(ExpandConstant('{localappdata}\mediahub-updater'));
+      Exec('taskkill.exe', '/F /IM MediaHub.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(500);
+      DeleteUserDataTree(ExpandConstant('{userappdata}\MediaHub'), 'MediaHubUninstallCleanup1');
+      DeleteUserDataTree(ExpandConstant('{userappdata}\mediahub'), 'MediaHubUninstallCleanup2');
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\MediaHub'));
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\mediahub'));
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\mediahub-updater'));
       DeleteAssetPatchTempDirs;
     end;
   end;
