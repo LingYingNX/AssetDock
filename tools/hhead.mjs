@@ -11,9 +11,14 @@ if (!expr) {
   process.exit(1)
 }
 let token = ''
-try {
-  token = readFileSync(join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'MediaHub', 'debug-bridge-token'), 'utf8').trim()
-} catch { /* token 文件不存在时按无 token 请求,桥会回 403 */ }
+const appDataDir = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+/* 更名后默认目录是 AssetDock;旧实例仍可能落在 MediaHub/mediahub,按顺序取存在的 token */
+for (const name of ['AssetDock', 'MediaHub', 'mediahub']) {
+  try {
+    token = readFileSync(join(appDataDir, name, 'debug-bridge-token'), 'utf8').trim()
+    break
+  } catch { /* 继续找下一个目录 */ }
+}
 const r = await (await fetch(`http://127.0.0.1:9223/${token}/${encodeURIComponent(expr)}`)).json()
 if (!r.ok) {
   console.error('ERR: ' + r.error)
