@@ -15,6 +15,8 @@ VersionInfoProductName={#AppName}
 VersionInfoDescription=MediaHub 素材管理器 安装程序
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
+; 覆盖安装时 Inno 默认(auto)会跳过目录页,这里强制每次都显示
+DisableDirPage=no
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 PrivilegesRequired=lowest
@@ -52,6 +54,20 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+{ 用户选 D:\管理器 时自动补成 D:\管理器\MediaHub,避免文件散落在所选目录根部 }
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Dir: String;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    Dir := RemoveBackslashUnlessRoot(WizardForm.DirEdit.Text);
+    if CompareText(ExtractFileName(Dir), '{#AppName}') <> 0 then
+      WizardForm.DirEdit.Text := AddBackslash(Dir) + '{#AppName}';
+  end;
+end;
+
 procedure DeleteTreeIfExists(const Dir: String);
 begin
   if DirExists(Dir) then
