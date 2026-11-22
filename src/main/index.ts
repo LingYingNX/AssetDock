@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, protocol, screen, Tray, nativeImage
 import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { openSqlite } from './services/sqlite'
@@ -21,9 +21,23 @@ const DEFAULT_WINDOW = { width: 1600, height: 950 }
 const MIN_WINDOW = { width: 1024, height: 640 }
 const WINDOW_STATE_KEY = 'windowBounds'
 
+// 应用更名 MediaHub→AssetDock:老用户继续用旧 userData,避免库注册表与标签丢失。
+// 只有新目录里已经有真正的库注册表时才切过去;全新用户才建 AssetDock。
+const APP_DATA_DIR = app.getPath('appData')
+const USER_DATA_DIR = join(APP_DATA_DIR, 'AssetDock')
+function resolveUserDataDir(): string {
+  if (existsSync(join(USER_DATA_DIR, 'mediahub.db'))) return USER_DATA_DIR
+  for (const legacy of [join(APP_DATA_DIR, 'MediaHub'), join(APP_DATA_DIR, 'mediahub')]) {
+    if (existsSync(join(legacy, 'mediahub.db'))) return legacy
+  }
+  return USER_DATA_DIR
+}
+
 // 无头/真实窗口验证使用独立 userData，避免测试触碰用户的库注册表。
 if (!app.isPackaged && process.env.MEDIAHUB_TEST_USER_DATA) {
   app.setPath('userData', resolve(process.env.MEDIAHUB_TEST_USER_DATA))
+} else {
+  app.setPath('userData', resolveUserDataDir())
 }
 
 /**
@@ -139,7 +153,7 @@ function ensureTray(): void {
   if (tray) return
   const image = nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png'))
   tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16, quality: 'best' }))
-  tray.setToolTip('MediaHub 素材管理器')
+  tray.setToolTip('AssetDock')
   tray.on('click', () => hideTrayMenu())
   tray.on('right-click', () => {
     if (!tray) return
@@ -309,7 +323,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       writeFileSync(join(userData, 'debug-bridge-token'), bridgeToken, 'utf8')
     } catch (e) {
-      console.warn('[MediaHub] debug bridge token write failed:', (e as Error).message)
+      console.warn('[AssetDock] debug bridge token write failed:', (e as Error).message)
     }
     const debugBridge = createServer((req, res) => {
       const raw = decodeURIComponent((req.url ?? '/').slice(1))
@@ -329,7 +343,7 @@ if (!app.requestSingleInstanceLock()) {
     })
     // 端口只是开发调试工具，不能让被占用的端口变成主进程崩溃。
     debugBridge.on('error', (error) => {
-      console.warn('[MediaHub] debug bridge unavailable:', error.message)
+      console.warn('[AssetDock] debug bridge unavailable:', error.message)
     })
     const debugPort = Number(process.env.MEDIAHUB_TEST_BRIDGE_PORT)
     debugBridge.listen(Number.isInteger(debugPort) && debugPort > 0 ? debugPort : 9223, '127.0.0.1')

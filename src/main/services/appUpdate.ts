@@ -53,7 +53,7 @@ async function fetchText(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: 'application/json', 'User-Agent': 'MediaHub' }
+      headers: { Accept: 'application/json', 'User-Agent': 'AssetDock' }
     })
     if (res.status === 403) throw new UpdateHttpError(403, '更新接口限流，请稍后重试')
     if (!res.ok) throw new UpdateHttpError(res.status, `更新服务器返回 ${res.status}`)

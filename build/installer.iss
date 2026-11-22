@@ -1,10 +1,10 @@
-﻿; MediaHub 安装器(Inno Setup 6,modern 风格 + 壁纸)
-#define AppName "MediaHub"
+﻿; AssetDock 安装器(Inno Setup 6,modern 风格 + 壁纸)
+#define AppName "AssetDock"
 #define AppVersion "1.1.0"
-#define AppExe "MediaHub.exe"
+#define AppExe "AssetDock.exe"
 
 [Setup]
-AppId={{9A1F5C2E-6B7D-4F3A-9C1E-3F0A7B2D5E41}
+AppId={{4E2B7A1D-9C3F-4D8B-B2A6-7F5C1E9D3A42}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
@@ -12,7 +12,7 @@ AppPublisher=LingYingNX
 AppPublisherURL=https://github.com/LingYingNX/AssetDock
 VersionInfoVersion=1.1.0.0
 VersionInfoProductName={#AppName}
-VersionInfoDescription=MediaHub 素材管理器 安装程序
+VersionInfoDescription=AssetDock 素材管理器 安装程序
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 ; 覆盖安装时 Inno 默认(auto)会跳过目录页,这里强制每次都显示
@@ -53,8 +53,11 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+Type: dirifempty; Name: "{app}"
+
 [Code]
-{ 用户选 D:\管理器 时自动补成 D:\管理器\MediaHub,避免文件散落在所选目录根部 }
+{ 用户选 D:\管理器 时自动补成 D:\管理器\AssetDock,避免文件散落在所选目录根部 }
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Dir: String;
@@ -92,8 +95,8 @@ begin
       'cmd.exe /c rd /s /q "' + RemoveBackslashUnlessRoot(Dir) + '"');
 end;
 
-{ 测试与资源补丁会按 mediahub-assetpatch-* 建临时目录,卸载时一并清掉 }
-procedure DeleteAssetPatchTempDirs;
+{ 测试与资源补丁会按 <app>-assetpatch-* 建临时目录,卸载时一并清掉 }
+procedure DeleteAssetPatchTempDirs(const Prefix: String);
 var
   FindRec: TFindRec;
   BaseDir: String;
@@ -101,7 +104,7 @@ begin
   BaseDir := GetEnv('TEMP');
   if BaseDir = '' then Exit;
   BaseDir := AddBackslash(BaseDir);
-  if FindFirst(BaseDir + 'mediahub-assetpatch-*', FindRec) then
+  if FindFirst(BaseDir + Prefix + '-assetpatch-*', FindRec) then
   begin
     try
       repeat
@@ -124,9 +127,11 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\AssetDock');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\assetdock');
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\MediaHub');
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\mediahub');
-    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\AssetDock');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\assetdock');
     RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\mediahub');
 
     { Windows 自己写的两条缓存:搜索跳转列表与应用名缓存,不删就会在卸载工具里露出来 }
@@ -141,17 +146,24 @@ begin
       ExePath + '.ApplicationCompany');
 
     { SuppressibleMsgBox 才能让静默卸载自动跳过询问;普通 MsgBox 会把 /VERYSILENT 卡住 }
-    if SuppressibleMsgBox('是否同时删除 MediaHub 的配置、素材索引、缩略图与更新缓存？' + #13#10 + #13#10 +
+    if SuppressibleMsgBox('是否同时删除 AssetDock 的配置、素材索引、缩略图与更新缓存？' + #13#10 + #13#10 +
       '只删除本机数据，素材库里的原始文件不会删除。', mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDYES then
     begin
+      Exec('taskkill.exe', '/F /IM AssetDock.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Exec('taskkill.exe', '/F /IM MediaHub.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(500);
+      DeleteUserDataTree(ExpandConstant('{userappdata}\AssetDock'), 'AssetDockUninstallCleanup1');
+      DeleteUserDataTree(ExpandConstant('{userappdata}\assetdock'), 'AssetDockUninstallCleanup2');
       DeleteUserDataTree(ExpandConstant('{userappdata}\MediaHub'), 'MediaHubUninstallCleanup1');
       DeleteUserDataTree(ExpandConstant('{userappdata}\mediahub'), 'MediaHubUninstallCleanup2');
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\AssetDock'));
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\assetdock'));
+      DeleteTreeWithRetry(ExpandConstant('{localappdata}\assetdock-updater'));
       DeleteTreeWithRetry(ExpandConstant('{localappdata}\MediaHub'));
       DeleteTreeWithRetry(ExpandConstant('{localappdata}\mediahub'));
       DeleteTreeWithRetry(ExpandConstant('{localappdata}\mediahub-updater'));
-      DeleteAssetPatchTempDirs;
+      DeleteAssetPatchTempDirs('AssetDock');
+      DeleteAssetPatchTempDirs('mediahub');
     end;
   end;
 end;

@@ -1,7 +1,8 @@
 {
-  "name": "mediahub",
+  "name": "assetdock",
   "version": "1.1.0",
-  "description": "MediaHub 素材管理器",
+  "description": "AssetDock 素材管理器",
+  "productName": "AssetDock",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
@@ -63,8 +64,8 @@
     "better-sqlite3@13.0.3": true
   },
   "build": {
-    "appId": "com.lingying.mediahub",
-    "productName": "MediaHub",
+    "appId": "com.lingying.assetdock",
+    "productName": "AssetDock",
     "directories": {
       "output": "artifacts/dist"
     },
@@ -83,7 +84,7 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "MediaHub-${version}-Setup.${ext}",
+      "artifactName": "AssetDock-${version}-Setup.${ext}",
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -92,8 +93,8 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MediaHub",
-      "uninstallDisplayName": "MediaHub 素材管理器",
+      "shortcutName": "AssetDock",
+      "uninstallDisplayName": "AssetDock 素材管理器",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",

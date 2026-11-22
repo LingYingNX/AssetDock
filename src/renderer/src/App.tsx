@@ -327,7 +327,7 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <SvgDefs />
       <a className="skip-link" href="#main-content">跳到主内容</a>
-      <h1 className="sr-only">MediaHub 素材管理器</h1>
+      <h1 className="sr-only">AssetDock 素材管理器</h1>
       <Titlebar />
       {/* 折叠检查器时不要卸载它:它一旦从 DOM 消失,列宽的过渡就没有对手可动画,
           只会看到内容凭空消失、布局瞬间重排。让它留在 DOM 里,由 .layout 的
