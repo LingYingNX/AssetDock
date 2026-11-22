@@ -50,3 +50,58 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure DeleteTreeIfExists(const Dir: String);
+begin
+  if DirExists(Dir) then
+    DelTree(Dir, True, True, True);
+end;
+
+{ 测试与资源补丁会按 mediahub-assetpatch-* 建临时目录,卸载时一并清掉 }
+procedure DeleteAssetPatchTempDirs;
+var
+  FindRec: TFindRec;
+  BaseDir: String;
+begin
+  BaseDir := GetEnv('TEMP');
+  if BaseDir = '' then Exit;
+  BaseDir := AddBackslash(BaseDir);
+  if FindFirst(BaseDir + 'mediahub-assetpatch-*', FindRec) then
+  begin
+    try
+      repeat
+        { 16 = FILE_ATTRIBUTE_DIRECTORY;Inno 的 Pascal 脚本没有导出 faDirectory 常量 }
+        if ((FindRec.Attributes and 16) <> 0) and
+           (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+          DelTree(BaseDir + FindRec.Name, True, True, True);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+{ 卸载时先问是否清数据;注册表杂项不依赖回答,直接删 }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\MediaHub');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\mediahub');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\AssetDock');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\mediahub');
+
+    { SuppressibleMsgBox 才能让静默卸载自动跳过询问;普通 MsgBox 会把 /VERYSILENT 卡住 }
+    if SuppressibleMsgBox('是否同时删除 MediaHub 的配置、素材索引、缩略图与更新缓存？' + #13#10 + #13#10 +
+      '只删除本机数据，素材库里的原始文件不会删除。', mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDYES then
+    begin
+      DeleteTreeIfExists(ExpandConstant('{userappdata}\MediaHub'));
+      DeleteTreeIfExists(ExpandConstant('{userappdata}\mediahub'));
+      DeleteTreeIfExists(ExpandConstant('{localappdata}\MediaHub'));
+      DeleteTreeIfExists(ExpandConstant('{localappdata}\mediahub'));
+      DeleteTreeIfExists(ExpandConstant('{localappdata}\mediahub-updater'));
+      DeleteAssetPatchTempDirs;
+    end;
+  end;
+end;
