@@ -95,6 +95,21 @@ begin
       'cmd.exe /c rd /s /q "' + RemoveBackslashUnlessRoot(Dir) + '"');
 end;
 
+{ 上次卸载没删掉时挂了 RunOnce;重新安装必须取消,否则下次登录会把新装的数据也删了 }
+procedure ClearPendingUninstallCleanup;
+begin
+  RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'AssetDockUninstallCleanup1');
+  RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'AssetDockUninstallCleanup2');
+  RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'MediaHubUninstallCleanup1');
+  RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'MediaHubUninstallCleanup2');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    ClearPendingUninstallCleanup;
+end;
+
 { 测试与资源补丁会按 <app>-assetpatch-* 建临时目录,卸载时一并清掉 }
 procedure DeleteAssetPatchTempDirs(const Prefix: String);
 var

@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, protocol, screen, Tray, nativeImage
 import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
-import { existsSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { getDb } from './services/db'
 import { closeAllLibHandles, libDbPath } from './services/libraryDb'
 import { openSqlite } from './services/sqlite'
@@ -21,23 +21,16 @@ const DEFAULT_WINDOW = { width: 1600, height: 950 }
 const MIN_WINDOW = { width: 1024, height: 640 }
 const WINDOW_STATE_KEY = 'windowBounds'
 
-// 应用更名 MediaHub→AssetDock:老用户继续用旧 userData,避免库注册表与标签丢失。
-// 只有新目录里已经有真正的库注册表时才切过去;全新用户才建 AssetDock。
+// 应用更名 MediaHub→AssetDock:只认新目录。旧版留下的 MediaHub/mediahub 数据
+// 归卸载清理处理,不自动接管——否则卸载后重装会把旧库再带回来。
 const APP_DATA_DIR = app.getPath('appData')
 const USER_DATA_DIR = join(APP_DATA_DIR, 'AssetDock')
-function resolveUserDataDir(): string {
-  if (existsSync(join(USER_DATA_DIR, 'mediahub.db'))) return USER_DATA_DIR
-  for (const legacy of [join(APP_DATA_DIR, 'MediaHub'), join(APP_DATA_DIR, 'mediahub')]) {
-    if (existsSync(join(legacy, 'mediahub.db'))) return legacy
-  }
-  return USER_DATA_DIR
-}
 
 // 无头/真实窗口验证使用独立 userData，避免测试触碰用户的库注册表。
 if (!app.isPackaged && process.env.MEDIAHUB_TEST_USER_DATA) {
   app.setPath('userData', resolve(process.env.MEDIAHUB_TEST_USER_DATA))
 } else {
-  app.setPath('userData', resolveUserDataDir())
+  app.setPath('userData', USER_DATA_DIR)
 }
 
 /**
