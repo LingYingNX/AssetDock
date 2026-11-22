@@ -108,6 +108,14 @@ describe('S2-5 createLibrary 查重收敛 store 层', () => {
     const r = createLibrary(memDb, '新库', join(root, 'other'))
     expect(r).toHaveProperty('id')
   })
+
+  it('库名按原样读写,混合拉丁与中文不被改字', () => {
+    seed()
+    const path = join(root, 'mixed')
+    const created = createLibrary(memDb, 'UI组件', path)
+    expect(created).toMatchObject({ name: 'UI组件', path })
+    expect(listLibraries(memDb).find((lib: LibraryRow) => lib.path === path)?.name).toBe('UI组件')
+  })
 })
 
 describe('S2-3 批量标签与 S2-6 毫秒时间戳', () => {
