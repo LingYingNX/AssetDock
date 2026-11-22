@@ -17,3 +17,7 @@ openspec/
 docs/
 design-concepts/
 启动.bat
+
+# 本地验证目录与启动器备份:不入库,避免误提交库数据与二进制
+.tmp-verify/
+启动.exe.bak
