@@ -2,7 +2,7 @@
 /* 遮罩从标题栏下方开始,窗口在面板打开时仍可拖动 */
 .dedup-backdrop{position:fixed;left:0;right:0;top:var(--h-title);bottom:0;z-index:100;display:grid;place-items:center;background:rgba(10,16,26,.36);backdrop-filter:blur(14px) saturate(1.2);-webkit-app-region:no-drag;opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
 .dedup-backdrop.show{opacity:1}
-.dedup-dialog{width:min(860px,calc(100vw - 56px));height:min(600px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:var(--r-l);box-shadow:0 28px 64px rgba(20,60,120,.32),inset 0 1px 0 var(--card-edge);opacity:0;transform:translateY(6px) scale(.985);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.dedup-dialog{width:min(860px,calc(100vw - 56px));height:min(600px,calc(100vh - 96px));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line2);border-radius:var(--r-l);box-shadow:0 12px 32px rgba(0,0,0,.28),inset 0 1px 0 var(--card-edge);opacity:0;transform:translateY(6px) scale(.985);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .dedup-dialog.show{opacity:1;transform:none}
 .dedup-header{height:48px;padding:0 16px 0 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
 .dedup-title{font-size:var(--fs-title);font-weight:600;color:var(--t1)}

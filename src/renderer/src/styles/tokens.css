@@ -153,6 +153,13 @@ body{
     radial-gradient(800px 600px at 4% 110%,rgba(70,90,120,.16),transparent 64%),
     linear-gradient(180deg,#1B1C1F,#141518);
 }
+/* 偏好设置打开:去掉光斑只留纯净底色,否则弹窗周边一圈蓝羽化溢出到边框外 */
+html[data-pref-open] body{
+  background:linear-gradient(180deg,#F5F6F9,#E9ECF1);
+}
+:root[data-theme="dark"][data-pref-open] body{
+  background:linear-gradient(180deg,#1B1C1F,#141518);
+}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
 /* 按压反馈:轻微收缩给出触感,透明度不压太低,避免按钮像被禁用 */
 button:active:not([disabled]){opacity:.9;transform:scale(.97)}

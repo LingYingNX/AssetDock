@@ -36,59 +36,31 @@ const SECTIONS: { key: SectionKey; icon: string; label: string }[] = [
 ]
 
 /**
- * 快捷键清单。只列 App.tsx / CssEditor.tsx 里真实绑定的键,不写"计划中"的条目——
+ * 快捷键速查(精选常用项)。只列真实绑定的键,不写"计划中"的条目——
  * 文档与实现漂移比没有文档更坏。
  */
 const SHORTCUT_GROUPS: { group: string; items: { keys: string; label: string }[] }[] = [
   {
-    group: '全局',
-    items: [
-      { keys: 'Ctrl F', label: '聚焦搜索框' },
-      { keys: 'Ctrl ,', label: '打开偏好设置' },
-      { keys: 'Ctrl A', label: '全选当前视图' },
-      { keys: 'Ctrl 滚轮', label: '调整缩略图大小' },
-      { keys: 'Esc', label: '关闭浮层 / 取消重命名' }
-    ]
-  },
-  {
     group: '素材浏览',
     items: [
-      { keys: 'Enter', label: '打开焦点素材' },
-      { keys: 'Space', label: '选中焦点素材' },
       { keys: 'F2', label: '重命名选中素材' },
       { keys: 'N', label: '展开 / 收起右侧信息面板' },
-      { keys: 'Del', label: '删除选中素材' },
-      { keys: 'Ctrl I', label: '打开焦点素材预览' }
-    ]
-  },
-  {
-    group: '素材剪贴板',
-    items: [
       { keys: 'Ctrl C', label: '复制选中素材（可跨资源库粘贴）' },
       { keys: 'Ctrl X', label: '剪切选中素材（可跨资源库粘贴）' },
-      { keys: 'Ctrl V', label: '粘贴到当前资源库 / 当前文件夹' }
+      { keys: 'Ctrl V', label: '粘贴到当前资源库 / 当前文件夹' },
+      { keys: 'Ctrl F', label: '聚焦搜索框' }
     ]
   },
   {
-    group: '灯箱',
+    group: '素材',
     items: [
-      { keys: '← →', label: '上一个 / 下一个（图片）' },
-      { keys: '+ -', label: '缩放图片' },
-      { keys: '0', label: '复位图片缩放' },
-      { keys: '方向键', label: '放大后平移图片' },
-      { keys: '[ ]', label: '上一个 / 下一个（图片与视频）' },
-      { keys: 'Enter', label: '收藏 / 取消收藏' },
+      { keys: '← →', label: '上一个 / 下一个素材（视频为快进 / 快退 5 秒）' },
       { keys: 'Space', label: '播放 / 暂停（视频）' },
+      { keys: '↑ ↓', label: '音量（视频）' },
+      { keys: '鼠标滚轮', label: '缩放素材（图片）' },
+      { keys: '鼠标左键', label: '拖拽素材' },
       { keys: 'F', label: '全屏 / 退出全屏' },
-      { keys: 'M', label: '静音（视频）' },
-      { keys: 'Esc', label: '关闭' }
-    ]
-  },
-  {
-    group: 'CSS 编辑器',
-    items: [
-      { keys: 'Ctrl S', label: '保存到原文件' },
-      { keys: 'Tab', label: '插入两个空格' }
+      { keys: 'M', label: '静音（视频）' }
     ]
   }
 ]
@@ -256,6 +228,13 @@ export function PreferencesDialog(): React.JSX.Element | null {
 
   useEffect(() => {
     if (open) setMounted(true)
+  }, [open])
+
+  /* 打开期间给 html 挂标记:body 摘掉光斑只留纯净底色,避免蓝羽化溢出到弹窗边框外;关窗还原 */
+  useEffect(() => {
+    if (open) document.documentElement.setAttribute('data-pref-open', '')
+    else document.documentElement.removeAttribute('data-pref-open')
+    return () => document.documentElement.removeAttribute('data-pref-open')
   }, [open])
 
   useEffect(() => {
@@ -606,9 +585,18 @@ export function PreferencesDialog(): React.JSX.Element | null {
     <>
       <section className="pref-section">
         <div className="pref-about-card">
-          <span className="pref-about-mark"><Icon name="spark" /></span>
+          <a
+            className="pref-about-mark"
+            href="https://github.com/LingYingNX/AssetDock"
+            target="_blank"
+            rel="noreferrer"
+            title="打开 GitHub 仓库"
+            aria-label="打开 GitHub 仓库"
+          >
+            <Icon name="github" />
+          </a>
           <div className="pref-about-text">
-            <span className="pref-about-name">MediaHub · 素材管理器</span>
+            <span className="pref-about-name">AssetDock</span>
             <span className="pref-about-author">作者：铃音奈绪</span>
           </div>
           <span className="pref-version-badge" title="当前安装版本">{appVersion || '—'}</span>

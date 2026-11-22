@@ -157,24 +157,6 @@ function MediaImg({ src, name, onZoom }: { src: string; name: string; onZoom: (s
       if (document.querySelector('.menu, .settings-menu, .pref-dialog, .pref-create-dialog, .tag-filter-menu')) return
       const actions = actionsRef.current
       if (!actions || !imgRef.current) return
-      if (event.key === '+' || event.key === '=') {
-        event.preventDefault()
-        event.stopPropagation()
-        actions.zoomBy(1.15)
-        return
-      }
-      if (event.key === '-' || event.key === '_') {
-        event.preventDefault()
-        event.stopPropagation()
-        actions.zoomBy(1 / 1.15)
-        return
-      }
-      if (event.key === '0') {
-        event.preventDefault()
-        event.stopPropagation()
-        actions.resetView()
-        return
-      }
       if (scaleRef.current <= 1) return
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
       if (target?.closest('.pv-stripbar, .pv-dock, .pv-ctl, [role="slider"]')) return
@@ -527,6 +509,17 @@ export function Lightbox(): React.JSX.Element | null {
         playback.stepBy((e.key === 'ArrowLeft' ? -1 : 1) / fps)
         return
       }
+      if (isVideo && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault()
+        playback.stepBy(e.key === 'ArrowLeft' ? -5 : 5)
+        return
+      }
+      if (isVideo && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault()
+        const base = playback.snap.muted ? 0 : playback.snap.volume
+        playback.setVolume(base + (e.key === 'ArrowUp' ? 0.05 : -0.05))
+        return
+      }
       if (isVideo && k === 'm') {
         e.preventDefault()
         playback.toggleMute()
@@ -540,7 +533,7 @@ export function Lightbox(): React.JSX.Element | null {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightboxId, isVideo, a?.fps, playback, toggleFullscreen])
+  }, [lightboxId, isVideo, a?.fps, playback, playback.snap.volume, playback.snap.muted, toggleFullscreen])
 
   /* 退场期间 lightboxId 已为 null,靠 mounted 撑着最后 220ms 的淡出 */
   if (!mounted) return null

@@ -223,21 +223,12 @@ export default function App(): React.JSX.Element {
       }
       if (st.lightboxId) {
         const cur = st.assets.find((a) => a.id === st.lightboxId)
-        /* 双击打开素材后,左右键在所有类型上都是「上一个/下一个」:
-           换成图片才生效的旧行为,让视频/文档里按方向键毫无反馈。 */
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        /* 左右键切换素材对图片/文档生效;视频让位给 ±5 秒快进快退(Lightbox 处理) */
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && cur?.type !== 'video') {
           if (e.altKey) return
           e.preventDefault()
           st.stepLightbox(e.key === 'ArrowLeft' ? -1 : 1)
           return
-        }
-        if (e.key === '[') {
-          e.preventDefault()
-          st.stepLightbox(-1)
-        }
-        if (e.key === ']') {
-          e.preventDefault()
-          st.stepLightbox(1)
         }
         if (e.key === 'Enter') {
           if (cur) st.toggleFavorite(cur.id)
