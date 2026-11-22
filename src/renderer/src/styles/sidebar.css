@@ -66,6 +66,8 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
    而文件夹树并不比其它三组更重要。它额外需要的只是右侧「新建文件夹」按钮的对齐。 */
 .folder-section-title{flex:1;min-width:0;font-size:var(--fs-title);font-weight:700;letter-spacing:.02em;color:var(--t1)}
 .folder-section-title .ic{color:var(--acc2)}
+/* 标题图标是实心路径:关掉 .ic 的描边,改为跟随强调色填充 */
+.folder-section-title .folder-section-mark{fill:currentColor;stroke:none}
 .side-title .ic{width:var(--ic-md);height:var(--ic-md)}
 .side-title-add{display:grid;place-items:center;width:24px;height:24px;margin-left:auto;margin-right:-7px;border-radius:var(--r-xs);color:var(--t3);transition:background-color var(--dur-hover) var(--ease-out),color var(--dur-hover) var(--ease-out),opacity var(--dur-press) var(--ease-out)}
 .side-title-add:hover{color:var(--t1);background:var(--bg3)}
@@ -79,6 +81,8 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .nav-item.on{background:var(--acc-tint);color:var(--t1);font-weight:600}
 .nav-item.on .ic{color:var(--acc2)}
 .nav-item .ic{width:var(--ic-md);height:var(--ic-md);color:var(--t3)}
+/* 「全部素材」图标是实心路径:关掉 .ic 的描边,改为跟随导航项颜色填充 */
+.nav-item .nav-all-mark{fill:currentColor;stroke:none}
 .nav-item .cnt{margin-left:auto;font-size:var(--fs-cap);font-weight:450;font-family:var(--font-mono);color:var(--t3);font-variant-numeric:tabular-nums}
 /* 计数是浏览文件夹时的决策信息(哪个目录有货),纯 --t3 太弱扫不到;
    但零值不该抢注意力——空目录的 0 保持最弱,有内容的才提到 --t2 */
@@ -93,15 +97,28 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 .side-add .ic{width:var(--ic-md);height:var(--ic-md)}
 .folder-edit{cursor:text;padding-right:6px}
 .folder-row{cursor:default;padding-right:6px;border-radius:4px}
-.folder-row:not(.on):hover,.folder-row:not(.on):focus-within{background:var(--bg3);color:var(--t1)}
+.folder-row:not(.on):hover,.folder-row:not(.on):focus-within{color:var(--t1)}
 .folder-row:not(.on):hover .folder-main>.ic,.folder-row:not(.on):focus-within .folder-main>.ic{color:var(--t1)}
 .folder-row,.folder-edit{gap:0}
 .folder-row[draggable="true"]{cursor:grab}
 .folder-row[draggable="true"]:active{cursor:grabbing}
+/* 高亮从文件夹图标左侧 2px 开始:左侧缩进与导引线保持无底色,树形线不会被色块切断。
+   左缘 = 行缩进 + 箭头槽 - 2px,略压住图标左缘;右缘仍到行尾。 */
+.folder-row::before{
+  content:"";position:absolute;top:0;bottom:0;right:0;pointer-events:none;border-radius:4px;
+  left:calc(var(--folder-indent) + var(--node-depth,0) * var(--folder-step) + var(--folder-arrow-slot) - 2px);
+  background:transparent;
+  transition:background-color var(--dur-hover) var(--ease-out)}
+.nav-item.folder-row:not(.on):hover::before,
+.nav-item.folder-row:not(.on):focus-within::before{background:var(--bg3)}
+.nav-item.folder-row.on::before,
+.nav-item.folder-row.sel::before,
+.nav-item.folder-row.sel:hover::before,
+.nav-item.folder-row.sel:focus-within::before{background:var(--acc-tint)}
 /* 文件夹树导引线:竖线锚在父级展开箭头的字形中心(缩进 + (深度-1) * 步进 + 6px),
    自父级中线下方起,中间项一直画到子树底部交给下一个同级,末项只收在自己行中线。
    横向折角只出现在自己的行上,孙级行拿不到祖级的折角。
-   行本身是 position:relative,再抬 z-index 让行底色压住线,悬停/选中时线不浮在色块上。 */
+   行底色从文件夹图标开始,导引线在它左侧;折角末端到图标前 3px,与高亮左缘相接。 */
 .folder-children > .folder-node{position:relative}
 .folder-children > .folder-node::before{content:"";position:absolute;pointer-events:none;left:calc(var(--folder-indent) + (var(--node-depth,1) - 1) * var(--folder-step) + var(--folder-guide-offset) - var(--folder-guide-w) / 2);top:0;bottom:0;width:var(--folder-guide-w);background:var(--guide-line)}
 /* 首项向上接到父级行中线下方,向下穿过自己的子树交给后续同级;末项只画到自己行中线,不拖进子树;独子两者兼顾 */
@@ -112,10 +129,12 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
    有子级的节点只画到自己的箭头上沿,不压住箭头字形 */
 .folder-children > .folder-node::after{content:"";position:absolute;pointer-events:none;left:calc(var(--folder-indent) + (var(--node-depth,1) - 1) * var(--folder-step) + var(--folder-guide-offset) - var(--folder-guide-w) / 2);top:calc(0.5 * var(--folder-row-h) - var(--folder-guide-w) / 2);width:calc(var(--folder-guide-stub) + var(--folder-guide-w) / 2);height:var(--folder-guide-w);background:var(--guide-line)}
 .folder-children > .folder-node.leaf::after{width:calc(var(--folder-step) + var(--folder-arrow-slot) - var(--folder-guide-inset) - var(--folder-guide-offset) + var(--folder-guide-w) / 2)}
-.nav-item.folder-row,.nav-item.folder-edit{z-index:1;height:var(--folder-row-h)}
-/* 当前文件夹用整行浅蓝底表示,和点选后的选中态一致:启动时 folderSelection 还是空的,
+/* 行本身抬到 z-index:1,导引线再高一层:折角与高亮左缘相接时不被吃掉 */
+.folder-children > .folder-node::before,.folder-children > .folder-node::after{z-index:2}
+.nav-item.folder-row,.nav-item.folder-edit{z-index:1;height:var(--folder-row-h);background:transparent}
+/* 当前文件夹用从图标开始的浅蓝底表示,和点选后的选中态一致:启动时 folderSelection 还是空的,
    只有 .on 能把高亮撑起来;左侧竖条不再画,避免行首多一条粗线。 */
-.nav-item.folder-row.on{background:var(--acc-tint);color:var(--t1)}
+.nav-item.folder-row.on{color:var(--t1)}
 .nav-item.folder-row.on,.nav-item.folder-edit{font-weight:400}
 .folder-edit{border-radius:var(--r-xs)}
 .folder-row.drop-target{background:var(--acc-soft);outline:1.5px solid var(--acc);outline-offset:-1.5px;color:var(--acc2);transition:none}
@@ -142,9 +161,9 @@ html[data-sidebar-resizing="true"] .layout{transition:none}
 /* 高亮只有一整行这一种形态:焦点不另画一层内嵌底色,键盘 Tab 由整行的 :focus-within 兜住 */
 .folder-main:focus-visible,.folder-toggle:focus-visible{outline:none}
 .folder-toggle:focus-visible .ic{color:var(--t1)}
-/* 选中的行(含单击导航选中的那一个):整行底色是「选中」的唯一形态。
-   选择器带上 .nav-item 与当前行的 .on 同权重、靠后生效,否则选中态会被 on 的 background:none 吃掉 */
-.nav-item.folder-row.sel,.nav-item.folder-row.sel:hover,.nav-item.folder-row.sel:focus-within{background:var(--acc-tint);color:var(--t1)}
+/* 选中的行(含单击导航选中的那一个):从图标开始的高亮底是「选中」的唯一形态。
+   底色统一由 .folder-row::before 画,行本身保持透明,避免色块盖住左侧导引线 */
+.nav-item.folder-row.sel,.nav-item.folder-row.sel:hover,.nav-item.folder-row.sel:focus-within{color:var(--t1)}
 .folder-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folder-name-edit{min-width:0;flex:1;height:var(--h-xs);margin-left:-4px;padding:0 3px;border:1px solid var(--acc);border-radius:var(--r-xs);background:var(--bg4);color:var(--t1);font:inherit;outline:none}
 .folder-drag-preview{position:fixed;top:-100px;left:-100px;display:flex;align-items:center;gap:6px;max-width:180px;height:var(--h-sm);padding:0 10px;border:1px solid var(--acc-line);border-radius:var(--r-pill);background:var(--bg2);box-shadow:0 7px 18px rgba(15,23,42,.18);color:var(--t1);font-size:var(--fs-body);pointer-events:none}
