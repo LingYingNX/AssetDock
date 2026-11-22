@@ -55,6 +55,21 @@ function rebaseStyleMap(map: Record<string, FolderStyle>, source: string, target
   return next
 }
 
+/** 目录改名/移动后,多选集合里的旧路径也要跟着搬,否则高亮与右键操作指向不存在的目录 */
+function rebaseFolderSelection(
+  selection: NonNullable<UIState['folderSelection']> | null,
+  libraryId: number,
+  source: string,
+  target: string
+): NonNullable<UIState['folderSelection']> | null {
+  if (!selection || selection.libraryId !== libraryId) return selection
+  return {
+    ...selection,
+    paths: selection.paths.map((item) => rebaseFolderPath(item, source, target)),
+    anchor: selection.anchor ? rebaseFolderPath(selection.anchor, source, target) : null
+  }
+}
+
 /* ---------- 界面偏好持久化(视图/列宽/信息面板/色带/导航) ---------- */
 
 const UI_PREFS_KEY = 'uiPrefs'
@@ -91,8 +106,10 @@ interface UiPrefs {
   nav: NavKey
   /** 用户拖拽后的侧栏宽度 */
   sideWidth: number
-  /** 已折叠的文件夹路径:该库文件夹树很深,折叠状态需跨重启保留。跨库共享,切库时不能按当前库的路径清空 */
+  /** 当前库已折叠的文件夹路径:文件夹树很深,折叠状态需跨重启保留 */
   collapsedFolders: string[]
+  /** 每个库各自的导航位置与折叠目录:库间路径互不相通,共用一份会把状态串到别的库 */
+  viewsByLibrary: Record<string, LibraryView>
   /** 格式下拉里已折叠的分类(图片/视频/三维/代码/文档);跨重启保留 */
   collapsedFormatGroups: string[]
   /** 三维预览模式与 HDR 环境:跨重启保留 */
@@ -107,6 +124,11 @@ interface UiPrefs {
   /** 灯箱底部胶片带是否展开:收起后仍留一条可点开的窄条 */
   stripOpen: boolean
   display: DisplayPrefs
+}
+
+interface LibraryView {
+  nav: NavKey
+  collapsedFolders: string[]
 }
 
 const NAV_SIMPLE: readonly NavKey[] = ['all', 'recent', 'untagged', 'fav', 'trash']
@@ -127,10 +149,44 @@ function parseCollapsedFolders(value: unknown): string[] {
   return value.filter((v): v is string => typeof v === 'string' && v !== '')
 }
 
+/**
+ * 首次打开某个库时的默认折叠:所有含子目录的文件夹都收起,
+ * 只展开当前导航目录的祖先链,保证恢复的选中行仍然可见。
+ */
+function defaultCollapsedFolders(paths: string[], activeFolder: string | null): string[] {
+  const parents = new Set<string>()
+  for (const path of paths) {
+    let cut = path.lastIndexOf('/')
+    while (cut > 0) {
+      const parent = path.slice(0, cut)
+      parents.add(parent)
+      cut = parent.lastIndexOf('/')
+    }
+  }
+  if (activeFolder) {
+    let ancestor = activeFolder
+    for (;;) {
+      const cut = ancestor.lastIndexOf('/')
+      if (cut <= 0) break
+      ancestor = ancestor.slice(0, cut)
+      parents.delete(ancestor)
+    }
+  }
+  return [...parents]
+}
+
 /** 把当前界面偏好写入主进程(失败静默:偏好丢失不应影响使用) */
 function persistUiPrefs(): void {
   try {
     const s = useUI.getState()
+    const libraryId = activeLibraryIdOf(s)
+    const views: Record<string, LibraryView> = {}
+    for (const [id, view] of libraryViews) views[String(id)] = view
+    if (libraryId != null) {
+      const live = { nav: s.nav, collapsedFolders: [...s.collapsedFolders] }
+      libraryViews.set(libraryId, live)
+      views[String(libraryId)] = live
+    }
     const prefs: UiPrefs = {
       view: s.view,
       colw: s.colw,
@@ -139,6 +195,7 @@ function persistUiPrefs(): void {
       nav: s.nav,
       sideWidth: s.sideWidth,
       collapsedFolders: [...s.collapsedFolders],
+      viewsByLibrary: views,
       collapsedFormatGroups: [...s.collapsedFormatGroups],
       modelShade: s.modelShade,
       modelHdr: s.modelHdr,
@@ -207,6 +264,17 @@ export async function restoreUiPrefs(): Promise<void> {
         parsed.view === 'grid' || parsed.view === 'list' || parsed.view === 'waterfall' ? parsed.view : 'waterfall'
       const colw = Number(parsed.colw)
       const hdr = parseHdrSettings(parsed as Record<string, unknown>)
+      if (parsed.viewsByLibrary && typeof parsed.viewsByLibrary === 'object') {
+        for (const [key, raw] of Object.entries(parsed.viewsByLibrary)) {
+          const id = Number(key)
+          if (!Number.isInteger(id) || !raw || typeof raw !== 'object') continue
+          const stored = raw as Partial<LibraryView>
+          libraryViews.set(id, {
+            nav: parseNav(stored.nav),
+            collapsedFolders: parseCollapsedFolders(stored.collapsedFolders)
+          })
+        }
+      }
       useUI.setState({
         view,
         colw: clampColw(colw),
@@ -515,6 +583,37 @@ let loadedLibraryId: number | null = null
 const folderCache = new Map<number, string[]>()
 /** 文件夹样式按库缓存:切库时先画缓存,再等 IPC 校准 */
 const folderStyleCache = new Map<number, Record<string, FolderStyle>>()
+/** 每个库各自的侧栏视图:切库后回到该库上次停留的目录与折叠状态 */
+const libraryViews = new Map<number, LibraryView>()
+/** 当前 nav/collapsedFolders 属于哪个库;null 表示启动初期还没绑定 */
+let viewLibraryId: number | null = null
+
+function activeLibraryIdOf(s: Pick<UIState, 'tabs' | 'activeTabId'>): number | null {
+  return s.tabs.find((t) => t.id === s.activeTabId)?.libraryId ?? null
+}
+
+/**
+ * 把 nav/collapsedFolders 绑定到当前库;切库时先把旧库的实时状态存进对照表。
+ * 新开的库先给空导航,等 folders:list 回来后再按目录结构生成默认折叠。
+ */
+function bindLibraryView(libraryId: number | null): void {
+  if (viewLibraryId === libraryId) return
+  const s = useUI.getState()
+  if (viewLibraryId != null) {
+    libraryViews.set(viewLibraryId, { nav: s.nav, collapsedFolders: [...s.collapsedFolders] })
+  }
+  const previous = viewLibraryId
+  viewLibraryId = libraryId
+  if (libraryId == null) return
+  const stored = libraryViews.get(libraryId)
+  if (stored) {
+    useUI.setState({ nav: stored.nav, collapsedFolders: [...stored.collapsedFolders] })
+    return
+  }
+  /* 这个库没有折叠记录:交给 folders:list 按目录结构生成默认折叠。
+     启动首屏保留偏好里恢复的 nav,切库则必须清掉上一个库的导航位置。 */
+  useUI.setState(previous == null ? { collapsedFolders: [] } : { nav: 'all', collapsedFolders: [] })
+}
 
 /** 离开一个库前保存它的最新集合(含增量、乐观编辑),切回时才有正确首帧 */
 function rememberLoadedAssets(): void {
@@ -861,6 +960,7 @@ export const useUI = create<UIState>((set, get) => {
         return
       }
       const libraryId = t.libraryId
+      bindLibraryView(libraryId)
       const cached = assetCache.get(libraryId)
       const cachedFolders = folderCache.get(libraryId)
       /* 切库瞬间先把树换成目标库的:主进程虽已缓存,一次 IPC 往返也足够让上一个库的目录闪在屏幕上 */
@@ -904,13 +1004,26 @@ export const useUI = create<UIState>((set, get) => {
         if ('paths' in folders) folderCache.set(libraryId, folderPaths)
         set((s) => {
           const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          const navValid = activeFolder != null && folderPaths.includes(activeFolder)
+          const nav: NavKey = activeFolder != null && !navValid ? 'all' : s.nav
+          let collapsedFolders = s.collapsedFolders
+          /* 这个库第一次打开:没有可比对的折叠记录,按目录结构收起有子级的文件夹 */
+          if ('paths' in folders && !libraryViews.has(libraryId)) {
+            collapsedFolders = defaultCollapsedFolders(folderPaths, navValid ? activeFolder : null)
+            libraryViews.set(libraryId, { nav, collapsedFolders })
+          }
           return {
             folderPaths,
             physicalFolderPaths: folderPaths,
             folderEditPath: s.folderEditPath && folderPaths.includes(s.folderEditPath) ? s.folderEditPath : null,
-            nav: activeFolder && !folderPaths.includes(activeFolder) ? 'all' : s.nav
+            nav,
+            collapsedFolders,
+            /* 目录已不在盘上时导航回退到「全部素材」,残留的文件夹选中会让两行同时高亮 */
+            folderSelection: nav !== s.nav && s.folderSelection?.libraryId === libraryId ? null : s.folderSelection
           }
         })
+        /* 首次打开生成的默认折叠要落盘,否则重启后同一个库又会全展开 */
+        persistUiPrefs()
       }).catch(() => {
         if (superseded()) return
         /* 目录树读失败就不展示上一棵树(可能属于别的库),素材本身照常可用 */
@@ -1012,13 +1125,16 @@ export const useUI = create<UIState>((set, get) => {
         folderCache.set(libraryId, r.paths)
         set((s) => {
           const activeFolder = s.nav.startsWith('folder:') ? s.nav.slice('folder:'.length) : null
+          const nav: NavKey = activeFolder != null && !r.paths.includes(activeFolder) ? 'all' : s.nav
           return {
             folderPaths: r.paths,
             physicalFolderPaths: r.paths,
             folderEditPath: s.folderEditPath && r.paths.includes(s.folderEditPath) ? s.folderEditPath : null,
-            nav: activeFolder && !r.paths.includes(activeFolder) ? 'all' : s.nav
+            nav,
+            folderSelection: nav !== s.nav && s.folderSelection?.libraryId === libraryId ? null : s.folderSelection
           }
         })
+        persistUiPrefs()
       }).catch(() => {
         get().showToast('目录列表刷新失败，目录树保持原样', 'warn')
       })
@@ -1026,8 +1142,9 @@ export const useUI = create<UIState>((set, get) => {
     createFolder: (parentPath = '') => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
+      const libraryId = t.libraryId
       set({ folderCtxMenu: null })
-      void window.windowApi.folders.create(t.libraryId, parentPath).then((r) => {
+      void window.windowApi.folders.create(libraryId, parentPath).then((r) => {
         if ('error' in r) {
           get().showToast(r.error, 'warn')
           return
@@ -1035,6 +1152,7 @@ export const useUI = create<UIState>((set, get) => {
         set((s) => ({
           folderEditPath: r.path,
           nav: `folder:${r.path}` as NavKey,
+          folderSelection: { libraryId, paths: [r.path], anchor: r.path },
           collapsedFolders: parentPath ? s.collapsedFolders.filter((path) => path !== parentPath) : s.collapsedFolders
         }))
         get().refreshFolders()
@@ -1058,6 +1176,7 @@ export const useUI = create<UIState>((set, get) => {
           folderStyleCache.set(libraryId, folderStyles)
           return {
             nav: rebaseFolderNav(s.nav, path, r.path),
+            folderSelection: rebaseFolderSelection(s.folderSelection, libraryId, path, r.path),
             collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, path, r.path)),
             folderStyles
           }
@@ -1066,11 +1185,15 @@ export const useUI = create<UIState>((set, get) => {
       })
     },
     cancelFolderRename: () => set({ folderEditPath: null }),
-    beginFolderRename: (path) => set({
-      folderEditPath: path,
-      nav: `folder:${path}` as NavKey,
-      folderCtxMenu: null
-    }),
+    beginFolderRename: (path) => {
+      const libraryId = activeLibraryIdOf(get())
+      set({
+        folderEditPath: path,
+        nav: `folder:${path}` as NavKey,
+        folderSelection: libraryId != null ? { libraryId, paths: [path], anchor: path } : get().folderSelection,
+        folderCtxMenu: null
+      })
+    },
     moveFolder: (source, target, placement) => {
       const t = get().tabs.find((x) => x.id === get().activeTabId)
       if (t?.libraryId == null) return
@@ -1086,6 +1209,7 @@ export const useUI = create<UIState>((set, get) => {
         folderPaths: optimistic.paths,
         physicalFolderPaths: optimistic.paths,
         nav: rebaseFolderNav(s.nav, source, optimistic.path),
+        folderSelection: rebaseFolderSelection(s.folderSelection, libraryId, source, optimistic.path),
         folderEditPath: s.folderEditPath ? rebaseFolderPath(s.folderEditPath, source, optimistic.path) : s.folderEditPath,
         collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, source, optimistic.path)),
         folderStyles: optimisticStyles,
@@ -1116,6 +1240,7 @@ export const useUI = create<UIState>((set, get) => {
           folderStyleCache.set(libraryId, folderStyles)
           return {
             nav: rebaseFolderNav(s.nav, optimistic.path, r.path),
+            folderSelection: rebaseFolderSelection(s.folderSelection, libraryId, optimistic.path, r.path),
             collapsedFolders: s.collapsedFolders.map((item) => rebaseFolderPath(item, optimistic.path, r.path)),
             folderStyles
           }
@@ -1207,13 +1332,26 @@ export const useUI = create<UIState>((set, get) => {
         const focusedCardId = s.focusedCardId && deletedIds.has(s.focusedCardId) ? null : s.focusedCardId
         const selectionAnchorId =
           s.selectionAnchorId && deletedIds.has(s.selectionAnchorId) ? null : s.selectionAnchorId
+        const leavingFolder = activeFolder === path || !!activeFolder?.startsWith(prefix)
+        let folderSelection = s.folderSelection
+        if (folderSelection?.libraryId === libraryId) {
+          const paths = folderSelection.paths.filter((item) => item !== path && !item.startsWith(prefix))
+          folderSelection = leavingFolder || paths.length === 0
+            ? null
+            : {
+                ...folderSelection,
+                paths,
+                anchor: folderSelection.anchor && paths.includes(folderSelection.anchor) ? folderSelection.anchor : paths[0]
+              }
+        }
         return {
           ...withSelection(selectedIds),
           activeId,
           focusedCardId,
           selectionAnchorId,
           renaming: s.renaming && (!s.activeId || !deletedIds.has(s.activeId)),
-          nav: activeFolder === path || activeFolder?.startsWith(prefix) ? 'all' : s.nav,
+          nav: leavingFolder ? 'all' : s.nav,
+          folderSelection,
           folderEditPath:
             s.folderEditPath === path || s.folderEditPath?.startsWith(prefix) ? null : s.folderEditPath,
           collapsedFolders: s.collapsedFolders.filter((item) => item !== path && !item.startsWith(prefix)),

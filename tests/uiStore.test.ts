@@ -195,6 +195,7 @@ describe('UI store', () => {
       physicalFolderPaths: ['source', 'target', 'target/existing'],
       assets: [],
       collapsedFolders: ['source', 'source/child'],
+      folderSelection: { libraryId: 1, paths: ['source'], anchor: 'source' },
       reloadActiveLibrary: reload
     })
 
@@ -204,6 +205,7 @@ describe('UI store', () => {
     expect(useUI.getState().physicalFolderPaths).toEqual(['target', 'target/existing', 'target/source'])
     expect(useUI.getState().nav).toBe('folder:target/source')
     expect(useUI.getState().collapsedFolders).toEqual(['target/source', 'target/source/child'])
+    expect(useUI.getState().folderSelection?.paths).toEqual(['target/source'])
     expect(move).toHaveBeenCalledWith(1, 'source', 'target', 'inside')
     expect(reload).not.toHaveBeenCalled()
 
@@ -241,6 +243,7 @@ describe('UI store', () => {
       tabs: [{ id: 'library-1', name: 'Library', libraryId: 1 }],
       activeTabId: 'library-1',
       nav: 'folder:tree',
+      folderSelection: { libraryId: 1, paths: ['tree'], anchor: 'tree' },
       folderEditPath: 'tree/child',
       collapsedFolders: ['tree', 'tree/child', 'treehouse'],
       assets: [
@@ -274,6 +277,7 @@ describe('UI store', () => {
     expect(state.lightboxId).toBeNull()
     expect(state.cssDirty).toBe(false)
     expect(state.nav).toBe('all')
+    expect(state.folderSelection).toBeNull()
     expect(state.folderEditPath).toBeNull()
     expect(state.collapsedFolders).toEqual(['treehouse'])
   })
@@ -815,14 +819,17 @@ describe('library load failure visibility', () => {
 })
 
 describe('collapsed folder state across libraries', () => {
-  it('keeps collapsed folders when the active library does not contain them', async () => {
-    const foldersList = vi.fn().mockResolvedValue({ paths: [] })
+  it('restores each library collapsed folders instead of leaking them across libraries', async () => {
+    const foldersList = vi.fn(async (libraryId: number) => ({
+      paths: libraryId === 1 ? ['图', '图/壁纸'] : []
+    }))
     vi.stubGlobal('window', {
       setTimeout,
       clearTimeout,
       windowApi: {
         assets: { list: vi.fn().mockResolvedValue({ assets: [] }) },
-        folders: { list: foldersList, styles: vi.fn().mockResolvedValue({ styles: [] }) }
+        folders: { list: foldersList, styles: vi.fn().mockResolvedValue({ styles: [] }) },
+        state: { set: vi.fn().mockResolvedValue({ ok: true }) }
       }
     })
     vi.resetModules()
@@ -832,20 +839,32 @@ describe('collapsed folder state across libraries', () => {
         { id: 't1', name: '素材', libraryId: 1 },
         { id: 't2', name: 'UI组件', libraryId: 2 }
       ],
-      activeTabId: 't2',
-      collapsedFolders: ['图', '图/壁纸'],
+      activeTabId: 't1',
+      collapsedFolders: [],
       folderPaths: [],
       mode: 'library'
     })
 
-    // 启动/切到另一个库:该库没有这些目录,折叠记忆也不能被清空
     useUI.getState().reloadActiveLibrary()
-    await vi.waitFor(() => expect(foldersList).toHaveBeenCalledWith(2))
-    expect(useUI.getState().collapsedFolders).toEqual(['图', '图/壁纸'])
+    await vi.waitFor(() => expect(useUI.getState().folderPaths).toEqual(['图', '图/壁纸']))
+    useUI.setState({ collapsedFolders: ['图'] })
 
+    // 切到另一个库:折叠记忆按库隔离,不能把上一个库的路径带过来
+    useUI.setState({ activeTabId: 't2' })
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(useUI.getState().folderPaths).toEqual([]))
+    expect(useUI.getState().collapsedFolders).toEqual([])
+
+    // 切回来:该库的折叠状态原样恢复
+    useUI.setState({ activeTabId: 't1' })
+    useUI.getState().reloadActiveLibrary()
+    await vi.waitFor(() => expect(useUI.getState().folderPaths).toEqual(['图', '图/壁纸']))
+    expect(useUI.getState().collapsedFolders).toEqual(['图'])
+
+    // 目录刷新也不能冲掉已恢复的状态
     useUI.getState().refreshFolders()
-    await vi.waitFor(() => expect(foldersList).toHaveBeenCalledTimes(2))
-    expect(useUI.getState().collapsedFolders).toEqual(['图', '图/壁纸'])
+    await vi.waitFor(() => expect(foldersList).toHaveBeenCalledTimes(4))
+    expect(useUI.getState().collapsedFolders).toEqual(['图'])
   })
 })
 
