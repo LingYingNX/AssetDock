@@ -1,6 +1,8 @@
 # AssetDock · 素材管理器
 
 本地优先的桌面素材管理器。扫描本地目录建立素材库，管理标签、评分与文件夹，并直接预览图片、视频、3D 模型和常见文档。所有数据保存在本机，不上传。
+<img width="1600" height="950" alt="image" src="https://github.com/user-attachments/assets/da9706a6-9ebd-4f8c-84ad-014158089ab2" />
+
 
 ## 功能
 
