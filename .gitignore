@@ -4,7 +4,6 @@ out/
 *.log
 artifacts/
 design-review/
-tools/.dev-log.txt
 .agents/
 
 # 只推送源码：AI 说明、知识库/规范、工具产物、设计稿、启动脚本不入库
@@ -18,6 +17,12 @@ docs/
 design-concepts/
 启动.bat
 
-# 本地验证目录与启动器备份:不入库,避免误提交库数据与二进制
-.tmp-verify/
+# 本机自用的启动器与调试探针:只留本地,不推远端(测试运行器除外)
+启动.exe
 启动.exe.bak
+build/launcher/
+tools/*
+!tools/run-tests.mjs
+
+# 本地验证目录:不入库,避免误提交库数据
+.tmp-verify/

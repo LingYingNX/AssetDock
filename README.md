@@ -38,10 +38,10 @@ src/preload/        contextBridge 暴露 windowApi
 src/renderer/src/   React 界面：组件、纯视图逻辑、zustand store、样式
 src/shared/         跨进程共享的纯逻辑（无 fs / 无 electron）
 tests/              Vitest 用例
-tools/              开发与无头验证脚本
+tools/              测试运行器（逐文件跑 vitest）
 ```
 
 
 ## 说明
 
-仓库不包含素材文件、构建产物与本地数据库（见 `.gitignore`）。
+仓库不包含素材文件、构建产物与本地数据库，也不包含本机自用的启动器与调试脚本（见 `.gitignore`）。
